@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4a2170">
+<meta name="description" content="Case Detective: a quick Latin practice game for first declension noun cases.">
+<title>Case Detective · Latin 1st Declension</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔎</text></svg>">
+<style>
+  :root {
+    --bg: #f5eedd; --bg2: #ece2c9; --card: #fffdf8; --ink: #2a2233; --muted: #6f667a;
+    --line: #e2d6bb; --purple: #4a2170; --purple2: #6b35a0; --purple-soft: #f1e8fa;
+    --terra: #c8553d; --gold: #e0a526; --gold-soft: #fff4d1;
+    --good: #1c8a4b; --good-bg: #e3f5ea; --bad: #c0392b; --bad-bg: #fdebe7;
+    --nom: #2563c9; --acc: #cf3f57; --dat: #17906a; --gen: #d97a0b; --voc: #b0399a; --abl: #0f8aa0; --verb: #6f667a;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; font-family: var(--sans); color: var(--ink); line-height: 1.5;
+    background:
+      radial-gradient(1200px 500px at 50% -200px, #fff7e2 0%, transparent 70%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+    background-attachment: fixed; min-height: 100vh; min-height: 100dvh;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  button:focus-visible, a:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+  /* ---------- Top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: var(--purple); color: #fff;
+    box-shadow: 0 2px 12px rgba(42,34,51,.25);
+    padding: 10px max(16px, env(safe-area-inset-left)) 10px max(16px, env(safe-area-inset-right));
+  }
+  .topbar-in { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+  .brand { display: flex; align-items: center; gap: 10px; background: none; border: 0; padding: 4px 6px 4px 0; color: #fff; border-radius: 10px; }
+  .brand .mark { width: 36px; height: 36px; border-radius: 10px; background: var(--gold); display: grid; place-items: center; font-size: 20px; }
+  .brand .name { font-family: var(--serif); font-weight: 700; font-size: 1.15rem; letter-spacing: .02em; line-height: 1.1; text-align: left; }
+  .brand .name small { display: block; font-family: var(--sans); font-weight: 500; font-size: .68rem; letter-spacing: .09em; text-transform: uppercase; opacity: .75; }
+  .spacer { flex: 1; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: .92rem; color: #fff; white-space: nowrap; }
+  button.chip:hover { background: rgba(255,255,255,.24); }
+  .chip.bump { animation: bump .4s ease; }
+
+  /* ---------- Layout ---------- */
+  main { max-width: 760px; margin: 0 auto; padding: 22px 16px calc(40px + env(safe-area-inset-bottom)); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 1px 0 #fff inset, 0 8px 24px rgba(74,33,112,.08); }
+  .view { animation: rise .3s ease both; }
+  h1, h2, h3 { font-family: var(--serif); line-height: 1.2; margin: 0; }
+  .eyebrow { font-size: .74rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--terra); }
+
+  /* ---------- Home ---------- */
+  .hero { padding: 26px 22px; display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; overflow: hidden; position: relative; }
+  .hero h1 { font-size: clamp(1.6rem, 5vw, 2.2rem); color: var(--purple); margin: 6px 0 8px; }
+  .hero p { margin: 0; color: var(--muted); max-width: 46ch; }
+  .hero .art { font-size: clamp(3.2rem, 12vw, 5rem); filter: drop-shadow(0 6px 10px rgba(0,0,0,.15)); transform: rotate(-8deg); }
+  .rules { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 16px 0 22px; }
+  .rule { border-radius: 14px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--c); }
+  .rule b { display: block; font-size: .95rem; }
+  .rule span { font-size: .8rem; color: var(--c); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .section-title { display: flex; align-items: baseline; justify-content: space-between; margin: 0 2px 10px; }
+  .section-title h2 { font-size: 1.25rem; }
+  .section-title span { font-size: .88rem; color: var(--muted); font-weight: 600; }
+  .files { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .file {
+    text-align: left; padding: 16px; display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; position: relative;
+  }
+  .file:hover { transform: translateY(-2px); border-color: var(--purple2); box-shadow: 0 12px 28px rgba(74,33,112,.16); }
+  .file:active { transform: translateY(0); }
+  .file .ico { width: 48px; height: 48px; border-radius: 14px; background: var(--purple-soft); display: grid; place-items: center; font-size: 24px; }
+  .file .num { font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--terra); }
+  .file h3 { font-size: 1.1rem; margin: 1px 0 3px; }
+  .file p { margin: 0; font-size: .88rem; color: var(--muted); line-height: 1.35; }
+  .file .foot { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; border-top: 1px dashed var(--line); padding-top: 10px; margin-top: 2px; }
+  .starrow { font-size: 1.05rem; letter-spacing: 2px; }
+  .starrow .off { opacity: .22; filter: grayscale(1); }
+  .file .go { font-weight: 800; color: var(--purple2); font-size: .9rem; }
+  .home-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    border: 0; border-radius: 14px; padding: 14px 20px; font-weight: 800; font-size: 1.02rem;
+    background: var(--purple2); color: #fff; box-shadow: 0 4px 0 var(--purple); transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .btn:hover { filter: brightness(1.07); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--purple); }
+  .btn.ghost { background: var(--card); color: var(--purple); box-shadow: 0 4px 0 var(--line); border: 1px solid var(--line); }
+  .btn.gold { background: var(--gold); color: #3b2a00; box-shadow: 0 4px 0 #b07f12; }
+  .btn.wide { width: 100%; }
+  .link { background: none; border: 0; padding: 6px 4px; color: var(--muted); font-weight: 700; font-size: .9rem; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ---------- Briefing ---------- */
+  .brief { padding: 24px 22px; }
+  .brief h2 { font-size: 1.5rem; color: var(--purple); margin: 4px 0 10px; }
+  .brief p { margin: 0 0 12px; }
+  .note { background: var(--gold-soft); border: 1px solid #efd88b; border-radius: 14px; padding: 14px 16px; margin: 14px 0 18px; }
+  .note ul, .note ol { margin: 6px 0 0; padding-left: 20px; }
+  .note li { margin: 3px 0; }
+  .tag { display: inline-block; font-size: .72rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: #fff; background: var(--c); border-radius: 6px; padding: 1px 7px; vertical-align: 1px; }
+
+  /* ---------- Play ---------- */
+  .playhead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .back { background: var(--card); border: 1px solid var(--line); border-radius: 12px; width: 40px; height: 40px; font-size: 1.1rem; flex: none; }
+  .back:hover { border-color: var(--purple2); }
+  .segs { flex: 1; display: flex; gap: 5px; }
+  .seg { flex: 1; height: 10px; border-radius: 99px; background: #dccfb0; transition: background .3s; }
+  .seg.ok { background: var(--good); } .seg.no { background: var(--terra); } .seg.cur { background: var(--gold); }
+  .count { font-weight: 800; font-size: .9rem; color: var(--muted); white-space: nowrap; }
+  .q { padding: 22px; }
+  .q .eyebrow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .again-badge { background: var(--gold-soft); color: #7a5a00; border: 1px solid #efd88b; border-radius: 99px; padding: 1px 9px; font-size: .68rem; letter-spacing: .06em; }
+  .prompt { font-size: 1.18rem; font-weight: 600; margin: 0 0 14px; }
+  .prompt u { text-decoration-color: var(--gold); text-decoration-thickness: 3px; text-underline-offset: 3px; }
+  .scroll {
+    font-family: var(--serif); font-size: clamp(1.35rem, 5.2vw, 1.75rem); line-height: 1.3;
+    background: linear-gradient(180deg, #fffaf0, #fbf1da); border: 1px solid #ead9b0; border-radius: 14px;
+    padding: 18px 14px 14px; margin: 0 0 16px; display: flex; flex-wrap: wrap; gap: 6px 10px; justify-content: center; text-align: center;
+  }
+  .w { display: inline-flex; flex-direction: column; align-items: center; padding: 2px 5px; border-radius: 8px; border-bottom: 3px solid transparent; }
+  .w.t { background: #ffe27a; box-shadow: 0 0 0 3px #ffe27a; font-weight: 700; }
+  .w i { font-style: normal; font-family: var(--sans); font-size: .62rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; height: 0; opacity: 0; overflow: hidden; transition: all .3s ease; white-space: nowrap; }
+  .scroll.solved .w[data-r] { border-bottom-color: var(--c); }
+  .scroll.solved .w i { height: 1.2em; opacity: 1; color: var(--c); margin-top: 2px; }
+  .scroll.solved .w.t { background: color-mix(in srgb, var(--c) 16%, #fff); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 16%, #fff); }
+  .opts { display: grid; gap: 10px; }
+  .opts.two { grid-template-columns: 1fr 1fr; }
+  .opt {
+    display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; text-align: left;
+    background: #fff; border: 2px solid var(--line); border-radius: 14px; padding: 12px 14px; min-height: 56px;
+    box-shadow: 0 3px 0 var(--line); transition: transform .08s, border-color .15s, background .15s;
+  }
+  .opt:hover:not(:disabled) { border-color: var(--purple2); background: var(--purple-soft); }
+  .opt:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--line); }
+  .opt .key { width: 28px; height: 28px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; font-weight: 800; font-size: .82rem; color: var(--muted); }
+  .opt .lab { font-weight: 700; font-size: 1.04rem; line-height: 1.25; }
+  .opt .lab small { display: block; font-weight: 500; font-size: .84rem; color: var(--muted); }
+  .opt.latin .lab { font-family: var(--serif); font-size: 1.3rem; }
+  .opt .mark { font-size: 1.2rem; width: 1.2em; text-align: center; }
+  .opt:disabled { cursor: default; opacity: .6; box-shadow: none; }
+  .opt.right { border-color: var(--good); background: var(--good-bg); opacity: 1; }
+  .opt.wrong { border-color: var(--bad); background: var(--bad-bg); opacity: 1; animation: shake .35s; }
+  .hintrow { display: flex; justify-content: center; margin-top: 12px; min-height: 34px; }
+  .hint { background: var(--gold-soft); border: 1px solid #efd88b; border-radius: 12px; padding: 8px 12px; font-size: .92rem; }
+  .fb { margin-top: 16px; border-radius: 16px; padding: 16px; border: 2px solid; animation: rise .25s ease both; }
+  .fb.good { background: var(--good-bg); border-color: #a9dcbd; }
+  .fb.bad { background: var(--bad-bg); border-color: #f2b9ae; }
+  .fb h3 { font-family: var(--sans); font-size: 1.1rem; margin-bottom: 6px; }
+  .fb.good h3 { color: var(--good); } .fb.bad h3 { color: var(--bad); }
+  .fb .tr { font-family: var(--serif); font-size: 1.08rem; font-style: italic; margin: 0 0 6px; }
+  .fb p { margin: 0 0 12px; }
+  .kbd { text-align: center; color: var(--muted); font-size: .78rem; margin-top: 12px; }
+  @media (hover: none) { .kbd { display: none; } }
+
+  /* ---------- Results ---------- */
+  .done { padding: 28px 22px; text-align: center; }
+  .bigstars { font-size: 3rem; letter-spacing: 6px; margin: 4px 0 6px; }
+  .bigstars span { display: inline-block; animation: starpop .5s cubic-bezier(.2,1.6,.4,1) both; }
+  .bigstars span:nth-child(2) { animation-delay: .15s; } .bigstars span:nth-child(3) { animation-delay: .3s; }
+  .bigstars .off { opacity: .2; filter: grayscale(1); }
+  .done h2 { font-size: 1.7rem; color: var(--purple); }
+  .done .sum { color: var(--muted); margin: 6px 0 18px; }
+  .statline { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .stat { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 10px 16px; min-width: 96px; }
+  .stat b { display: block; font-size: 1.3rem; font-family: var(--serif); } .stat span { font-size: .75rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+  .review { text-align: left; margin: 0 0 18px; }
+  .review h3 { font-size: 1.05rem; margin-bottom: 6px; }
+  .review .item { border: 1px solid var(--line); border-left: 4px solid var(--terra); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: .94rem; background: #fff; }
+  .review .item .lat { font-family: var(--serif); font-size: 1.08rem; font-weight: 700; }
+  .actions { display: grid; gap: 10px; }
+
+  /* ---------- Notebook drawer ---------- */
+  .scrim { position: fixed; inset: 0; background: rgba(42,34,51,.5); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .2s; }
+  .drawer {
+    position: fixed; z-index: 50; background: var(--card); top: 0; right: 0; bottom: 0; width: min(420px, 100%);
+    transform: translateX(105%); visibility: hidden; transition: transform .25s ease, visibility 0s .25s; display: flex; flex-direction: column;
+    box-shadow: -10px 0 40px rgba(0,0,0,.25);
+  }
+  body.nb-open .scrim { opacity: 1; pointer-events: auto; }
+  body.nb-open .drawer { transform: none; visibility: visible; transition: transform .25s ease; }
+  .drawer header { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--line); background: var(--purple-soft); }
+  .drawer header h2 { font-size: 1.25rem; color: var(--purple); }
+  .drawer .x { background: #fff; border: 1px solid var(--line); border-radius: 10px; width: 38px; height: 38px; font-size: 1.1rem; }
+  .drawer .body { padding: 16px 18px calc(24px + env(safe-area-inset-bottom)); overflow: auto; }
+  .drawer h3 { font-size: 1rem; margin: 14px 0 8px; }
+  .drawer h3:first-child { margin-top: 0; }
+  .jobs { display: grid; gap: 6px; }
+  .job { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: center; border: 1px solid var(--line); border-left: 5px solid var(--c); border-radius: 10px; padding: 8px 10px; font-size: .92rem; }
+  .job b { color: var(--c); }
+  table.decl { width: 100%; border-collapse: collapse; font-family: var(--serif); font-size: 1.05rem; }
+  table.decl th { font-family: var(--sans); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); text-align: left; padding: 6px 8px; }
+  table.decl td { padding: 7px 8px; border-top: 1px solid var(--line); }
+  table.decl td:first-child { font-family: var(--sans); font-size: .82rem; font-weight: 800; color: var(--c); }
+  table.decl b { color: var(--terra); }
+  table.decl .ae { background: #ffe27a; border-radius: 4px; padding: 0 2px; }
+
+  canvas#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes shake { 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+  @keyframes bump { 50% { transform: scale(1.25); } }
+  @keyframes starpop { from { transform: scale(0) rotate(-40deg); } to { transform: none; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+  @media (max-width: 620px) {
+    main { padding-top: 16px; }
+    .files { grid-template-columns: 1fr; }
+    .rules { grid-template-columns: 1fr 1fr; }
+    .hero { padding: 20px 18px; }
+    .q, .brief { padding: 18px 16px; }
+    .opts.two { grid-template-columns: 1fr; }
+    .brand .name small { display: none; }
+    .drawer { top: auto; left: 0; width: 100%; max-height: 86dvh; border-radius: 20px 20px 0 0; transform: translateY(105%); }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <button class="brand" id="homeBtn" aria-label="Case Detective home">
+      <span class="mark" aria-hidden="true">🔎</span>
+      <span class="name">Case Detective<small>Latin · 1st declension</small></span>
+    </button>
+    <span class="spacer"></span>
+    <span class="chip" id="streakChip" title="Answers in a row" hidden>🔥 <span id="streakN">0</span></span>
+    <button class="chip" id="nbBtn" aria-haspopup="dialog">📓 Notebook</button>
+  </div>
+</div>
+
+<main id="app" aria-live="polite"></main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Detective notebook" aria-hidden="true">
+  <header><h2>📓 Detective Notebook</h2><button class="x" id="nbClose" aria-label="Close notebook">✕</button></header>
+  <div class="body">
+    <h3>Ask every noun a question</h3>
+    <div class="jobs">
+      <div class="job" style="--c:var(--nom)"><b>Nominative</b><span><strong>Who does it?</strong> The subject.</span></div>
+      <div class="job" style="--c:var(--gen)"><b>Genitive</b><span><strong>Whose is it?</strong> Possession, “of”.</span></div>
+      <div class="job" style="--c:var(--dat)"><b>Dative</b><span><strong>Who receives it?</strong> “to / for”.</span></div>
+      <div class="job" style="--c:var(--acc)"><b>Accusative</b><span><strong>What gets the action?</strong> Direct object.</span></div>
+      <div class="job" style="--c:var(--abl)"><b>Ablative</b><span>“by / with / from / in”.</span></div>
+      <div class="job" style="--c:var(--voc)"><b>Vocative</b><span><strong>Talking to someone.</strong> “Ō puella!”</span></div>
+    </div>
+    <h3>puella, the girl</h3>
+    <table class="decl">
+      <tr><th></th><th>Singular</th><th>Plural</th></tr>
+      <tr><td style="--c:var(--nom)">Nom.</td><td>puell<b>a</b></td><td>puell<b class="ae">ae</b></td></tr>
+      <tr><td style="--c:var(--gen)">Gen.</td><td>puell<b class="ae">ae</b></td><td>puell<b>ārum</b></td></tr>
+      <tr><td style="--c:var(--dat)">Dat.</td><td>puell<b class="ae">ae</b></td><td>puell<b>īs</b></td></tr>
+      <tr><td style="--c:var(--acc)">Acc.</td><td>puell<b>am</b></td><td>puell<b>ās</b></td></tr>
+      <tr><td style="--c:var(--abl)">Abl.</td><td>puell<b>ā</b></td><td>puell<b>īs</b></td></tr>
+      <tr><td style="--c:var(--voc)">Voc.</td><td>puell<b>a</b></td><td>puell<b class="ae">ae</b></td></tr>
+    </table>
+    <h3>Cracking the sneaky -ae</h3>
+    <div class="note" style="margin:0">
+      <ol>
+        <li><strong>Check the verb.</strong> Ends in <b>-nt</b> (dant, amant)? Then a <em>plural</em> subject is doing it: nominative plural.</li>
+        <li><strong>Is it a giving verb</strong> (dat, dant)? Somebody must <em>receive</em>: dative.</li>
+        <li><strong>All those jobs taken?</strong> Then -ae tells you <em>whose</em>: genitive.</li>
+      </ol>
+    </div>
+  </div>
+</aside>
+<canvas id="confetti"></canvas>
+
+<script>
+(function () {
+"use strict";
+
+/* ================= Data ================= */
+var CASE = {
+  nom: { name: "Nominative", job: "Who does it? (subject)", tag: "who does it" },
+  gen: { name: "Genitive",   job: "Whose is it? (of)", tag: "whose" },
+  dat: { name: "Dative",     job: "Who receives it? (to / for)", tag: "who receives" },
+  acc: { name: "Accusative", job: "What gets the action? (direct object)", tag: "gets the action" },
+  abl: { name: "Ablative",   job: "by / with / from", tag: "by / with" },
+  voc: { name: "Vocative",   job: "Talking to someone", tag: "talked to" },
+  verb:{ name: "Verb", job: "", tag: "verb" }
+};
+function caseOpts(keys) { return keys.map(function (k) { return { k: k, label: CASE[k].name, sub: CASE[k].job }; }); }
+function formOpts(forms) { return forms.map(function (f) { return { k: f, label: f, latin: true }; }); }
+var AE_OPTS = [
+  { k: "gen", label: "Genitive singular", sub: "Whose is it?" },
+  { k: "dat", label: "Dative singular", sub: "Who receives it?" },
+  { k: "nom", label: "Nominative plural", sub: "Who does it? (more than one)" }
+];
+/* sentence helper: "word:role" tokens, * marks the target */
+function S(str) {
+  return str.split(" ").map(function (tok) {
+    var t = tok.charAt(0) === "*"; if (t) tok = tok.slice(1);
+    var p = tok.split(":");
+    return { w: p[0], r: p[1] || "", t: t };
+  });
+}
+
+var ROUNDS = [
+  {
+    id: "jobs", icon: "🗂️", title: "Who Does What?", blurb: "Match each case to its job in the sentence.",
+    brief: "<p>Every Latin noun has a <b>job</b> in its sentence, and the <b>case</b> tells you the job. A good detective asks each noun a question:</p>" +
+      "<div class='note'><ul>" +
+      "<li><b>Who does it?</b> <span class='tag' style='--c:var(--nom)'>Nominative</span></li>" +
+      "<li><b>What gets the action?</b> <span class='tag' style='--c:var(--acc)'>Accusative</span></li>" +
+      "<li><b>Who receives it?</b> <span class='tag' style='--c:var(--dat)'>Dative</span></li>" +
+      "<li><b>Whose is it?</b> <span class='tag' style='--c:var(--gen)'>Genitive</span></li>" +
+      "<li><b>Talking to someone?</b> <span class='tag' style='--c:var(--voc)'>Vocative</span></li>" +
+      "</ul></div>",
+    qs: [
+      { prompt: "A word that shows <b>whose</b> something is (“the rose <u>of the girl</u>”) is in the…", opts: caseOpts(["gen","dat","acc","nom"]), a: "gen",
+        why: "Genitive means possession. It answers <b>WHOSE?</b> English uses “of” or ’s." },
+      { prompt: "The word that <b>gets the action</b> of the verb (“The poet loves <u>the girl</u>”) is in the…", opts: caseOpts(["acc","dat","gen","nom"]), a: "acc",
+        why: "Accusative is the direct object: the action lands right on it. Its endings are <b>-am</b> and <b>-ās</b>." },
+      { prompt: "When you <b>talk straight to</b> someone (“<u>Girl</u>, come here!”), their name is in the…", opts: caseOpts(["voc","nom","dat","acc"]), a: "voc",
+        why: "Vocative is for direct speech, calling someone by name. You often see <b>Ō</b> with it: <i>Ō puella!</i>" },
+      { prompt: "The person something is <b>given to</b> (“The poet gives roses <u>to the girl</u>”) is in the…", opts: caseOpts(["dat","gen","acc","voc"]), a: "dat",
+        why: "Dative answers <b>WHO RECEIVES IT?</b> Trick: <b>D</b>ative is for <b>D</b>elivery, the one who gets the gift." },
+      { prompt: "The word that <b>does</b> the action (“<u>The sailor</u> sees the land”) is in the…", opts: caseOpts(["nom","acc","gen","voc"]), a: "nom",
+        why: "Nominative is the subject. It answers <b>WHO DOES IT?</b>" },
+      { prompt: "Which question does the <b>genitive</b> answer?", a: "gen",
+        opts: [{k:"gen",label:"Whose is it?"},{k:"dat",label:"Who receives it?"},{k:"nom",label:"Who does it?"},{k:"acc",label:"What gets the action?"}],
+        why: "Genitive: <b>whose is it?</b> “Who receives it?” is the dative’s question. Those two are easy to swap, so say them out loud." },
+      { prompt: "Which question does the <b>dative</b> answer?", a: "dat",
+        opts: [{k:"gen",label:"Whose is it?"},{k:"dat",label:"Who receives it?"},{k:"nom",label:"Who does it?"},{k:"voc",label:"Who is being talked to?"}],
+        why: "Dative: <b>who receives it?</b> Look for it near giving verbs like <i>dat</i>." },
+      { prompt: "<i>Ō poēta!</i> What is <b>poēta</b> doing here?", a: "voc",
+        opts: [{k:"voc",label:"Being talked to",sub:"Vocative"},{k:"acc",label:"Getting the action",sub:"Accusative"},{k:"gen",label:"Owning something",sub:"Genitive"}],
+        why: "“O poet!” Somebody is speaking directly to the poet, so it is vocative." }
+    ]
+  },
+  {
+    id: "endings", icon: "🧪", title: "Ending Lab", blurb: "Pick the right form: puellārum or puellās?",
+    brief: "<p>Now the plural endings. Two of them love to get mixed up:</p>" +
+      "<div class='note'><ul>" +
+      "<li><b>-ārum</b> is <span class='tag' style='--c:var(--gen)'>Genitive plural</span>: <i>puellārum</i>, “<b>of</b> the girls”. Long ending, lots of owners.</li>" +
+      "<li><b>-ās</b> is <span class='tag' style='--c:var(--acc)'>Accusative plural</span>: <i>puellās</i>, “the girls” as direct object. It grows from <b>-am</b>: one girl <i>puell<b>am</b></i>, many girls <i>puell<b>ās</b></i>.</li>" +
+      "</ul></div><p>Stuck? Tap <b>📓 Notebook</b> at the top to see the whole chart.</p>",
+    qs: [
+      { prompt: "How do you say “<b>of the girls</b>”?", opts: formOpts(["puellārum","puellās","puellīs","puellae"]), a: "puellārum",
+        why: "<b>puellārum</b> is genitive plural. “Of” means whose, and whose means genitive: <b>-ārum</b>." },
+      { prompt: "“The poet loves <u>the girls</u>.” Which form is “the girls”?", opts: formOpts(["puellās","puellārum","puellae","puellam"]), a: "puellās",
+        why: "The girls get the loving, so they are the direct object: accusative plural <b>puellās</b>." },
+      { prompt: "“<u>The girls</u> love roses.” Which form is “the girls”?", opts: formOpts(["puellae","puellās","puellārum","puellīs"]), a: "puellae",
+        why: "Here the girls DO the loving, so they are the subject: nominative plural <b>puellae</b>." },
+      { prompt: "“The poet gives roses <u>to the girls</u>.” Which form?", opts: formOpts(["puellīs","puellās","puellārum","puellae"]), a: "puellīs",
+        why: "The girls receive the roses, so it is dative plural: <b>puellīs</b>." },
+      { prompt: "How do you say “<b>of the sailors</b>”?", opts: formOpts(["nautārum","nautās","nautīs","nautam"]), a: "nautārum",
+        why: "“Of” means genitive, and the genitive plural is <b>-ārum</b>: <b>nautārum</b>." },
+      { prompt: "“The sailors see <u>the roses</u>.” Which form is “the roses”?", opts: formOpts(["rosās","rosārum","rosae","rosam"]), a: "rosās",
+        why: "The roses are what gets seen: direct object, plural, so accusative <b>rosās</b>." },
+      { prompt: "Which one is <b>accusative plural</b>?", opts: formOpts(["patriās","patriārum","patriae","patriam"]), a: "patriās",
+        why: "<b>-ās</b> is accusative plural. (<i>-ārum</i> is genitive plural and <i>-am</i> is accusative singular.)" },
+      { prompt: "Which one is <b>genitive plural</b>?", opts: formOpts(["poētārum","poētās","poētīs","poētae"]), a: "poētārum",
+        why: "<b>-ārum</b> is genitive plural: <b>poētārum</b>, “of the poets”." }
+    ]
+  },
+  {
+    id: "ae", icon: "🕵️", title: "The -ae Mystery", blurb: "One ending, three suspects. Use the sentence to crack it.",
+    brief: "<p>The sneakiest ending in Latin! <b>puellae</b> can be three different things:</p>" +
+      "<div class='note'><ul>" +
+      "<li><span class='tag' style='--c:var(--gen)'>Genitive singular</span> of the girl (whose?)</li>" +
+      "<li><span class='tag' style='--c:var(--dat)'>Dative singular</span> to the girl (who receives?)</li>" +
+      "<li><span class='tag' style='--c:var(--nom)'>Nominative plural</span> the girls (who does it?)</li>" +
+      "</ul><p style='margin:10px 0 0'><b>How to crack it:</b></p><ol>" +
+      "<li><b>Check the verb.</b> Ends in <b>-nt</b>? Find a plural subject.</li>" +
+      "<li><b>Giving verb</b> (<i>dat, dant</i>)? Someone receives: dative.</li>" +
+      "<li><b>Jobs all taken?</b> Then it tells you whose: genitive.</li></ol></div>",
+    qs: [
+      { s: S("Poēta:nom *puellae:dat magnās:acc rosās:acc dat:verb ."), opts: AE_OPTS, a: "dat",
+        hint: "The verb is <b>dat</b>: “gives”, and it is singular.",
+        tr: "The poet gives big roses <b>to the girl</b>.",
+        why: "<i>Dat</i> means someone receives something. The poet does it, the roses get given, so <b>puellae</b> is who receives them: dative. It can’t be the subject, because <i>dat</i> is singular." },
+      { s: S("Puellae:nom nautīs:dat rosās:acc *poētae:gen dant:verb ."), opts: AE_OPTS, a: "gen",
+        hint: "Who receives is already taken by <b>nautīs</b>.",
+        tr: "The girls give <b>the poet’s</b> roses to the sailors.",
+        why: "Who does it? <i>Puellae</i> (dant is plural). Who receives? <i>Nautīs</i>. Those jobs are taken, so <b>poētae</b> tells us WHOSE roses: genitive." },
+      { s: S("*Puellae:nom nautīs:dat rosās:acc poētae:gen dant:verb ."), opts: AE_OPTS, a: "nom",
+        hint: "Look at the verb’s ending: da<b>nt</b>.",
+        tr: "<b>The girls</b> give the poet’s roses to the sailors.",
+        why: "<i>Dant</i> ends in -nt, so more than one person is giving. <b>Puellae</b> is the plural subject: nominative plural." },
+      { s: S("Fāma:nom *puellae:gen est:verb magna:nom ."), opts: AE_OPTS, a: "gen",
+        hint: "Nobody is giving anything, and <b>est</b> is singular.",
+        tr: "The fame <b>of the girl</b> is great.",
+        why: "No giving, so no receiver. <i>Est</i> is singular, so no plural subject. The fame belongs to the girl: genitive." },
+      { s: S("*Nautae:nom patriam:acc amant:verb ."), opts: AE_OPTS, a: "nom",
+        hint: "Look at the verb’s ending: ama<b>nt</b>.",
+        tr: "<b>The sailors</b> love their country.",
+        why: "<i>Amant</i> is plural (-nt), so look for a plural subject. <b>Nautae</b>, the sailors: nominative plural." },
+      { s: S("Nauta:nom *puellae:dat rosam:acc dat:verb ."), opts: AE_OPTS, a: "dat",
+        hint: "<b>Dat</b> is a giving verb. Who gets the rose?",
+        tr: "The sailor gives a rose <b>to the girl</b>.",
+        why: "Who gives? <i>Nauta</i>. What? <i>Rosam</i>. Who receives it? <b>Puellae</b>: dative." },
+      { s: S("Poēta:nom vītam:acc *puellae:gen laudat:verb ."), opts: AE_OPTS, a: "gen",
+        hint: "<b>Laudat</b> means “praises”. Nothing is handed to anyone.",
+        tr: "The poet praises the life <b>of the girl</b>.",
+        why: "Praising has no receiver, and <i>laudat</i> is singular. The life belongs to the girl, so <b>puellae</b> is WHOSE: genitive." },
+      { s: S("*Puellae:nom poētam:acc laudant:verb ."), opts: AE_OPTS, a: "nom",
+        hint: "Look at the verb’s ending: lauda<b>nt</b>.",
+        tr: "<b>The girls</b> praise the poet.",
+        why: "<i>Laudant</i> is plural, and <i>poētam</i> is the direct object (-am). So <b>puellae</b> must be doing it: nominative plural." }
+    ]
+  },
+  {
+    id: "final", icon: "🏛️", title: "Final Case Files", blurb: "Any case can turn up. Read the whole sentence first.",
+    brief: "<p>Last file, detective. Now <b>any</b> case can show up. Read the whole sentence, find the verb, then ask the highlighted word:</p>" +
+      "<div class='note'><b>Who does it? Who receives it? Whose is it? What gets the action? Is someone being talked to?</b></div>",
+    qs: [
+      { s: S("Ō *puella:voc , patriam:acc servā:verb !"), opts: caseOpts(["voc","nom","acc","gen"]), a: "voc",
+        hint: "Spot the <b>Ō</b> and the comma.", tr: "<b>O girl</b>, save your country!",
+        why: "Someone is speaking straight to the girl. <b>Ō</b> plus a comma is a big clue: vocative." },
+      { s: S("Poēta:nom fāmam:acc *puellārum:gen laudat:verb ."), opts: caseOpts(["gen","acc","dat","nom"]), a: "gen",
+        hint: "What does <b>-ārum</b> always mean?", tr: "The poet praises the fame <b>of the girls</b>.",
+        why: "<b>-ārum</b> is always genitive plural. Whose fame? The girls’." },
+      { s: S("Nautae:nom *puellās:acc vident:verb ."), opts: caseOpts(["acc","gen","nom","dat"]), a: "acc",
+        hint: "<b>-ās</b> grows from -am.", tr: "The sailors see <b>the girls</b>.",
+        why: "<b>-ās</b> is accusative plural. The girls are what gets seen: direct object." },
+      { s: S("Puella:nom *poētīs:dat rosās:acc dat:verb ."), opts: caseOpts(["dat","acc","gen","nom"]), a: "dat",
+        hint: "<b>Dat</b> is a giving verb. Who gets the roses?", tr: "The girl gives roses <b>to the poets</b>.",
+        why: "The poets receive the roses, so <b>poētīs</b> is dative (plural)." },
+      { s: S("Puella:nom *rosam:acc amat:verb ."), opts: caseOpts(["acc","nom","gen","dat"]), a: "acc",
+        hint: "What gets loved?", tr: "The girl loves <b>the rose</b>.",
+        why: "<b>-am</b> is accusative singular. The rose gets the action: direct object." },
+      { s: S("Poētae:nom fāmam:acc *patriae:gen laudant:verb ."), opts: caseOpts(["gen","dat","nom","acc"]), a: "gen",
+        hint: "<b>Laudant</b> is plural, and praising has no receiver.", tr: "The poets praise the fame <b>of their country</b>.",
+        why: "<i>Poētae</i> is the plural subject (laudant). Nothing is given, so no dative. <b>Patriae</b> tells whose fame: genitive." },
+      { s: S("Nauta:nom *poētae:dat pecūniam:acc dat:verb ."), opts: caseOpts(["dat","gen","nom","acc"]), a: "dat",
+        hint: "<b>Dat</b> is singular and means “gives”.", tr: "The sailor gives money <b>to the poet</b>.",
+        why: "Giving needs a receiver. <i>Nauta</i> gives, <i>pecūniam</i> is given, and <b>poētae</b> receives it: dative." },
+      { s: S("*Puellae:nom poētae:dat rosās:acc dant:verb ."), opts: caseOpts(["nom","gen","dat","voc"]), a: "nom",
+        hint: "Look at the verb’s ending: da<b>nt</b>.", tr: "<b>The girls</b> give roses to the poet.",
+        why: "<i>Dant</i> is plural, so we need a plural subject, and it usually comes first: <b>Puellae</b>. Then <i>poētae</i> is the one who receives." }
+    ]
+  }
+];
+
+/* ================= State & storage ================= */
+var KEY = "caseDetective.v1";
+var save = { stars: {} };
+try { var raw = localStorage.getItem(KEY); if (raw) save = JSON.parse(raw) || save; if (!save.stars) save.stars = {}; } catch (e) {}
+function persist() { try { localStorage.setItem(KEY, JSON.stringify(save)); } catch (e) {} }
+
+var app = document.getElementById("app");
+var st = null;           // current round state
+var streak = 0;
+var view = "home";
+
+function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function el(html) { var d = document.createElement("div"); d.innerHTML = html; return d.firstElementChild; }
+function starRow(n, cls) { var s = ""; for (var i = 0; i < 3; i++) s += "<span class='" + (i < n ? "" : "off") + "'>⭐</span>"; return "<span class='" + (cls || "starrow") + "' aria-label='" + n + " of 3 stars'>" + s + "</span>"; }
+function setStreak(n) {
+  streak = n; var chip = document.getElementById("streakChip");
+  document.getElementById("streakN").textContent = n;
+  chip.hidden = n < 2;
+  if (n >= 2) { chip.classList.remove("bump"); void chip.offsetWidth; chip.classList.add("bump"); }
+}
+function show(node) { app.innerHTML = ""; app.appendChild(node); window.scrollTo(0, 0); }
+
+/* ================= Home ================= */
+function home() {
+  view = "home"; st = null; setStreak(0);
+  var total = 0; ROUNDS.forEach(function (r) { total += save.stars[r.id] || 0; });
+  var next = ROUNDS.filter(function (r) { return !(save.stars[r.id] > 0); })[0];
+  var h = "<div class='view'>" +
+    "<section class='card hero'><div><div class='eyebrow'>Wheelock’s Latin · Chapter 2</div>" +
+    "<h1>Every noun has a job. Can you crack the case?</h1>" +
+    "<p>Four quick case files on first declension nouns. Get instant clues after every answer and earn up to 12 stars.</p></div>" +
+    "<div class='art' aria-hidden='true'>🔎</div></section>" +
+    "<div class='rules'>" +
+    "<div class='rule' style='--c:var(--nom)'><span>Nominative</span><b>Who does it?</b></div>" +
+    "<div class='rule' style='--c:var(--gen)'><span>Genitive</span><b>Whose is it?</b></div>" +
+    "<div class='rule' style='--c:var(--dat)'><span>Dative</span><b>Who receives it?</b></div>" +
+    "<div class='rule' style='--c:var(--acc)'><span>Accusative</span><b>What gets the action?</b></div>" +
+    "</div>" +
+    "<div class='section-title'><h2>Case files</h2><span>⭐ " + total + " / 12</span></div><div class='files'>";
+  ROUNDS.forEach(function (r, i) {
+    var s = save.stars[r.id] || 0;
+    h += "<button class='card file' data-i='" + i + "'><span class='ico' aria-hidden='true'>" + r.icon + "</span>" +
+      "<span><span class='num'>File " + (i + 1) + "</span><h3>" + r.title + "</h3><p>" + r.blurb + "</p></span>" +
+      "<span class='foot'>" + starRow(s) + "<span class='go'>" + (s ? "Play again" : "Open file") + " →</span></span></button>";
+  });
+  h += "</div><div class='home-actions'>" +
+    (next ? "<button class='btn' id='cont'>" + (total ? "Continue: " : "Start: ") + next.title + "</button>" : "<button class='btn gold' id='cont'>🏆 All files solved! Play File 3 again</button>") +
+    (total ? "<button class='link' id='reset'>Reset my stars</button>" : "") + "</div>" +
+    "<p style='margin:26px 2px 0;font-size:.9rem'><a href='../' style='color:var(--muted);font-weight:700;text-underline-offset:3px'>← More language games</a></p></div>";
+  var node = el(h);
+  node.querySelectorAll(".file").forEach(function (b) { b.onclick = function () { brief(+b.dataset.i); }; });
+  node.querySelector("#cont").onclick = function () { brief(next ? ROUNDS.indexOf(next) : 2); };
+  var rs = node.querySelector("#reset");
+  if (rs) rs.onclick = function () { save = { stars: {} }; persist(); home(); };
+  show(node);
+}
+
+/* ================= Briefing ================= */
+function brief(i) {
+  view = "brief"; var r = ROUNDS[i];
+  var node = el("<div class='view'><section class='card brief'><div class='eyebrow'>File " + (i + 1) + " of 4 · Briefing</div>" +
+    "<h2>" + r.icon + " " + r.title + "</h2>" + r.brief +
+    "<button class='btn wide' id='go'>Start the case (" + r.qs.length + " clues)</button>" +
+    "<div class='kbd'>Tip: on a keyboard, press 1–4 to answer and Enter to continue.</div></section></div>");
+  node.querySelector("#go").onclick = function () { startRound(i); };
+  show(node);
+  st = { pending: i };
+}
+
+/* ================= Play ================= */
+function startRound(i, onlyThese) {
+  var r = ROUNDS[i];
+  var qs = shuffle(onlyThese || r.qs).map(function (q) { return { q: q, retry: false }; });
+  st = { i: i, queue: qs, pos: 0, n: qs.length, results: [], missed: [], best: 0, answered: false, practice: !!onlyThese };
+  setStreak(0);
+  play();
+}
+
+function play() {
+  view = "play";
+  var item = st.queue[st.pos], q = item.q, r = ROUNDS[st.i];
+  var segs = "";
+  for (var k = 0; k < st.n; k++) {
+    var c = st.results[k] === true ? "ok" : st.results[k] === false ? "no" : (k === st.results.length && !item.retry ? "cur" : "");
+    segs += "<span class='seg " + c + "'></span>";
+  }
+  var h = "<div class='view'><div class='playhead'><button class='back' id='quit' aria-label='Back to case files'>←</button>" +
+    "<div class='segs' aria-hidden='true'>" + segs + "</div>" +
+    "<span class='count'>" + Math.min(st.pos + 1, st.queue.length) + " / " + st.queue.length + "</span></div>" +
+    "<section class='card q'><div class='eyebrow'>" + r.icon + " " + r.title + (item.retry ? " <span class='again-badge'>Second chance</span>" : "") + "</div>";
+  if (q.s) {
+    h += "<p class='prompt'>" + (q.opts === AE_OPTS ? "What is the highlighted <b>-ae</b> word doing?" : "What case is the highlighted word?") + "</p><div class='scroll' id='scroll' lang='la'>";
+    q.s.forEach(function (p) {
+      if (!p.r && /^[.,!?]$/.test(p.w)) { h += "<span class='w' style='margin-left:-15px;padding:2px 0'>" + p.w + "<i></i></span>"; return; }
+      h += "<span class='w" + (p.t ? " t" : "") + "'" + (p.r ? " data-r='" + p.r + "' style='--c:var(--" + p.r + ")'" : "") + ">" + p.w + "<i>" + (p.r ? CASE[p.r].tag : "") + "</i></span>";
+    });
+    h += "</div>";
+  } else {
+    h += "<p class='prompt'>" + q.prompt + "</p>";
+  }
+  var opts = q.opts === AE_OPTS ? q.opts : shuffle(q.opts);
+  var two = opts.length === 4 && opts[0].latin;
+  h += "<div class='opts" + (two ? " two" : "") + "'>";
+  opts.forEach(function (o, n) {
+    h += "<button class='opt" + (o.latin ? " latin" : "") + "' data-k='" + o.k + "'" + (o.latin ? " lang='la'" : "") + "><span class='key'>" + (n + 1) + "</span>" +
+      "<span class='lab'>" + o.label + (o.sub ? "<small>" + o.sub + "</small>" : "") + "</span><span class='mark'></span></button>";
+  });
+  h += "</div>";
+  if (q.hint) h += "<div class='hintrow' id='hintrow'><button class='link' id='hintBtn'>💡 Need a clue?</button></div>";
+  h += "<div id='fbSlot'></div></section></div>";
+  var node = el(h);
+  st.answered = false;
+  node.querySelectorAll(".opt").forEach(function (b) { b.onclick = function () { answer(b, item, opts); }; });
+  node.querySelector("#quit").onclick = home;
+  var hb = node.querySelector("#hintBtn");
+  if (hb) hb.onclick = function () { node.querySelector("#hintrow").innerHTML = "<div class='hint'>💡 " + q.hint + "</div>"; };
+  show(node);
+}
+
+var PRAISE = ["Case closed!", "Optimē! Excellent!", "Bene! Well done!", "Sharp eyes, detective!", "Rēctē! Correct!", "Nailed it!"];
+function answer(btn, item, opts) {
+  if (st.answered) return; st.answered = true;
+  var q = item.q, ok = btn.dataset.k === q.a;
+  app.querySelectorAll(".opt").forEach(function (b) {
+    b.disabled = true;
+    if (b.dataset.k === q.a) { b.classList.add("right"); b.querySelector(".mark").textContent = "✅"; }
+  });
+  if (!ok) { btn.classList.add("wrong"); btn.querySelector(".mark").textContent = "❌"; }
+  var sc = document.getElementById("scroll"); if (sc) sc.classList.add("solved");
+  var hr = document.getElementById("hintrow"); if (hr) hr.remove();
+
+  if (!item.retry) {
+    st.results.push(ok);
+    if (!ok) { st.missed.push(q); st.queue.push({ q: q, retry: true }); }
+  }
+  if (ok) { setStreak(streak + 1); st.best = Math.max(st.best, streak); } else setStreak(0);
+
+  var rightLabel = opts.filter(function (o) { return o.k === q.a; })[0].label;
+  var head = ok ? "✅ " + PRAISE[Math.floor(Math.random() * PRAISE.length)] + (streak >= 3 ? " 🔥 " + streak + " in a row" : "")
+                : "Not quite. It’s <span" + (opts[0].latin ? " lang='la'" : "") + ">" + rightLabel + "</span>.";
+  var last = st.pos + 1 >= st.queue.length;
+  var fb = el("<div class='fb " + (ok ? "good" : "bad") + "'><h3>" + head + "</h3>" +
+    (q.tr ? "<p class='tr'>“" + q.tr + "”</p>" : "") + "<p>" + q.why + (!ok && !item.retry ? " <b>You’ll get one more try at this one.</b>" : "") + "</p>" +
+    "<button class='btn wide " + (ok ? "" : "ghost") + "' id='next'>" + (last ? "See my results" : "Next clue →") + "</button></div>");
+  document.getElementById("fbSlot").appendChild(fb);
+  var nb = fb.querySelector("#next");
+  nb.onclick = function () { st.pos++; if (st.pos >= st.queue.length) finish(); else play(); };
+  // update the progress segment
+  var segs = app.querySelectorAll(".seg");
+  if (!item.retry && segs[st.results.length - 1]) segs[st.results.length - 1].className = "seg " + (ok ? "ok" : "no");
+  nb.focus({ preventScroll: true });
+  setTimeout(function () { fb.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, 60);
+}
+
+/* ================= Results ================= */
+function finish() {
+  view = "done";
+  var r = ROUNDS[st.i], right = st.results.filter(Boolean).length, n = st.n, pct = right / n;
+  var stars = pct === 1 ? 3 : pct >= 0.75 ? 2 : pct >= 0.5 ? 1 : 0;
+  var isBest = false;
+  if (!st.practice) { isBest = stars > (save.stars[r.id] || 0); if (isBest) { save.stars[r.id] = stars; persist(); } }
+  var title = stars === 3 ? "Master Detective!" : stars === 2 ? "Great sleuthing!" : stars === 1 ? "Good work, detective!" : "The case is still open";
+  var nextI = st.i + 1 < ROUNDS.length ? st.i + 1 : -1;
+  var h = "<div class='view'><section class='card done'><div class='eyebrow'>" + (st.practice ? "Practice round" : "File " + (st.i + 1) + " · " + r.title) + "</div>" +
+    (st.practice ? "<div class='bigstars'><span>" + (pct === 1 ? "🎯" : "🔎") + "</span></div>" : starRow(stars, "bigstars")) +
+    "<h2>" + (st.practice ? (pct === 1 ? "All fixed!" : "Getting closer!") : title) + "</h2>" +
+    "<p class='sum'>" + (stars === 3 || (st.practice && pct === 1) ? "Every clue right on the first try." : "Misses are just clues for next time.") + (isBest && stars ? " New best!" : "") + "</p>" +
+    "<div class='statline'><div class='stat'><b>" + right + " / " + n + "</b><span>First try</span></div>" +
+    "<div class='stat'><b>🔥 " + st.best + "</b><span>Best streak</span></div></div>";
+  if (st.missed.length) {
+    h += "<div class='review'><h3>🗒️ Clues to remember</h3>";
+    st.missed.forEach(function (q) {
+      var lat = q.s ? q.s.map(function (p) { return p.w; }).join(" ").replace(/ ([.,!?])/g, "$1") : "";
+      h += "<div class='item'>" + (lat ? "<div class='lat' lang='la'>" + lat + "</div>" : "<div><b>" + q.prompt + "</b></div>") + q.why + "</div>";
+    });
+    h += "</div>";
+  }
+  h += "<div class='actions'>";
+  if (st.missed.length) h += "<button class='btn' id='fix'>Practice my " + st.missed.length + " miss" + (st.missed.length > 1 ? "es" : "") + "</button>";
+  if (nextI >= 0) h += "<button class='btn " + (st.missed.length ? "ghost" : "") + "' id='nextFile'>Next file: " + ROUNDS[nextI].title + " →</button>";
+  h += "<button class='btn ghost' id='again'>Play this file again</button><button class='link' id='toHome'>Back to all case files</button></div></section></div>";
+  var node = el(h), i = st.i, missed = st.missed.slice();
+  var f = node.querySelector("#fix"); if (f) f.onclick = function () { startRound(i, missed); };
+  var nf = node.querySelector("#nextFile"); if (nf) nf.onclick = function () { brief(nextI); };
+  node.querySelector("#again").onclick = function () { startRound(i); };
+  node.querySelector("#toHome").onclick = home;
+  show(node);
+  if (stars >= 2 || (st.practice && pct === 1)) confetti();
+}
+
+/* ================= Notebook ================= */
+var drawer = document.getElementById("drawer"), lastFocus = null;
+function nb(open) {
+  document.body.classList.toggle("nb-open", open);
+  drawer.setAttribute("aria-hidden", open ? "false" : "true");
+  if (open) { lastFocus = document.activeElement; document.getElementById("nbClose").focus(); }
+  else if (lastFocus) lastFocus.focus();
+}
+document.getElementById("nbBtn").onclick = function () { nb(true); };
+document.getElementById("nbClose").onclick = function () { nb(false); };
+document.getElementById("scrim").onclick = function () { nb(false); };
+document.getElementById("homeBtn").onclick = home;
+
+/* ================= Keyboard ================= */
+document.addEventListener("keydown", function (e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "Escape" && document.body.classList.contains("nb-open")) { nb(false); return; }
+  if (document.body.classList.contains("nb-open")) return;
+  if (view === "play" && !st.answered && /^[1-4]$/.test(e.key)) {
+    var b = app.querySelectorAll(".opt")[+e.key - 1]; if (b) { e.preventDefault(); b.click(); }
+  } else if (e.key === "Enter" && !(document.activeElement && document.activeElement.matches("button:not(:disabled), a"))) {
+    var go = app.querySelector("#next, #go"); if (go) { e.preventDefault(); go.click(); }
+  }
+});
+
+/* ================= Confetti ================= */
+function confetti() {
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var c = document.getElementById("confetti"), x = c.getContext("2d");
+  var W = c.width = innerWidth, H = c.height = innerHeight;
+  var cols = ["#e0a526", "#6b35a0", "#c8553d", "#17906a", "#2563c9"], ps = [];
+  for (var i = 0; i < 110; i++) ps.push({ x: W / 2 + (Math.random() - .5) * 120, y: H * .32, vx: (Math.random() - .5) * 13, vy: -Math.random() * 12 - 3, s: 5 + Math.random() * 6, r: Math.random() * 6, c: cols[i % cols.length] });
+  var t0 = performance.now();
+  (function tick(t) {
+    x.clearRect(0, 0, W, H);
+    ps.forEach(function (p) { p.vy += .32; p.x += p.vx; p.y += p.vy; p.r += .2; x.save(); x.translate(p.x, p.y); x.rotate(p.r); x.fillStyle = p.c; x.fillRect(-p.s / 2, -p.s / 3, p.s, p.s * .66); x.restore(); });
+    if (t - t0 < 2600) requestAnimationFrame(tick); else x.clearRect(0, 0, W, H);
+  })(t0);
+}
+
+home();
+})();
+</script>
+</body>
+</html>
