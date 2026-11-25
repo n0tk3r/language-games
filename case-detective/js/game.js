@@ -116,7 +116,7 @@
 
   /* ---------------------------------------------------------------- DOM */
   var app = $("app"), desk = $("desk"), stage = $("stage"), tbMid = $("tbMid");
-  var homeBtn = $("homeBtn"), soundBtn = $("soundBtn"), streakEl = $("streak"), streakN = $("streakN");
+  var homeBtn = $("homeBtn"), soundBtn = $("soundBtn"), nbBtn = $("nbBtn"), streakEl = $("streak"), streakN = $("streakN");
   var inspFig = $("inspFig"), bubble = $("bubble"), bText = $("bText"), bName = $("bName"), bNext = $("bNext");
   var live = $("live"), fx = $("fx");
   var nb = $("notebook"), nbScrim = $("nbScrim"), nbClose = $("nbClose"), nbPages = $("nbPages");
@@ -124,8 +124,8 @@
   var skA = document.querySelector(".sk-a"), skB = document.querySelector(".sk-b");
   bName.textContent = D.inspector.name;
 
-  /* the case colours come from data.js; the stylesheet carries the same values as a fallback.
-     The verb is not a case: its tag keeps the stylesheet's warm grey (the grey in data.js leans violet,
+  /* the case colors come from data.js; the stylesheet carries the same values as a fallback.
+     The verb is not a case: its tag keeps the stylesheet's warm gray (the gray in data.js leans violet,
      and violet belongs to the accusative alone). */
   try {
     CASE_KEYS.forEach(function (k) { if (D.cases[k] && /^#[0-9a-f]{3,8}$/i.test(D.cases[k].color)) { document.documentElement.style.setProperty("--" + k, D.cases[k].color); } });
@@ -482,12 +482,29 @@
   });
 
   /* ---------------------------------------------------------- top bar */
-  function setMid(html) { tbMid.innerHTML = html || ""; }
+  function setMid(html) { tbMid.innerHTML = html || ""; fitPips(); }
+  /* Every pip of the round has its place between the buttons of the top bar. A small phone has no room
+     for nine of them at full size once the streak counter is out as well: there they all get smaller
+     together, rather than slide under their neighbors. */
+  function fitPips() {
+    var box = tbMid.querySelector(".pips");
+    if (!box) { return; }
+    box.style.removeProperty("--pip");
+    var n = box.children.length, first = box.firstElementChild;
+    if (!n || !first || !tbMid.clientWidth) { return; }
+    var full = first.offsetWidth, gap = 0, used = 0;
+    try { gap = parseFloat(getComputedStyle(box).columnGap) || 0; used = parseFloat(getComputedStyle(tbMid).columnGap) || 0; } catch (e) { gap = 4; used = 8; }
+    var room = tbMid.clientWidth;
+    for (var c = tbMid.firstElementChild; c; c = c.nextElementSibling) { if (c !== box && c.getClientRects().length) { room -= c.offsetWidth + used; } }
+    /* (the pip of the question on show is drawn a little larger: 4 px of air for it) */
+    var size = Math.floor((room - 4 - gap * (n - 1)) / n);
+    if (size < full) { box.style.setProperty("--pip", Math.max(5, size) + "px"); }
+  }
   function midFile(f, extra) { setMid('<span class="tb-file"><b>File ' + f.n + "</b>" + txt(extra || f.title) + "</span>"); }
   function setStreak(n) {
     streakN.textContent = n;
     var show = n >= 2;
-    if (streakEl.hidden === show) { streakEl.hidden = !show; }
+    if (streakEl.hidden === show) { streakEl.hidden = !show; fitPips(); }
     if (show) { streakEl.classList.remove("bump"); void streakEl.offsetWidth; streakEl.classList.add("bump"); }
   }
   function syncSound() {
@@ -510,7 +527,9 @@
     stage.style.minHeight = "";
     app.classList.remove("compact");
     app.classList.remove("terse");
+    app.classList.remove("brief-small");
     app.style.removeProperty("--insp");
+    nbBtn.classList.remove("point");
     lookAt(null);
     view = name;
     app.setAttribute("data-view", name);
@@ -606,7 +625,7 @@
     return h + "</span>";
   }
   function pic(id, cls) { return '<svg class="' + cls + '" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><use href="#' + id + '"></use></svg>'; }
-  /* an answer is shown in its case colour only when it names the case itself */
+  /* an answer is shown in its case color only when it names the case itself */
   function caseOfOption(o) {
     var c = D.cases[o.k];
     if (!c) { return null; }
@@ -624,7 +643,8 @@
     if (!cs) { return ""; }
     return String(o.label).indexOf(cs.name) === 0 ? cs.question : cs.name;
   }
-  function sentenceString(words) { return words.map(function (w) { return w.w + (w.after || ""); }).join(" "); }
+  /* gap: the mystery word is the answer itself and must not be given away, so its place is only named */
+  function sentenceString(words, gap) { return words.map(function (w) { return (gap && w.t ? "(missing word)" : w.w) + (w.after || ""); }).join(" "); }
   function sentenceText(words, markTarget) {
     return words.map(function (w) {
       var t = esc(w.w);
@@ -642,25 +662,34 @@
     return s;
   }
   /* The sentence under investigation. Every word is a button (tap it for its meaning). The mystery
-     word is boxed in gold and wears a "?" until its job is known. Each word's job label hangs under it. */
+     word is boxed in gold and wears a "?" until its job is known. Each word's job label hangs under it.
+     gap: the mystery word is the answer itself (file 2). Its place is an empty slot with the "?" in it,
+     and the word is nowhere in the page (text, label, pop-up) until the answer is in: see fillGap. */
   var gloss = null, glossTimer = 0;
-  function buildScroll(words) {
+  function buildScroll(words, gap) {
     var wrap = el("div", "scroll-wrap"), sc = el("div", "scroll"), row = el("div", "s-row");
     sc.setAttribute("lang", "la");
     sc.setAttribute("role", "group");
-    sc.setAttribute("aria-label", sentenceString(words));
+    sc.setAttribute("aria-label", sentenceString(words, gap));
     var tag = el("span", "ev-tag", "Evidence");
     tag.setAttribute("aria-hidden", "true");
     wrap.appendChild(tag);
     words.forEach(function (w, i) {
+      var hole = !!(gap && w.t);
       var u = el("span", "wu" + (w.r && caseInfo(w.r) ? " c-" + w.r : ""));
       u.style.setProperty("--i", i);
-      var b = el("button", "w" + (w.t ? " t" : ""), '<span class="w-t">' + esc(w.w) + "</span>" + (w.after ? esc(w.after) : "") +
-        (w.t ? '<span class="sr" lang="en">, the highlighted word</span><span class="w-q" aria-hidden="true">?</span>' : ""));
+      var b = el("button", "w" + (w.t ? " t" : "") + (hole ? " gap" : ""), hole
+        ? '<span class="w-t"> <span class="w-q" aria-hidden="true">?</span></span><span class="sr" lang="en">the missing word</span>' + (w.after ? esc(w.after) : "")
+        : '<span class="w-t">' + esc(w.w) + "</span>" + (w.after ? esc(w.after) : "") +
+          (w.t ? '<span class="sr" lang="en">, the highlighted word</span><span class="w-q" aria-hidden="true">?</span>' : ""));
       b.type = "button";
       b.setAttribute("data-word", i);
       u.appendChild(b);
       var lab = wordLabel(w);
+      /* In a gap question no label is written before the answer, not even out of sight: one of them may
+         name the missing word (the tag "describes rosās"). An empty holder keeps its place and its
+         width (sizeGap); fillGap writes the labels when the answer is in. */
+      if (lab && gap) { lab.textContent = ""; }
       if (lab) { u.appendChild(lab); }
       row.appendChild(u);
     });
@@ -696,10 +725,55 @@
     return best;
   }
   /* The rows are worked out from the width each word needs once its label hangs under it. So no word
-     changes row when the labels appear, and no label ever has to wrap, squeeze or touch its neighbour. */
+     changes row when the labels appear, and no label ever has to wrap, squeeze or touch its neighbor. */
+  /* The empty slot of a gap question is as wide as the widest of the forms that could go into it. So its
+     width says nothing about the answer, and no word moves when the right form drops in. (Every answer
+     is measured, never the right one alone; they are all on the cards anyway.) */
+  function swapWord(text, form, by) {
+    var low = String(text).toLowerCase(), f = String(form).toLowerCase(), out = "", from = 0, p;
+    while (f && (p = low.indexOf(f, from)) >= 0) { out += text.slice(from, p) + by; from = p + f.length; }
+    return out + text.slice(from);
+  }
+  function sizeGap(sc) {
+    var b = sc.querySelector(".w.gap, .w.filled"), c = view === "play" && R ? R.cur : null;
+    if (!b || !c || !c.q.words) { return; }
+    var words = c.q.words, hole = words[+b.getAttribute("data-word")], slot = b.querySelector(".w-t"), max = 0;
+    if (!slot || !hole) { return; }
+    var first = String(hole.w).charAt(0), cap = first !== first.toLowerCase();
+    var probe = el("span", "w-t");
+    probe.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;min-width:0;white-space:nowrap";
+    probe.setAttribute("aria-hidden", "true");
+    b.appendChild(probe);
+    c.opts.forEach(function (o) {
+      var s = String(o.label);
+      probe.textContent = cap ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+      max = Math.max(max, probe.getBoundingClientRect().width);
+    });
+    b.removeChild(probe);
+    if (max > 0) { slot.style.minWidth = Math.ceil(max) + "px"; }
+    /* The labels: each one's place is as wide as the label that will hang there, so the rows are right
+       from the start. A label that names the missing word is measured with every form in its place. */
+    var units = sc.querySelectorAll(".wu"), hidden = String(hole.w).toLowerCase();
+    for (var i = 0; i < units.length; i++) {
+      var wb = units[i].querySelector(".w"), hold = units[i].querySelector(".w-lab"), w = wb ? words[+wb.getAttribute("data-word")] : null;
+      if (!hold || !w || !wordLabel(w)) { continue; }
+      var tag = String(w.tag || ""), list = [w], wide = 0;
+      if (tag.toLowerCase().indexOf(hidden) >= 0) { list = c.opts.map(function (o) { return { r: w.r, tag: swapWord(tag, hole.w, String(o.label)) }; }); }
+      for (var n = 0; n < list.length; n++) {
+        var lp = wordLabel(list[n]);
+        lp.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;height:auto;min-width:0";
+        lp.setAttribute("aria-hidden", "true");
+        units[i].appendChild(lp);
+        wide = Math.max(wide, lp.getBoundingClientRect().width);
+        units[i].removeChild(lp);
+      }
+      if (wide > 0) { hold.style.minWidth = Math.ceil(wide) + "px"; }
+    }
+  }
   function layoutScroll() {
     var sc = desk.querySelector(".scroll");
-    if (!sc) { return; }
+    if (!sc || !sc.getClientRects().length) { return; }
+    sizeGap(sc);
     var units = sc.querySelectorAll(".wu"), n = units.length, i, w = [];
     if (!n) { return; }
     var gap = parseFloat(getComputedStyle(units[0]).marginLeft) * 2 || 0;
@@ -728,7 +802,9 @@
   function showGloss(btn, w) {
     if (!gloss || !btn || !w) { return; }
     var wrap = gloss.parentNode, row = btn.closest ? btn.closest(".s-row") : null;
-    gloss.innerHTML = '<b lang="la">' + esc(w.lemma) + ":</b> " + esc(w.g);
+    /* the empty slot of a gap question: what is missing in English, never a Latin form */
+    if (btn.classList.contains("gap")) { gloss.innerHTML = "<b>?</b> Which form of “" + esc(String(w.g || "").split(",")[0]) + "” goes here?"; }
+    else { gloss.innerHTML = '<b lang="la">' + esc(w.lemma) + ":</b> " + esc(w.g); }
     gloss.style.left = "0px"; gloss.style.top = "0px";
     var r = btn.getBoundingClientRect(), wr = wrap.getBoundingClientRect(), gw = gloss.offsetWidth, gh = gloss.offsetHeight;
     var left = Math.max(0, Math.min(wr.width - gw, r.left + r.width / 2 - wr.left - gw / 2));
@@ -750,6 +826,26 @@
     var units = desk.querySelectorAll(".wu");
     for (var i = 0; i < units.length; i++) {
       if (!indexes || indexes.indexOf(i) >= 0) { units[i].classList.add("show"); }
+    }
+  }
+  /* The answer is in: the right form drops into the empty slot, exactly as the sentence prints it (with
+     its capital at the start of a sentence). Only ever the right form: a wrong pick does not go in. */
+  function fillGap(v, q) {
+    var b = v.querySelector(".scroll .w.gap");
+    if (!b || !q.words) { return; }
+    var w = q.words[+b.getAttribute("data-word")], slot = b.querySelector(".w-t"), sr = b.querySelector(".sr"), sc = v.querySelector(".scroll");
+    if (!w || !slot) { return; }
+    slot.textContent = w.w;
+    slot.classList.add("drop");
+    b.classList.remove("gap");
+    b.classList.add("filled");
+    if (sr) { sr.textContent = ", the highlighted word"; }
+    if (sc) { sc.setAttribute("aria-label", sentenceString(q.words)); }
+    /* and now the labels may be written (see buildScroll) */
+    var units = v.querySelectorAll(".scroll .wu");
+    for (var i = 0; i < units.length; i++) {
+      var wb = units[i].querySelector(".w"), hold = units[i].querySelector(".w-lab"), real = wb && q.words[+wb.getAttribute("data-word")] ? wordLabel(q.words[+wb.getAttribute("data-word")]) : null;
+      if (hold && real) { hold.innerHTML = real.innerHTML; }
     }
   }
   /* His magnifying glass. When a clue talks about words of the sentence, the glass leaves his hand and
@@ -813,8 +909,11 @@
     var box = el("div", "answers n" + opts.length + (opts[0] && opts[0].latin ? " latin" : ""));
     box.setAttribute("role", "group");
     box.setAttribute("aria-label", "Answers");
+    /* the faces belong to the three -ae suspects as a set, never to some cards of another set of answers
+       (such as "Accusative plural" beside "Genitive plural") */
+    var faces = opts.length === 3 && opts.every(function (o) { return !!portraitFor(o); });
     opts.forEach(function (o, i) {
-      var ck = caseOfOption(o), p = portraitFor(o);
+      var ck = caseOfOption(o), p = faces ? portraitFor(o) : "";
       var b = el("button", "opt" + (o.latin ? " latin" : "") + (ck ? " colored c-" + ck : "") + (p ? " has-pic" : ""));
       b.type = "button";
       b.setAttribute("data-k", o.k);
@@ -823,6 +922,114 @@
       box.appendChild(b);
     });
     return box;
+  }
+  /* No answer may ever be cut off by its card. The stylesheet puts four Latin forms in one row only
+     where the longest of them fits; this is the measured net under it, for the fonts, zoom levels and
+     window sizes nobody planned for. A label that is wider than its box sends the four cards back to
+     two columns (three cards in a row give up the air at their sides); if it still does not fit, the
+     type of the labels steps down (never under 17 px), then the number keys give up their badges; and
+     should even that fail, the word is allowed to break rather than to hide its ending.
+     Run after the cards are built, and again when the window, the fonts or a card change. */
+  var LAB_MIN = 17;
+  /* true when the text of a label is wider than the room it has (less `spare` px of air) */
+  function labOver(lab, spare) {
+    var room = lab.getBoundingClientRect().width, need = lab.scrollWidth > lab.clientWidth ? lab.scrollWidth : 0, rg;
+    if (!room) { return false; }
+    try { rg = document.createRange(); rg.selectNodeContents(lab); need = Math.max(need, rg.getBoundingClientRect().width); } catch (e) { /* keep the box's own figure */ }
+    return need + spare > room + 0.5;
+  }
+  function labelOver(box, spare) {
+    var labs = box.querySelectorAll(".o-lab");
+    for (var i = 0; i < labs.length; i++) { if (labOver(labs[i], spare)) { return true; } }
+    return false;
+  }
+  /* The right or wrong mark of a card may never lie on its words, and where it stands in a row with the
+     label it may not take the room a long word needs. (Asked while the box is in "probe": no word breaks.) */
+  function markHits(box) {
+    var list = box.querySelectorAll(".opt.right, .opt.wrong"), rg = null, i, j, k;
+    try { rg = document.createRange(); } catch (e) { rg = null; }
+    for (i = 0; i < list.length; i++) {
+      var m = list[i].querySelector(".o-mark"), mr = m ? m.getBoundingClientRect() : null, lab = list[i].querySelector(".o-lab");
+      if (!mr || !mr.width) { continue; }
+      if (getComputedStyle(m).position !== "absolute") { if (lab && labOver(lab, 0)) { return true; } continue; }
+      var texts = rg ? list[i].querySelectorAll(".o-lab, .o-sub") : [];
+      for (j = 0; j < texts.length; j++) {
+        rg.selectNodeContents(texts[j]);
+        var rs = rg.getClientRects();
+        for (k = 0; k < rs.length; k++) {
+          if (rs[k].left < mr.right - 1 && mr.left < rs[k].right - 1 && rs[k].top < mr.bottom - 1 && mr.top < rs[k].bottom - 1) { return true; }
+        }
+      }
+    }
+    return false;
+  }
+  /* A number key may never lie on the words of its card (three cards in a row keep it in a corner,
+     where a long label can reach it). Where one would, the keys of that question give up their badges;
+     the keys themselves still work. Asked again after the play screen has closed its ranks. */
+  function keyHits(box) {
+    var keys = box.querySelectorAll(".o-key"), rg = null, i, j, k;
+    try { rg = document.createRange(); } catch (e) { return false; }
+    for (i = 0; i < keys.length; i++) {
+      var kr = keys[i].getBoundingClientRect(), texts = kr.width ? keys[i].parentNode.querySelectorAll(".o-lab, .o-sub") : [];
+      for (j = 0; j < texts.length; j++) {
+        rg.selectNodeContents(texts[j]);
+        var rs = rg.getClientRects();
+        for (k = 0; k < rs.length; k++) {
+          if (rs[k].left < kr.right - 0.5 && kr.left < rs[k].right - 0.5 && rs[k].top < kr.bottom - 0.5 && kr.top < rs[k].bottom - 0.5) { return true; }
+        }
+      }
+    }
+    return false;
+  }
+  function fitKeys() {
+    var boxes = desk.querySelectorAll(".answers:not(.ghost):not(.nokey)");
+    for (var n = 0; n < boxes.length; n++) { if (keyHits(boxes[n])) { boxes[n].classList.add("nokey"); } }
+  }
+  function fitAnswers(keep) {
+    var boxes = desk.querySelectorAll(".answers:not(.ghost)");
+    for (var n = 0; n < boxes.length; n++) {
+      var box = boxes[n], cols = 0, marked = !!box.querySelector(".opt.right, .opt.wrong");
+      /* keep: a card has changed in the middle of a question (a stamp has landed, the answer is in). Then
+         the cards may only be given more room, never be put back, so nothing jumps under the player's finger. */
+      if (!keep) {
+        box.classList.remove("cols2"); box.classList.remove("slim"); box.classList.remove("fs"); box.classList.remove("nokey"); box.classList.remove("brk"); box.classList.remove("st-sm");
+        box.style.removeProperty("--lab-fs");
+      }
+      /* while measuring, a long word may not break: it has to show up as too wide. The marks of an
+         answered question stand out of the labels' way meanwhile; their place is decided last. */
+      box.classList.add("probe");
+      box.classList[marked ? "add" : "remove"]("mk-top");
+      try { cols = String(getComputedStyle(box).gridTemplateColumns).split(/\s+/).length; } catch (e) { cols = 0; }
+      if (box.classList.contains("n4") && cols > 2 && labelOver(box, 8)) { box.classList.add("cols2"); }
+      if (labelOver(box, 0)) {
+        /* three cards in a row first give up the air at their sides: that costs no type */
+        if (box.classList.contains("n3")) { box.classList.add("slim"); }
+        var lab = box.querySelector(".o-lab"), fs = lab ? Math.floor(parseFloat(getComputedStyle(lab).fontSize)) || 0 : 0;
+        while (fs > LAB_MIN && labelOver(box, 0)) {
+          fs--;
+          box.style.setProperty("--lab-fs", fs + "px");
+          box.classList.add("fs");
+        }
+        /* before a word may break, the number keys give up their badges (the keys still work) */
+        if (labelOver(box, 0)) { box.classList.add("nokey"); }
+        if (labelOver(box, 0)) { box.classList.add("brk"); }
+      }
+      /* the marks: where they are by the stylesheet, unless one would lie on a word or squeeze one; then
+         every card of this question keeps a strip free at its top and the marks sit there ("mk-top") */
+      if (marked) {
+        box.classList.remove("mk-top");
+        if (markHits(box)) { box.classList.add("mk-top"); }
+      }
+      /* and a "Ruled out" stamp that is wider than its card gets its small size (measured on the layout
+         box: the stamp is still turning into place when this runs) */
+      var stamps = box.querySelectorAll(".opt.out .o-stamp");
+      for (var si = 0; si < stamps.length && !box.classList.contains("st-sm"); si++) {
+        var card = stamps[si].offsetParent;
+        if (card && stamps[si].offsetWidth && (stamps[si].offsetLeft < 0 || stamps[si].offsetLeft + stamps[si].offsetWidth + 1 > card.clientWidth)) { box.classList.add("st-sm"); }
+      }
+      box.classList.remove("probe");
+      if (!box.classList.contains("nokey") && keyHits(box)) { box.classList.add("nokey"); }
+    }
   }
   function optButton(k) { return desk.querySelector('.opt[data-k="' + selEsc(k) + '"]'); }
   /* what a clue or a training step rules out: one key in the data, or a list of them */
@@ -835,6 +1042,7 @@
     if (!keepEnabled) { b.disabled = true; }
     var st = b.querySelector(".o-stamp");
     if (st) { st.removeAttribute("aria-hidden"); }
+    fitAnswers(true);
     if (loud) {
       b.classList.add("thud");
       later(function () { Sfx.play("ruleout"); }, 140);
@@ -873,6 +1081,22 @@
 
   /* ------------------------------------------------------- the Notebook */
   var nbOpen = false, cfOpen = false, lastFocus = null;
+  /* The declension chart: one build for the Notebook and for the briefing that opens with it (request 6).
+     sneaky: mark the cells with the sneaky ending (the Notebook explains them; the first briefing does not). */
+  function declTable(sneaky) {
+    var dc = D.declension, n = 0, h = '<table class="decl"><thead><tr><th scope="col">Case</th><th scope="col">One</th><th scope="col">Many</th></tr></thead><tbody>';
+    dc.rows.forEach(function (row) {
+      var c = D.cases[row.k];
+      if (!c) { return; }
+      function cell(end) {
+        var sn = sneaky && end === dc.sneaky;
+        if (sn) { n++; }
+        return "<td" + (sn ? ' class="sn"' : "") + ' lang="la">' + esc(dc.stem) + "<b>" + esc(end) + "</b>" + (sn ? '<span class="sr" lang="en"> (the sneaky ending)</span>' : "") + "</td>";
+      }
+      h += '<tr class="c-' + c.key + '"><td>' + esc(c.name) + "</td>" + cell(row.sg) + cell(row.pl) + "</tr>";
+    });
+    return { html: h + "</tbody></table>", sneaky: n };
+  }
   function buildNotebook() {
     var dc = D.declension, h = "", sneakyCells = 0;
     h += '<section class="nb-sec"><h3>Every case has a job</h3><ul class="nb-cases">';
@@ -883,29 +1107,20 @@
         '<span class="nb-job">Job: ' + esc(c.job) + '</span><span class="nb-hook">' + rich(c.hook) + "</span></div></li>";
     });
     h += "</ul></section>";
-    h += '<section class="nb-sec"><h3>The <i lang="la">' + esc(dc.word) + "</i> chart</h3><p>" + '<i lang="la">' + esc(dc.word) + "</i> means “" + esc(dc.meaning) + "”. The ending changes with the job.</p>" +
-      '<table class="decl"><thead><tr><th scope="col">Case</th><th scope="col">One</th><th scope="col">Many</th></tr></thead><tbody>';
-    dc.rows.forEach(function (row) {
-      var c = D.cases[row.k];
-      if (!c) { return; }
-      function cell(end) {
-        var sn = end === dc.sneaky;
-        if (sn) { sneakyCells++; }
-        return "<td" + (sn ? ' class="sn"' : "") + ' lang="la">' + esc(dc.stem) + "<b>" + esc(end) + "</b>" + (sn ? '<span class="sr" lang="en"> (the sneaky ending)</span>' : "") + "</td>";
-      }
-      h += '<tr class="c-' + c.key + '"><td>' + esc(c.name) + "</td>" + cell(row.sg) + cell(row.pl) + "</tr>";
-    });
+    var chart = declTable(true);
+    sneakyCells = chart.sneaky;
+    h += '<section class="nb-sec"><h3>The <i lang="la">' + esc(dc.word) + "</i> chart</h3><p>" + '<i lang="la">' + esc(dc.word) + "</i> means “" + esc(dc.meaning) + "”. The ending changes with the job.</p>" + chart.html;
     /* the chart marks every cell with the sneaky ending; he speaks of three suspects, because the fourth
        cell (the vocative plural) is the nominative's twin. The caption says so. */
     var twin = false;
     dc.rows.forEach(function (row) { if (row.k === "voc" && row.pl === dc.sneaky) { twin = true; } });
-    h += '</tbody></table><p class="decl-key"><b lang="la">-' + esc(dc.sneaky) + "</b><span>The sneaky ending. It turns up " + sneakyCells + " times" +
+    h += '<p class="decl-key"><b lang="la">-' + esc(dc.sneaky) + "</b><span>The sneaky ending. It turns up " + sneakyCells + " times" +
       (twin && sneakyCells === 4 ? ": the three suspects, and the vocative plural, which always looks like the nominative." : ", so the rest of the sentence has to tell you which job it has.") + "</span></p></section>";
     h += '<section class="nb-sec"><h3>The detective method</h3><ol class="nb-method">';
     D.method.forEach(function (m) { h += "<li><b>" + txt(m.title) + "</b>" + txt(m.text) + "</li>"; });
     h += "</ol></section>";
     h += '<section class="nb-sec"><h3>Field notes</h3><p>' + esc(D.inspector.nameNote) + '</p><ul class="nb-tips"><li>' + esc(L.glossHint) + "</li><li>Clues never cost stars. Ask as often as you like.</li>" +
-      "<li>On a keyboard: <kbd>1</kbd> to <kbd>4</kbd> answer, <kbd>Enter</kbd> continues, <kbd>C</kbd> asks for a clue, <kbd>N</kbd> opens this Notebook and <kbd>M</kbd> turns the sound on or off.</li></ul></section>";
+      '<li class="kb-tip">On a keyboard: <kbd>1</kbd> to <kbd>4</kbd> answer, <kbd>Enter</kbd> continues, <kbd>C</kbd> asks for a clue, <kbd>N</kbd> opens this Notebook and <kbd>M</kbd> turns the sound on or off.</li></ul></section>';
     nbPages.innerHTML = h;
     nbPages.setAttribute("tabindex", "0");
     nbPages.setAttribute("aria-label", "Notebook pages");
@@ -1082,6 +1297,132 @@
     }
     return h;
   }
+  /* A briefing may teach with cards (file 1): the chart first (request 6), then one mini lesson per case,
+     all of one build (request 5), and the recap at the end. The cards lie on one spot of the desk. */
+  function chartCardHtml() {
+    var dc = D.declension;
+    return '<h2 class="rc-h">The <i lang="la">' + esc(dc.word) + "</i> chart<small>“" + esc(dc.meaning) + "”: one, and many</small></h2>" + declTable(false).html;
+  }
+  function sameWords(a, b) {
+    if (!a || !b || a.length !== b.length) { return false; }
+    for (var i = 0; i < a.length; i++) { if (a[i].w !== b[i].w || (a[i].after || "") !== (b[i].after || "")) { return false; } }
+    return true;
+  }
+  /* The lesson of one case: the case and its question, one Latin example in which only that case's word
+     wears its label, what it says, and the case's row of the chart. A lesson whose sentence is already
+     on the card keeps the card and moves the label: one sentence, several jobs.
+     (.ls-scene is the place of the picture of the sentence; it stays shut until scenes.js is loaded.) */
+  function setLesson(ls) {
+    var box = B.lessonEl, c = D.cases[ls.k], dc = D.declension, keep = !!(B.lesson && sameWords(B.lesson.words, ls.words)), ti = -1, i;
+    if (!box || !c || !ls.words) { return; }
+    for (i = 0; i < ls.words.length; i++) { if (ls.words[i].t) { ti = i; } }
+    if (!keep) {
+      box.innerHTML = '<div class="ls-head"></div><div class="ls-strip"></div><p class="ls-tr"></p><div class="ls-scene" hidden></div><p class="ls-row"></p>';
+      /* the strip is the game's own evidence scroll (a tap on a word shows its meaning); none of its words is a mystery */
+      box.querySelector(".ls-strip").appendChild(buildScroll(ls.words.map(function (w) { var o = {}; for (var k in w) { if (k !== "t") { o[k] = w[k]; } } return o; }), false));
+    }
+    B.lesson = ls;
+    box.className = "bf-card bf-lesson c-" + c.key + (box.classList.contains("wait") ? " wait" : "");
+    box.querySelector(".ls-head").innerHTML = pic("c-" + c.key, "c-pic") + '<span class="chip c-' + c.key + '">' + esc(c.name) + '</span><b class="ls-q">' + esc(c.question) + '</b><span class="ls-job">Job: ' + esc(c.job) + "</span>";
+    var units = box.querySelectorAll(".wu");
+    for (i = 0; i < units.length; i++) {
+      var b = units[i].querySelector(".w");
+      units[i].classList[i === ti ? "add" : "remove"]("show");
+      if (b) { b.classList[i === ti ? "add" : "remove"]("t"); }
+    }
+    box.querySelector(".ls-tr").innerHTML = ls.translation ? "“" + rich(ls.translation) + "”" : "";
+    var dr = null;
+    dc.rows.forEach(function (r) { if (r.k === ls.k) { dr = r; } });
+    box.querySelector(".ls-row").innerHTML = dr ? '<span class="ls-row-h">In the chart:</span><span class="ls-end" lang="la">' + esc(dc.stem) + "<b>" + esc(dr.sg) + '</b></span><small>one</small><span class="ls-end" lang="la">' + esc(dc.stem) + "<b>" + esc(dr.pl) + "</b></span><small>many</small>" : "";
+    if (!keep) { layoutScroll(); }
+  }
+  /* which card lies on the desk: "chart", "lesson", "recap" or none; true when that changed */
+  function showCard(which, look) {
+    var changed = false, shown = null;
+    [["chart", B.chart], ["lesson", B.lessonEl], ["recap", B.recap]].forEach(function (p) {
+      if (!p[1]) { return; }
+      var on = p[0] === which;
+      if (p[1].classList.contains("wait") === on) { changed = true; p[1].classList[on ? "remove" : "add"]("wait"); }
+      if (on) { shown = p[1]; }
+    });
+    B.view.classList[shown ? "add" : "remove"]("has-recap");
+    if (changed && look && shown) { lookAtNode(shown, 1500); }
+    return changed;
+  }
+  /* "that is where the chart lives": the Notebook button lights up for as long as a beat points at it */
+  function pointAt(what) {
+    var on = what === "notebook";
+    nbBtn.classList[on ? "add" : "remove"]("point");
+    if (on) { lookAtNode(nbBtn, 2400); }
+  }
+  /* All lessons are of one build, but a longer question wraps: the lesson card is as tall as the tallest
+     of them, from the first beat on, so the spot of the cards never changes its height. */
+  function sizeLessons() {
+    var box = B.lessonEl, cur = B.lesson, first = null, max = 0;
+    if (!box) { return; }
+    box.style.minHeight = "";
+    box.style.alignSelf = "start";
+    B.lines.forEach(function (ln) {
+      if (!ln.lesson) { return; }
+      first = first || ln.lesson;
+      setLesson(ln.lesson);
+      max = Math.max(max, box.offsetHeight);
+    });
+    box.style.alignSelf = "";
+    if (cur || first) { setLesson(cur || first); }
+    if (max) { box.style.minHeight = max + "px"; }
+  }
+  /* A briefing with cards is fitted once, for his tallest line, so that nothing moves from beat to beat.
+     What is given up, in this order: the cover folds to its title ("bf-tight"), the cover goes (the bar
+     at the top has the title too: "bf-nocover"), the cards close ranks and the lesson lets go of its line
+     from the chart ("bf-tight2"), he gets smaller, and on the smallest phones he and his type get smaller
+     still and the lesson leaves its job line to him ("bf-tight3"). What was given up stays given up
+     until the window changes (start). Should a later line still be too tall, the same steps are taken then. */
+  var BF_STEPS = ["bf-tight", "bf-nocover", "bf-tight2", "bf-tight3"];
+  function briefSmall(on) {
+    if (app.classList.contains("brief-small") === on) { return; }
+    app.classList[on ? "add" : "remove"]("brief-small");
+    if (on) { app.style.removeProperty("--insp"); }
+    fitInspector();
+  }
+  function briefFit(start) {
+    if (!B || !B.view) { return; }
+    var v = B.view, n, over, h;
+    function step(cls) {
+      if (pageOver() <= 0 || v.classList.contains(cls)) { return; }
+      v.classList.add(cls);
+      if (cls === "bf-tight3") { briefSmall(true); }
+      sizeLessons();
+      if (start) { applyReserve(true); }
+    }
+    if (!B.cards) {
+      /* A briefing without cards looks as it always did. Only where its recap would still run under the
+         screen after he has made himself small, the cover goes, and then he and his type get smaller. */
+      if (start) { v.classList.remove("bf-nocover"); briefSmall(false); applyReserve(); }
+      squeezeInspector(v.lastElementChild);
+      if (pageOver() > 0 && !v.classList.contains("bf-nocover")) { v.classList.add("bf-nocover"); applyReserve(); }
+      if (pageOver() > 0) { briefSmall(true); applyReserve(); }
+      return;
+    }
+    if (start) {
+      BF_STEPS.forEach(function (c) { v.classList.remove(c); });
+      briefSmall(false);
+      sizeLessons();
+      applyReserve(true);
+    }
+    step(BF_STEPS[0]); step(BF_STEPS[1]); step(BF_STEPS[2]);
+    if (start && !wideLayout()) {
+      for (n = 0; n < 8; n++) {
+        over = pageOver(); h = Math.round(inspFig.clientHeight);
+        if (over <= 0 || h <= INSP_MIN) { break; }
+        app.style.setProperty("--insp", Math.max(INSP_MIN, h - Math.max(over, 8)) + "px");
+        fitInspector();
+        applyReserve(true);
+      }
+    }
+    step(BF_STEPS[3]);
+    applyReserve();
+  }
   function briefing(file, opts) {
     opts = opts || {};
     var seen = !!save.seen[file.id];
@@ -1089,14 +1430,21 @@
     B = { file: file, lines: file.briefing, i: 0, last: file.briefing.length - 1, talk: !seen || !!opts.hear, willTrain: !!(file.training && !save.seen[file.training.id]) };
     var s = save.stars[file.id] || 0, played = s > 0 || !!save.seen["round:" + file.id];
     var stamp = s >= 2 ? L.stamp.closed : (played ? L.stamp.open : "");
-    var v = el("div", "view v-brief");
+    /* (cards only while he talks: the short form of a briefing heard before is the recap alone, as ever) */
+    var cards = B.talk && file.briefing.some(function (ln) { return ln.show === "chart" || !!ln.lesson; });
+    var v = el("div", "view v-brief" + (cards ? " has-cards" : ""));
     v.innerHTML = '<header class="bf-cover"><span class="f-tab">File ' + file.n + " of " + FILES.length + '</span><h1 class="bf-title">' + txt(file.title) + '</h1><p class="bf-blurb">' + txt(file.blurb) + "</p>" +
       '<p class="bf-meta">' + (stamp ? '<span class="bf-stamp' + (s >= 2 ? "" : " still") + '">' + esc(stamp) + "</span>" : "<span>" + file.questions.length + " questions</span>") + starsHtml(s) + "</p></header>" +
-      '<section class="recap wait">' + recapHtml(file) + "</section>" +
+      (cards ? '<div class="bf-cards"><section class="bf-card bf-chart wait">' + chartCardHtml() + '</section><section class="bf-card bf-lesson wait"></section>' : "") +
+      '<section class="recap wait">' + recapHtml(file) + "</section>" + (cards ? "</div>" : "") +
       '<div class="bf-more" hidden><button type="button" class="btn ghost sm" data-action="hear">' + icon("replay") + "Hear the briefing</button>" +
       (file.training && !B.willTrain ? '<button type="button" class="btn ghost sm" data-action="retrain">' + icon("glass") + "Replay the training case</button>" : "") + "</div>" +
       '<div class="dock stick"><button type="button" class="btn ghost" data-action="skip">' + icon("skip") + '<span class="sk-t">Skip</span></button><button type="button" class="btn primary" data-primary><span class="p-lab">Next</span>' + icon("next") + "</button></div>";
     B.view = v;
+    B.cards = v.querySelector(".bf-cards");
+    B.chart = v.querySelector(".bf-chart");
+    B.lessonEl = v.querySelector(".bf-lesson");
+    B.lesson = null;
     B.recap = v.querySelector(".recap");
     B.more = v.querySelector(".bf-more");
     B.skip = v.querySelector('[data-action="skip"]');
@@ -1107,25 +1455,32 @@
       briefLine(false);
       reserveStage(B.lines.map(function (ln) { return [{ html: ln.say }]; }), { dots: [0, B.lines.length] });
     } else { briefReady(); }
+    briefFit(true);
     squeezeInspector(v.lastElementChild);
   }
   function startLabel() { return B.willTrain ? "Start the training case" : "Start the case"; }
-  function showRecap(look) {
-    if (!B.recap.classList.contains("wait")) { return; }
-    B.recap.classList.remove("wait");
-    B.view.classList.add("has-recap");
-    if (look) { lookAtNode(B.recap, 1500); }
-  }
+  function showRecap(look) { return showCard("recap", look); }
   function briefLine(instant) {
-    var ln = B.lines[B.i], atEnd = B.i >= B.last, was = B.recap.classList.contains("wait");
+    var ln = B.lines[B.i], atEnd = B.i >= B.last, which = "", lesson = null;
     mood(ln.mood);
-    for (var i = 0; i <= B.i; i++) { if (B.lines[i].show === "recap") { showRecap(i === B.i && !instant); } }
+    /* the card of this beat is the one the latest beat so far has asked for (the chart stays while he
+       points at the Notebook; a file without cards has its recap alone, as ever) */
+    for (var i = 0; i <= B.i; i++) {
+      var bl = B.lines[i];
+      if (bl.lesson && B.lessonEl) { which = "lesson"; lesson = bl.lesson; }
+      else if (bl.show === "chart" && B.chart) { which = "chart"; }
+      else if (bl.show === "recap") { which = "recap"; }
+    }
+    if (which === "lesson") { setLesson(lesson); }
+    var changed = showCard(which, !instant && !!(ln.show || ln.lesson));
+    pointAt(ln.point);
     B.skip.hidden = atEnd;
     B.plab.textContent = atEnd ? startLabel() : "Next";
     say([{ html: ln.say }], { dots: [B.i, B.lines.length], instant: !!instant });
-    if (was !== B.recap.classList.contains("wait")) { applyReserve(); squeezeInspector(B.view.lastElementChild); }
+    if (changed || B.cards) { applyReserve(); briefFit(false); squeezeInspector(B.view.lastElementChild); }
   }
   function briefReady() {
+    pointAt("");
     showRecap(false);
     B.more.hidden = false;
     B.skip.hidden = true;
@@ -1193,6 +1548,7 @@
     });
     setView("training", v);
     layoutScroll();
+    fitAnswers();
     trainStep(0);
   }
   function trainPips() {
@@ -1265,13 +1621,14 @@
     reserve = anchored ? null : { list: T.lines, opts: null };
     applyReserve();
     trainHold(wide);
-    if (wide) { v.classList.remove("tight"); return; }
+    if (wide) { v.classList.remove("tight"); fitKeys(); return; }
     /* a short phone keeps the tighter spacing for the whole case, so nothing changes size half way */
     if (anchored && window.innerHeight < 700) { v.classList.add("tight"); }
     if (pageOver() > 0) { v.classList.add("tight"); }
     var from = inspFig.getBoundingClientRect();
     squeezeInspector(v.lastElementChild);
     if (T.i > 0 && Math.abs(inspFig.getBoundingClientRect().height - from.height) > 3) { hopFrom(inspFig, from); }
+    fitKeys();
   }
   function trainStep(i) {
     var s = T.tr.steps[i];
@@ -1406,7 +1763,7 @@
     R = {
       file: file, practice: !!only, order: qs, n: qs.length, pos: 0,
       queue: qs.map(function (q) { return { q: q, retry: false }; }),
-      results: [], missed: [], fixed: {}, right: 0, streak: 0, best: 0, clues: 0, cur: null, done: false
+      results: [], missed: [], fixed: {}, picks: {}, right: 0, streak: 0, best: 0, clues: 0, cur: null, done: false
     };
     setStreak(0);
     showQuestion(false);
@@ -1456,15 +1813,16 @@
     } else {
       c = R.cur = { q: q, retry: item.retry, opts: q.shuffle ? shuffle(q.options) : q.options.slice(), answered: false, ok: false, picked: null, clues: 0, clueAt: 0, out: {}, line: "", extra: "" };
     }
-    var sentence = q.type === "sentence" && q.words && q.words.length;
-    var v = el("div", "view v-play " + (sentence ? "is-sentence" : "is-choice"));
-    if (sentence) {
-      v.appendChild(buildScroll(q.words));
-      v.insertAdjacentHTML("beforeend", methodHtml(""));
-    }
+    /* Every question that has Latin words shows them as evidence and is laid out as a sentence question
+       ("is-sentence"). The method strip belongs to the sentence type alone; a choice question with an
+       example ("q-choice") has none, and its mystery word may be a gap ("q-gap"). */
+    var hasWords = !!(q.words && q.words.length), sentence = hasWords && q.type === "sentence", gap = hasWords && !!q.gap;
+    var v = el("div", "view v-play " + (hasWords ? "is-sentence" : "is-choice") + (hasWords && !sentence ? " q-choice" : "") + (gap ? " q-gap" : ""));
+    if (hasWords) { v.appendChild(buildScroll(q.words, gap)); }
+    if (sentence) { v.insertAdjacentHTML("beforeend", methodHtml("")); }
     v.appendChild(buildAnswers(c.opts));
     var dock = el("div", "dock play-dock");
-    if (sentence) { dock.appendChild(el("p", "gloss-hint" + (save.seen.gloss ? " used" : ""), esc(L.glossHint))); }
+    if (hasWords) { dock.appendChild(el("p", "gloss-hint" + (save.seen.gloss ? " used" : ""), esc(L.glossHint))); }
     if (q.clues && q.clues.length) {
       var cb = el("button", "clue-btn");
       cb.type = "button";
@@ -1475,6 +1833,7 @@
     setView("play", v);
     layoutScroll();
     for (var k in c.out) { if (c.out[k]) { stampOut(k, false); } }
+    fitAnswers();
     midPips();
     syncClueBtn();
     var parts = [];
@@ -1487,7 +1846,7 @@
       mood(c.retry ? "think" : "idle");
       act(c.retry ? "think" : "point", c.retry ? 900 : 1500);
       say(parts);
-      if (sentence) { lookAtNode(desk.querySelector(".w.t"), 1600); }
+      if (hasWords) { lookAtNode(desk.querySelector(".w.t"), 1600); }
     }
     /* one stage height for the whole round: the tallest question still to come, with room for the
        line he says about the answer */
@@ -1515,6 +1874,11 @@
     if (pageOver() > 0 && !v.classList.contains("tight")) { v.classList.add("tight"); applyReserve(); }
     /* last of all, on a second look, the line about it having slipped away goes: the question stays */
     if (pageOver() > 0) { app.classList.add("terse"); applyReserve(); }
+    /* A choice question can be answered from its prompt alone: its Latin example is the first thing
+       that is worth less than the prompt and the answers. So where even all of the above is not enough,
+       the evidence makes way (it is back, with its labels, once the answer is in). */
+    if (pageOver() > 0 && v.classList.contains("q-choice")) { v.classList.add("no-ev"); hideGloss(); dropLens(); applyReserve(); }
+    fitKeys();
   }
   /* after a quiet while he gets thoughtful and the clue button glints */
   function nudge() {
@@ -1549,6 +1913,8 @@
       return -1;
     }
     c.q.words.forEach(function (w, i) {
+      /* the empty slot of a gap question is never visited: a ring there would say "this is the one" */
+      if (c.q.gap && w.t) { return; }
       var f = String(w.w).toLowerCase(), at = find(f, false);
       text.replace(/[^a-z\u00c0-\u024f]-([a-z\u00c0-\u024f]+)/g, function (m0, s, pos) {
         if (f.length > s.length && f.slice(-s.length) === s && (at < 0 || pos < at)) { at = pos; }
@@ -1568,7 +1934,7 @@
     });
     hits.sort(function (x, y) { return x.at - y.at || x.i - y.i; });
     var out = hits.slice(0, 3).map(function (h) { return h.b; });
-    if (!out.length) { var tb = desk.querySelector(".scroll .w.t"); if (tb) { out.push(tb); } }
+    if (!out.length) { var tb = desk.querySelector(".scroll .w.t:not(.gap)"); if (tb) { out.push(tb); } }
     return out;
   }
   function showClue(n, fresh) {
@@ -1602,7 +1968,8 @@
       into: note.querySelector(".cn-text"), live: false,
       onDone: function () {
         if (c.answered || R.cur !== c) { return; }
-        tourEvidence(btns, fresh, function () {
+        /* (where the evidence had to make way on a very short screen there is nothing to visit) */
+        tourEvidence(v.classList.contains("no-ev") ? [] : btns, fresh, function () {
           if (!fresh || c.answered || R.cur !== c) { return; }
           mood("think");
           outKeys(clue).forEach(function (key) { stampOut(key, true); });
@@ -1638,14 +2005,41 @@
   }
 
   /* answering */
+  /* ------------------------------------------- a wrong pick has an alibi (request 7)
+     After a wrong pick the child is told why THAT card is not it, before the right answer and its
+     reason. It is the Inspector who says it, right after his line ("Close, but that suspect has an
+     alibi." "Why not Dative? ..."), and his words are where he is: in his bubble while he stands on
+     the stage (there they take the place of the question he asked, so the case note keeps its size),
+     and in the case note, first thing under his line, once he has hopped into it on a phone.
+     The text is the data's (question.whyNot[key of the card]) and is never written here. A question
+     that has none for the card gets the right answer and its reason only, as before. */
+  function whyNot(q, k) {
+    var t = q && q.whyNot && typeof q.whyNot === "object" && k !== q.answer && Object.prototype.hasOwnProperty.call(q.whyNot, k) ? q.whyNot[k] : "";
+    return typeof t === "string" ? t : "";
+  }
+  function alibiOf(c) {
+    if (!c || !c.answered || c.ok) { return null; }
+    var o = optByKey(c.opts, c.picked), t = o ? whyNot(c.q, c.picked) : "";
+    return t ? { o: o, text: t } : null;
+  }
+  /* "Why not Dative?" as data-style text: a Latin form is in italics, as everywhere */
+  function alibiAsk(o) { return "Why not " + (o.latin ? "<i>" + plain(o.label) + "</i>" : plain(o.label)) + "?"; }
   function buildSheet(c, ok) {
-    var q = c.q, right = optByKey(c.opts, q.answer), mine = optByKey(c.opts, c.picked);
-    var s = el("section", "sheet " + (ok ? "good" : "bad")), h = "", job = right ? jobOf(right) : "";
+    var q = c.q, right = optByKey(c.opts, q.answer), mine = optByKey(c.opts, c.picked), al = alibiOf(c);
+    var s = el("section", "sheet " + (ok ? "good" : "bad") + (al ? " has-wn" : "")), h = "", job = right ? jobOf(right) : "";
     s.setAttribute("aria-label", "What the Inspector found");
     var jobHtml = job ? '<span class="sh-job">' + esc(job) + "</span>" : "";
+    /* With an alibi the note has two faces, and the stylesheet shows one of them: "Not X / It is Y" beside
+       the verdict mark while he explains the pick in his bubble; or, when he sits in the note, "Why not X?"
+       beside him, the alibi under it, and then "The answer: Y". */
     h += '<div class="sh-head"><div class="sh-insp"></div><span class="sh-ic">' + icon(ok ? "check" : "x") + '</span><div class="sh-ttl"><div class="sh-say"></div>' +
       (ok ? '<p class="sh-line"><b>' + (c.retry ? "Got it this time" : "Correct") + "</b>" + optionChip(right, "pop") + jobHtml + "</p>"
-        : '<p class="sh-line sh-not"><b>Not</b>' + optionChip(mine, "no") + '</p><p class="sh-line"><b>It is</b>' + optionChip(right, "pop") + jobHtml + "</p>") + "</div></div>";
+        : '<p class="sh-line sh-not"><b>Not</b>' + optionChip(mine, "no") + '</p><p class="sh-line sh-is"><b>It is</b>' + optionChip(right, "pop") + jobHtml + "</p>" +
+          (al ? '<p class="sh-line sh-ask"><b>Why not</b>' + optionChip(mine, "no") + "<b>?</b></p>" : "")) + "</div></div>";
+    if (al) {
+      h += '<p class="sh-wn">' + rich(al.text) + "</p>";
+      h += '<p class="sh-line sh-ans"><span class="sh-ok">' + icon("check") + "</span><b>The answer:</b>" + optionChip(right, "") + jobHtml + "</p>";
+    }
     h += '<p class="sh-q"><b>The question:</b> ' + rich(q.prompt) + "</p>";
     h += '<p class="sh-why">' + rich(q.why) + "</p>";
     if (!ok && !c.retry) { h += '<p class="sh-note">' + icon("replay") + "<span>" + esc(L.retryNote) + "</span></p>"; }
@@ -1672,17 +2066,23 @@
   }
   /* what he says about the answer: in his bubble, above the question he asked, or (when the scene has
      folded away on a small phone) beside him in the case note */
-  function sayReaction(instant) {
-    var c = R.cur, compact = app.classList.contains("compact"), into = desk.querySelector(".sh-say");
-    var parts = [{ html: c.line, cls: "b-lead" }];
+  function reactionParts(inNote) {
+    var c = R.cur, parts = [{ html: c.line, cls: "b-lead" }], al = inNote ? null : alibiOf(c);
     if (c.extra) { parts.push({ html: c.extra, cls: "b-lead" }); }
+    if (inNote) { return parts; }
+    /* on the stage: the alibi of a wrong pick, or else the question he asked */
+    if (al) { parts.push({ html: "<b>" + alibiAsk(al.o) + "</b> " + al.text, cls: "b-wn" }); }
+    else { parts.push({ html: c.q.prompt, cls: "b-q", type: false }); }
+    return parts;
+  }
+  function sayReaction(instant) {
+    var compact = app.classList.contains("compact"), into = desk.querySelector(".sh-say");
     if (compact && into) {
-      say(parts, { into: into, live: false, instant: instant });
+      say(reactionParts(true), { into: into, live: false, instant: instant });
       return;
     }
     if (into) { into.textContent = ""; }
-    parts.push({ html: c.q.prompt, cls: "b-q", type: false });
-    say(parts, { live: false, instant: instant });
+    say(reactionParts(false), { live: false, instant: instant });
     applyReserve();
   }
   /* The answered screen has to show the whole lesson at once: the sentence with every job label, the
@@ -1707,13 +2107,20 @@
     dockInspector(v.querySelector(".sh-insp"), from);
     if (!first) { sayReaction(true); }
   }
-  /* if even the folded screen is too long, the reminder that the question will come back gives way: he
-     says so again when it does */
+  /* if even the folded screen is too long, it closes ranks ("dense"), and then the reminder that the
+     question will come back gives way: he says so again when it does. (On a wide screen the reminder is
+     the one thing that can go.) */
   function trimAnswered() {
-    var sheet = desk.querySelector(".sheet");
-    if (!sheet || !app.classList.contains("compact")) { return; }
+    var sheet = desk.querySelector(".sheet"), v = sheet ? sheet.parentNode : null;
+    if (!sheet || !v) { return; }
     sheet.classList.remove("terse");
+    v.classList.remove("dense");
+    v.classList.remove("dense2");
+    /* first the spacing closes up, which costs nothing; only then does the reminder go; and if a long
+       alibi still needs a few pixels, the lines of the two texts stand closer (the type keeps its size) */
+    if (pageOver() > 0) { v.classList.add("dense"); }
     if (pageOver() > 0) { sheet.classList.add("terse"); }
+    if (pageOver() > 0) { v.classList.add("dense2"); }
   }
   function answer(k) {
     var c = R && R.cur;
@@ -1726,7 +2133,7 @@
     if (!c.retry) {
       R.results.push(ok);
       if (ok) { R.right++; R.streak++; R.best = Math.max(R.best, R.streak); }
-      else { R.streak = 0; R.missed.push(q); R.queue.push({ q: q, retry: true }); }
+      else { R.streak = 0; R.missed.push(q); R.picks[q.id] = k; R.queue.push({ q: q, retry: true }); }
       setStreak(R.streak);
     } else if (ok) { R.fixed[q.id] = true; }
     clearViewTimers();
@@ -1738,7 +2145,7 @@
     var marks = flipMark(v), boxRect = box.getBoundingClientRect();
     var note = v.querySelector(".clue-note");
     if (note) { v.removeChild(note); }
-    v.classList.remove("has-clue"); v.classList.remove("snug"); v.classList.remove("snug2"); v.classList.remove("tight");
+    v.classList.remove("has-clue"); v.classList.remove("snug"); v.classList.remove("snug2"); v.classList.remove("tight"); v.classList.remove("no-ev");
     app.classList.remove("terse");
     box.classList.add("locked");
     for (i = 0; i < list.length; i++) {
@@ -1747,6 +2154,9 @@
       if (bk === q.answer) { b.classList.add("right"); b.querySelector(".o-mark").innerHTML = icon("check"); }
       else if (bk === k) { b.classList.add("wrong"); b.querySelector(".o-mark").innerHTML = icon("x"); }
     }
+    fitAnswers(true);
+    fillGap(v, q);
+    layoutScroll();
     revealWords(null);
     var wrap = v.querySelector(".scroll-wrap");
     if (wrap && q.translation) { wrap.appendChild(el("p", "s-tr", "“" + rich(q.translation) + "”")); }
@@ -1761,7 +2171,7 @@
     c.line = pickLine(ok ? L.correct : L.wrong, ok ? "ok" : "no");
     c.extra = ok && !c.retry && L.streak && L.streak[String(R.streak)] ? L.streak[String(R.streak)] : "";
     /* try the roomy layout first; fitAnswered folds the scene away if the lesson does not fit under it */
-    say([{ html: c.line, cls: "b-lead" }, { html: c.extra, cls: "b-lead" }, { html: q.prompt, cls: "b-q", type: false }], { instant: true, live: false });
+    say(reactionParts(false), { instant: true, live: false });
     applyReserve();
     fitAnswered(true);
     if (sentence) { ghostAnswers(box, boxRect, v); }
@@ -1788,8 +2198,11 @@
     }
     sayReaction(false);
     trimAnswered();
-    var right = optByKey(c.opts, q.answer);
-    announce(plain(c.line) + " " + (ok ? "" : "The answer is " + (right ? right.label : "") + ". ") + (q.translation ? "“" + plain(q.translation) + "” " : "") + plain(q.why) + (!ok && !c.retry ? " " + L.retryNote : ""));
+    /* a screen reader hears it in the order of the screen: his line, the alibi of the pick, the right
+       answer, the meaning of the sentence, the reason */
+    var right = optByKey(c.opts, q.answer), al = alibiOf(c);
+    announce(plain(c.line) + " " + (al ? plain(alibiAsk(al.o)) + " " + plain(al.text) + " " : "") + (ok ? "" : "The answer is " + (right ? plain(right.label) : "") + ". ") +
+      (q.translation ? "“" + plain(q.translation) + "” " : "") + plain(q.why) + (!ok && !c.retry ? " " + L.retryNote : ""));
   }
   function nextQuestion() {
     if (!R || !R.cur || !R.cur.answered || view !== "play") { return; }
@@ -1857,8 +2270,13 @@
       h += '<section class="misses"><h2>' + (res.practice ? "Still on the loose" : "Notes on the ones that got away") + "</h2>";
       missed.forEach(function (q) {
         var right = optByKey(q.options, q.answer), fixed = !!R.fixed[q.id];
-        h += '<article class="miss">' + (q.words ? '<p class="miss-q" lang="la">' + sentenceText(q.words, true) + "</p>" + (q.translation ? '<p class="miss-tr">“' + rich(q.translation) + "”</p>" : "") : '<p class="miss-p">' + rich(q.prompt) + "</p>") +
-          '<p class="miss-a"><span>Answer</span>' + (right ? optionChip(right) : "") + (fixed ? '<span class="miss-fixed">' + icon("check") + "Fixed on the second look</span>" : "") + '</p><p class="miss-why">' + rich(q.why) + "</p></article>";
+        var pk = Object.prototype.hasOwnProperty.call(R.picks, q.id) ? R.picks[q.id] : null, mine = pk === null ? null : optByKey(q.options, pk), alibi = mine ? whyNot(q, pk) : "";
+        /* A sentence question is asked in the same words every time, so its sentence says it all. Every
+           other question needs its own words first; its Latin example, where it has one, comes with it. */
+        var asked = q.type === "sentence" && q.words ? "" : '<p class="miss-p">' + rich(q.prompt) + "</p>";
+        h += '<article class="miss">' + asked + (q.words ? '<p class="miss-q" lang="la">' + sentenceText(q.words, true) + "</p>" + (q.translation ? '<p class="miss-tr">“' + rich(q.translation) + "”</p>" : "") : "") +
+          '<p class="miss-a"><span>Answer</span>' + (right ? optionChip(right) : "") + (fixed ? '<span class="miss-fixed">' + icon("check") + "Fixed on the second look</span>" : "") + '</p><p class="miss-why">' + rich(q.why) + "</p>" +
+          (alibi ? '<p class="miss-wn"><span class="miss-ask">Why not' + optionChip(mine, "no") + "<b>?</b></span>" + rich(alibi) + "</p>" : "") + "</article>";
       });
       h += "</section>";
     }
@@ -1995,6 +2413,7 @@
       var wi = +t.getAttribute("data-word");
       if (view === "training" && T) { trainWord(wi, t); }
       else if (view === "play" && R && R.cur && R.cur.q.words && R.cur.q.words[wi]) { Sfx.play("tap"); showGloss(t, R.cur.q.words[wi]); }
+      else if (view === "briefing" && B && B.lesson && B.lesson.words[wi]) { Sfx.play("tap"); showGloss(t, B.lesson.words[wi]); }
       return;
     }
     if (t.hasAttribute("data-choice") && view === "training" && T) { trainChoice(+t.getAttribute("data-choice"), t); }
@@ -2049,8 +2468,12 @@
   /* when the window changes size (or the fonts arrive) every screen fits itself again */
   function refit() {
     hideGloss();
+    var c = view === "play" && R ? R.cur : null, pv = c && !c.answered ? desk.querySelector(".v-play") : null;
+    /* (the evidence may have made way for the old size: it has to be back before it is measured) */
+    if (pv) { pv.classList.remove("no-ev"); }
+    fitPips();
     layoutScroll();
-    var c = view === "play" && R ? R.cur : null;
+    fitAnswers();
     if (c && c.answered) {
       fitAnswered(false);
       if (!docked) { fitInspector(); applyReserve(); }
@@ -2069,7 +2492,7 @@
     }
     applyReserve();
     if (view === "training" && T) { trainFit(); }
-    else if (view === "briefing" && B) { squeezeInspector(B.view.lastElementChild); applyReserve(); }
+    else if (view === "briefing" && B) { briefFit(true); squeezeInspector(B.view.lastElementChild); applyReserve(); }
     else if (view === "results") { squeezeInspector(desk.querySelector(".res-actions")); }
   }
   var resizeRaf = 0;
