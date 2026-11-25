@@ -314,6 +314,9 @@
   /* ------------------------------------------------------------------ drawing */
   var P = {
     head: "M55,92C55,64 74,46 100,46C126,46 145,64 145,92C145,117 128,136 100,136C72,136 55,117 55,92Z",
+    hair: "M59,108C54,101 51,88 55,74C55.500,57 74,42.800 100,42.800C126,42.800 144.500,57 145,77C147,88 145,98 141.500,104" +
+      "C139,97 139,87 140,77C139.500,70 128,65.500 114,66C105,66.300 97,68 92,72C86,77 80,77.200 76,76.800" +
+      "C72.600,76.500 70.200,80 69.300,86C68.300,94 65.500,102 59,108Z",
     crown: "M50,67C44,34 69,13 101,13C133,13 155,35 150,69C123,57 78,56 50,67Z",
     flapL: "M52,64C47,45 58,27 80,18C75,31 73,45 76,58C68,58 59,60 52,64Z",
     flapR: "M148,66C152,47 143,29 124,19C128,32 129,46 127,58C134,59 142,62 148,66Z",
@@ -414,9 +417,9 @@
       sh("M60,58C84,50 124,50 152,60V71C126,86 92,83 60,69Z", ".2") +
       '<path class="dt-fine" d="M141.500,84C144,98 140,113 131,124" fill="none" stroke="#fff6d8" stroke-width="2.400" stroke-linecap="round" opacity=".7"/>' +
       "</g>" + '<path class="dt-ol" d="' + P.head + '"/>';
-    skull += '<path class="dt-c-hair dt-so" d="M55,74C51,88 54,101 59,108C64,101 66,87 68,74Z"/>' +
-      '<path class="dt-c-hair dt-so" d="M145,77C147,88 145,98 141.500,104C139,97 139,87 140,77Z"/>' +
-      '<path class="dt-c-hair dt-so" d="M66,64C70,76 82,80 92,72L86,62Z"/>';
+    /* hair: one cap over the whole skull, so that hair (never bare skin) shows at the temples and wherever the
+       hat lifts or tips. Its visible edge runs from the fringe under the brim, round the temple, down the sideburn. */
+    skull += '<path class="dt-c-hair dt-so" d="' + P.hair + '"/>';
     var face = '<ellipse cx="74.500" cy="114" rx="8" ry="5" fill="#e9705f" opacity=".42"/><ellipse cx="129" cy="114" rx="7" ry="4.800" fill="#e9705f" opacity=".42"/>';
     /* nose */
     face += '<path d="M104,104C110,105 113,111 108,115C105,117 101,116 100,113" fill="#e9a183" opacity=".55"/>' +
