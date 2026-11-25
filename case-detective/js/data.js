@@ -252,7 +252,7 @@
           whyNot: {
             gen: "Possession, <b>whose</b>, is the genitive’s job, and “of the sailors” would be <i>nautārum</i>. Here the sailors are the ones who receive the roses.",
             nom: "The subject is the <b>doer</b>, and that is the nominative’s job. The one who gives is the girl, <i>puella</i>. The sailors receive.",
-            voc: "Direct address means <b>talking to</b> someone, and that is the vocative’s job. Nobody is speaking to the sailors here. They are the ones who receive the roses."
+            voc: "Direct address means <b>talking to</b> someone: the vocative’s job. Nobody speaks to the sailors here. They receive the roses."
           },
           clues: [
             { say: "Think of <i>dat</i>, “gives”. When something is given, the dative is the person on the other end." },
@@ -511,7 +511,7 @@
           translation: "The poet gives big roses <b>to the girl</b>.",
           options: suspects(), answer: "dat",
           whyNot: {
-            gen: "“The girl’s roses” would leave the giving with <b>no receiver</b>, and <i>dat</i> needs one. So <i>puellae</i> is the one who gets the roses.",
+            gen: "“The girl’s roses” would leave <b>no receiver</b>, and <i>dat</i> needs one. So <i>puellae</i> gets the roses.",
             nom: "“The girls” as subject would need a verb in <b>-nt</b>. <i>Dat</i> ends in -t: one giver only, and that is <i>poēta</i>."
           },
           clues: [
@@ -525,19 +525,19 @@
           options: suspects(), answer: "gen",
           whyNot: {
             dat: "The receiver’s job is already taken: <i>nautīs</i>, “to the sailors”. So <i>poētae</i> is not receiving. It tells whose roses they are.",
-            nom: "The doers are <i>Puellae</i>, at the front, where the subject usually stands. With doer and receiver taken, <i>poētae</i> tells whose roses."
+            nom: "The doers are <i>Puellae</i>, at the front, where the subject usually stands. So <i>poētae</i> is not giving."
           },
           clues: [
             { say: "The verb is <b>dant</b>, “they give”. Who gives? <i>Puellae</i>, at the front. So the doer’s job is already taken.", eliminates: "nom" },
             { say: "Who receives? <b>nautīs</b>, “to the sailors”. That job is taken too. What is left for <i>poētae</i>?" }
           ],
-          why: "Who does it? <i>Puellae</i>, because <i>dant</i> is plural and the subject usually comes first. Who receives? <i>Nautīs</i>. Those jobs are taken, so <b>poētae</b> tells us WHOSE roses: genitive." },
+          why: "Who does it? <i>Puellae</i>: <i>dant</i> is plural, and the subject usually comes first. Who receives? <i>Nautīs</i>. So <b>poētae</b> tells WHOSE roses: genitive." },
         { id: "ae-3", type: "sentence", shuffle: false, prompt: AE_PROMPT,
           words: [T(n("Puellae", "nom", "puella")), n("nautīs", "dat", "nauta"), n("rosās", "acc", "rosa"), n("poētae", "gen", "poēta"), P(v("dant", "dō", "(they) give"), ".")],
           translation: "<b>The girls</b> give the poet’s roses to the sailors.",
           options: suspects(), answer: "nom",
           whyNot: {
-            gen: "The -nt of <i>dant</i> calls for <b>more than one</b> giver, and the subject usually comes first. So <i>Puellae</i>, at the front, means “the girls”, not “of the girl”.",
+            gen: "The -nt of <i>dant</i> calls for <b>more than one</b> giver, and the subject usually comes first. So <i>Puellae</i> means “the girls”.",
             dat: "The receiver’s job belongs to <i>nautīs</i>, “to the sailors”. And <i>dant</i> needs <b>more than one</b> giver: <i>Puellae</i>, at the front."
           },
           clues: [

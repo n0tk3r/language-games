@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070d1f">
+<meta name="robots" content="noindex">
+<title>Pictures of the sentences · every scene</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23b3202a'/%3E%3Ccircle cx='28' cy='28' r='14' fill='%23c6ecfa' stroke='%23e2a93c' stroke-width='6'/%3E%3Cpath d='M40 40l14 14' stroke='%232b1d14' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  @font-face { font-family: "Nunito Variable"; font-style: normal; font-display: swap; font-weight: 200 1000; src: url(fonts/nunito-latin-ext-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+  @font-face { font-family: "Nunito Variable"; font-style: normal; font-display: swap; font-weight: 200 1000; src: url(fonts/nunito-latin-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+  @font-face { font-family: "Alegreya Variable"; font-style: normal; font-display: swap; font-weight: 400 900; src: url(fonts/alegreya-latin-ext-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+  @font-face { font-family: "Alegreya Variable"; font-style: normal; font-display: swap; font-weight: 400 900; src: url(fonts/alegreya-latin-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+  :root {
+    --night-1: #0c1630; --night-2: #13244a; --night-3: #1e3a6e;
+    --parch: #fbf3dc; --parch-3: #dcc590; --cream: #f8ecd0; --ink: #2b1d14; --ink-2: #5c4636;
+    --brass-lt: #ffe39a; --brass-ink: #2c1a05; --red-dk: #7c121b;
+    --f-ui: "Nunito Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --f-serif: "Alegreya Variable", Georgia, "Times New Roman", serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; padding: 0 0 56px; color: var(--cream); font: 500 16px/1.5 var(--f-ui); -webkit-font-smoothing: antialiased;
+    background: var(--night-1) linear-gradient(180deg, #172a55 0, #101e40 320px, #0a1228 900px) no-repeat; min-height: 100vh;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 0 16px; }
+  header.top { padding: 28px 0 8px; }
+  h1 { margin: 0 0 6px; font: 800 clamp(1.8rem, 5vw, 2.6rem)/1.1 var(--f-serif); color: var(--brass-lt); }
+  h2 { margin: 26px 0 12px; font: 800 1.35rem/1.2 var(--f-serif); color: var(--cream); }
+  p { margin: 0 0 12px; max-width: 70ch; }
+  button {
+    font: 800 15px/1.2 var(--f-ui); min-height: 44px; padding: 9px 16px; border-radius: 12px; cursor: pointer; color: var(--brass-ink);
+    border: 2px solid #7a4e10; background: linear-gradient(180deg, #ffe596, #d99a2b); box-shadow: 0 3px 0 #7a4e10; -webkit-tap-highlight-color: transparent;
+  }
+  button:active { transform: translateY(2px); box-shadow: 0 1px 0 #7a4e10; }
+  button.small { min-height: 34px; padding: 5px 11px; font-size: 13px; }
+  button[aria-pressed="true"] { color: #fff; background: linear-gradient(180deg, #c8323a, #9c1a24); border-color: var(--red-dk); box-shadow: 0 3px 0 var(--red-dk); }
+  button:focus-visible { outline: 3px solid var(--brass-lt); outline-offset: 3px; }
+  .bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 14px 22px; padding: 10px 0 12px; background: rgba(12, 22, 48, .94); }
+  .group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .group > span { font: 800 12px/1.2 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--brass-lt); margin-right: 4px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 14px; }
+  .cell { padding: 10px 12px 10px; border-radius: 16px; border: 2px solid var(--parch-3); background: var(--parch); color: var(--ink); }
+  .cell h3 { margin: 0 0 2px; font: 800 12px/1.2 var(--f-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+  .la { margin: 0; font: 700 1.1rem/1.35 var(--f-serif); }
+  .en { margin: 0 0 8px; font: 600 .92rem/1.35 var(--f-ui); color: var(--ink-2); }
+  .en b { color: var(--ink); }
+  .slot { display: inline-block; min-width: 3.6em; height: 1.05em; vertical-align: -.12em; border: 2px dashed #b9801c; border-radius: 6px; background: rgba(255, 224, 138, .34); }
+  .stage { line-height: 0; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .note { margin: 0 0 12px; font-size: 14px; color: #cfd8ee; }
+  footer { margin-top: 30px; font-size: 14px; color: #cfd8ee; }
+  /* on a 360 px phone a picture of size S is exactly 328 px wide, as in the game */
+  @media (max-width: 720px) { .bar { position: static; } } /* four rows of buttons would cover a phone's screen */
+  @media (max-width: 480px) { .wrap { padding: 0 8px; } .grid { gap: 10px; } .cell { padding: 10px 6px; } .cell h3, .la, .en, .ctl { padding: 0 4px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Pictures of the sentences</h1>
+    <p>Every sentence of the game as a little picture: who does it, what gets the action, who receives it, whose it is, who is talked to. Tap a picture to play it again.</p>
+  </header>
+  <div class="bar" id="bar">
+    <div class="group" role="group" aria-label="Mode"><span>Mode</span>
+      <button type="button" data-mode="ask" aria-pressed="true">Ask</button>
+      <button type="button" data-mode="solved" aria-pressed="false">Solved</button>
+      <button type="button" data-mode="lesson" aria-pressed="false">Lesson</button>
+    </div>
+    <div class="group" role="group" aria-label="Size"><span>Size</span>
+      <button type="button" data-size="s" aria-pressed="false">S</button>
+      <button type="button" data-size="m" aria-pressed="true">M</button>
+      <button type="button" data-size="l" aria-pressed="false">L</button>
+    </div>
+    <div class="group" role="group" aria-label="Motion"><span>Motion</span>
+      <button type="button" id="still" aria-pressed="false">Reduced motion</button>
+    </div>
+    <div class="group" role="group" aria-label="All pictures"><span>All</span>
+      <button type="button" id="replay">Replay all</button>
+      <button type="button" id="solveall">Solve all</button>
+    </div>
+  </div>
+  <main id="main"></main>
+  <footer>Reached by its address only. Scenes module version <span id="ver"></span>, aspect <span id="asp"></span>.</footer>
+</div>
+<script src="js/data.js"></script>
+<script src="js/scenes.js"></script>
+<script>
+(function () {
+  "use strict";
+  var D = window.CD_DATA, S = window.Scenes, main = document.getElementById("main");
+  var WIDTH = { s: 328, m: 480, l: 640 };
+  var state = { mode: "ask", size: "m" };
+  var cards = [];
+  window.__cards = cards;
+  document.getElementById("ver").textContent = S.version;
+  document.getElementById("asp").textContent = S.aspect;
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) { e.className = cls; } if (text != null) { e.textContent = text; } return e; }
+  function button(text, fn) { var b = el("button", "small", text); b.type = "button"; b.onclick = fn; return b; }
+  function plain(html) { var d = document.createElement("div"); d.innerHTML = html || ""; return d.textContent; }
+  function target(words) { for (var i = 0; i < words.length; i++) { if (words[i].t) { return i; } } return -1; }
+  /* the Latin line: the target is a slot while the question is open and has a gap */
+  function latin(box, words, hideTarget) {
+    box.textContent = "";
+    words.forEach(function (w, i) {
+      if (i) { box.appendChild(document.createTextNode(" ")); }
+      if (w.t && hideTarget) { box.appendChild(el("span", "slot")); } else { box.appendChild(document.createTextNode(w.w)); }
+      if (w.after) { box.appendChild(document.createTextNode(w.after)); }
+    });
+  }
+
+  function card(parent, item) {
+    var c = el("div", "cell"), rec = { id: item.id, item: item, ctrl: null, mode: null, stage: el("div", "stage"), la: el("p", "la"), en: el("p", "en"), ctl: el("div", "ctl") };
+    c.appendChild(el("h3", null, item.id)); c.appendChild(rec.la); c.appendChild(rec.en); c.appendChild(rec.stage); c.appendChild(rec.ctl);
+    parent.appendChild(c);
+    cards.push(rec);
+    build(rec);
+  }
+  /* the buttons under a picture: replay; solve while the question is open; in a lesson, where the spotlight goes */
+  function controls(rec) {
+    var it = rec.item, ctl = rec.ctl, spots = [];
+    function spot(text, i, pressed, translation) {
+      var b = button(text, function () {
+        rec.ctrl.setTarget(i);
+        if (translation) { rec.en.innerHTML = translation; }
+        spots.forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+      });
+      b.setAttribute("aria-pressed", pressed ? "true" : "false");
+      spots.push(b);
+      ctl.appendChild(b);
+    }
+    ctl.textContent = "";
+    if (!rec.ctrl) { return; }
+    ctl.appendChild(button("Replay", function () { rec.ctrl.replay(); }));
+    if (rec.mode === "ask") {
+      ctl.appendChild(button("Solve", function () { rec.ctrl.solve(); rec.mode = "solved"; latin(rec.la, it.words, false); controls(rec); }));
+    } else if (rec.mode === "lesson" && it.steps) {
+      /* the briefing: one picture, and each lesson moves the spotlight */
+      it.steps.forEach(function (st, n) { spot("Lesson " + st.n + ": " + D.cases[st.k].name, st.t, n === 0, st.translation); });
+    } else if (rec.mode === "lesson") {
+      it.words.forEach(function (w, i) { if (w.r && w.r !== "verb") { spot("Spotlight " + w.w, i, !!w.t); } });
+    }
+  }
+  function build(rec) {
+    var it = rec.item;
+    if (rec.ctrl) { rec.ctrl.destroy(); }
+    rec.stage.textContent = "";
+    rec.mode = it.steps ? "lesson" : state.mode;
+    rec.en.innerHTML = it.translation || "";
+    latin(rec.la, it.words, rec.mode === "ask" && it.gap);
+    rec.stage.style.width = WIDTH[state.size] + "px";
+    rec.stage.style.maxWidth = "100%";
+    rec.ctrl = null;
+    if (S.canDraw(it.words, it.scene || null)) {
+      rec.ctrl = S.create(it.words, { cases: D.cases, hints: it.scene || null, mode: rec.mode, gap: !!it.gap, size: state.size, alt: plain(it.translation) });
+      rec.stage.appendChild(rec.ctrl.el);
+    } else { rec.stage.appendChild(el("p", "en", "(no picture)")); }
+    controls(rec);
+  }
+  function section(title, note, items) {
+    if (!items.length) { return; }
+    main.appendChild(el("h2", null, title));
+    if (note) { main.appendChild(el("p", "note", note)); }
+    var g = el("div", "grid");
+    main.appendChild(g);
+    items.forEach(function (it) { card(g, it); });
+  }
+
+  /* the lessons of the briefings: lessons in a row that use the same sentence share one picture, as in the game */
+  var lessons = [], count = 0;
+  D.files.forEach(function (f) {
+    (f.briefing || []).forEach(function (b) {
+      var L = b.lesson, last = lessons[lessons.length - 1], key, step;
+      if (!L || !L.words) { return; }
+      key = f.id + "|" + L.words.map(function (w) { return w.w + (w.after || ""); }).join(" ");
+      step = { n: ++count, k: L.k, t: target(L.words), translation: L.translation };
+      if (last && last.key === key) { last.steps.push(step); last.id += "+" + L.k; return; }
+      lessons.push({ id: f.id + " lesson " + L.k, key: key, words: L.words, translation: L.translation, scene: L.scene, steps: [step] });
+    });
+  });
+  section("The lessons of the briefing", "Always in lesson mode: one figure is in the spotlight. The buttons move the spotlight the way the briefing does, without a new picture.", lessons);
+  D.files.forEach(function (f) {
+    var qs = f.questions.filter(function (q) { return q.words && q.words.length; }).map(function (q) {
+      return { id: q.id, words: q.words, translation: q.translation, scene: q.scene, gap: q.gap };
+    });
+    section("File " + f.n + ": " + f.title, "", qs);
+    if (f.training && f.training.words) { section("Training case", "", [{ id: "training", words: f.training.words, translation: f.training.translation, scene: f.training.scene, gap: f.training.gap }]); }
+  });
+
+  function press(sel, on) { Array.prototype.forEach.call(document.querySelectorAll(sel), function (b) { b.setAttribute("aria-pressed", on(b) ? "true" : "false"); }); }
+  function setMode(m) { state.mode = m; press("[data-mode]", function (x) { return x.dataset.mode === m; }); cards.forEach(build); }
+  function setSize(s) {
+    state.size = s; press("[data-size]", function (x) { return x.dataset.size === s; });
+    cards.forEach(function (r) { r.stage.style.width = WIDTH[s] + "px"; if (r.ctrl) { r.ctrl.setSize(s); } });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-mode]"), function (b) { b.onclick = function () { setMode(b.dataset.mode); }; });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-size]"), function (b) { b.onclick = function () { setSize(b.dataset.size); }; });
+  document.getElementById("still").onclick = function () {
+    var on = !document.body.classList.contains("scn-still");
+    document.body.classList.toggle("scn-still", on);
+    this.setAttribute("aria-pressed", on ? "true" : "false");
+    cards.forEach(function (r) { if (r.ctrl) { r.ctrl.replay(); } });
+  };
+  document.getElementById("replay").onclick = function () { cards.forEach(function (r) { if (r.ctrl) { r.ctrl.replay(); } }); };
+  document.getElementById("solveall").onclick = function () {
+    cards.forEach(function (r) { if (r.ctrl && r.mode === "ask") { r.ctrl.solve(); r.mode = "solved"; latin(r.la, r.item.words, false); controls(r); } });
+  };
+  /* for the check scripts in ../scenes/ */
+  window.__demo = { state: state, build: build, setMode: setMode, setSize: setSize };
+})();
+</script>
+</body>
+</html>

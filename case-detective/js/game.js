@@ -62,7 +62,7 @@
   function selEsc(s) { return String(s).replace(/["\\]/g, "\\$&"); }
 
   /* ------------------------------------------------------------ storage */
-  var save = { stars: {}, solo: {}, seen: {}, sound: true };
+  var save = { stars: {}, solo: {}, seen: {}, sound: true, music: true, piece: 1 };
   function loadSave() {
     try {
       var raw = window.localStorage.getItem(D.storageKey);
@@ -76,6 +76,9 @@
       });
       if (o.seen && typeof o.seen === "object") { for (var k in o.seen) { if (o.seen[k] === true) { save.seen[k] = true; } } }
       if (typeof o.sound === "boolean") { save.sound = o.sound; }
+      if (typeof o.music === "boolean") { save.music = o.music; }
+      else if (o.sound === false) { save.music = false; }          /* a save from before the music, with the sound off: stay quiet */
+      if (typeof o.piece === "number" && o.piece >= 1 && o.piece <= 24) { save.piece = Math.floor(o.piece); }
     } catch (e) { /* no storage: the game still works, it just forgets */ }
   }
   function persist() {
@@ -116,7 +119,7 @@
 
   /* ---------------------------------------------------------------- DOM */
   var app = $("app"), desk = $("desk"), stage = $("stage"), tbMid = $("tbMid");
-  var homeBtn = $("homeBtn"), soundBtn = $("soundBtn"), nbBtn = $("nbBtn"), streakEl = $("streak"), streakN = $("streakN");
+  var homeBtn = $("homeBtn"), soundBtn = $("soundBtn"), musicBtn = $("musicBtn"), nbBtn = $("nbBtn"), streakEl = $("streak"), streakN = $("streakN");
   var inspFig = $("inspFig"), bubble = $("bubble"), bText = $("bText"), bName = $("bName"), bNext = $("bNext");
   var live = $("live"), fx = $("fx");
   var nb = $("notebook"), nbScrim = $("nbScrim"), nbClose = $("nbClose"), nbPages = $("nbPages");
@@ -212,6 +215,12 @@
     if (h < base) { app.style.setProperty("--insp", Math.round(h) + "px"); }
     app.style.setProperty("--low-b", Math.round(b) + "px");
     app.style.setProperty("--low-bub", Math.round(side ? sh + nh + 9 : b + h + 4) + "px");
+  }
+  /* how far his bubble reaches up under the top bar there (the page itself cannot be too long before
+     the answer: his column is pinned to the screen) */
+  function lowOver() {
+    if (!lowOn || docked) { return 0; }
+    return Math.max(0, Math.ceil(tbMid.parentNode.getBoundingClientRect().bottom - bubble.getBoundingClientRect().top));
   }
   function fitInspector() {
     if (docked) { return; }
@@ -509,8 +518,34 @@
   }
   function syncSound() {
     soundBtn.setAttribute("aria-pressed", save.sound ? "true" : "false");
-    soundBtn.setAttribute("aria-label", "Sound");
-    soundBtn.setAttribute("title", save.sound ? "Sound is on" : "Sound is off");
+    soundBtn.setAttribute("aria-label", "Sound effects");
+    soundBtn.setAttribute("title", save.sound ? "Sound effects are on" : "Sound effects are off");
+  }
+  /* the background music: js/music.js plays it, the game remembers whether it is on and which piece it was */
+  /* (music/list.js names the pieces; while it names none, the game shows no music button and stays silent) */
+  /* no pieces, or a browser that cannot make sound: no music button, no music block */
+  var MUSIC = window.Music && typeof window.Music.count === "function" && window.Music.count() > 0 && (window.AudioContext || window.webkitAudioContext) ? window.Music : null;
+  function musicLine(m) {
+    if (!save.music) { return "The music is switched off."; }
+    if (m && m.failed) { return "The music could not be loaded. Tap Next piece to try again."; }
+    if (m && m.title && m.playing) { return "Now playing: " + m.title + (m.marking ? " (" + m.marking + ")" : ""); }
+    if (m && m.title) { return "Coming up: " + m.title; }
+    return "The music starts with your first tap.";
+  }
+  function syncMusic() {
+    var m = null, line, t = $("muTitle"), b = $("muToggle"), nx = $("muNext");
+    try { m = MUSIC ? MUSIC.now() : null; } catch (e) { m = null; }
+    if (musicBtn) {
+      musicBtn.hidden = !MUSIC;
+      musicBtn.setAttribute("aria-pressed", save.music ? "true" : "false");
+      musicBtn.setAttribute("title", save.music ? "Music is on" : "Music is off");
+    }
+    if (t) {
+      line = musicLine(m);
+      if (t.textContent !== line) { t.textContent = line; }
+    }
+    if (b) { b.setAttribute("aria-pressed", save.music ? "true" : "false"); b.textContent = save.music ? "Music: on" : "Music: off"; }
+    if (nx) { nx.disabled = !save.music; }
   }
 
   /* ----------------------------------------------------------- views */
@@ -520,6 +555,8 @@
     stopTyping();
     hideGloss();
     dropLens();
+    dropScene();
+    dropLessonScene();
     undockInspector();
     seq = null;
     bNext.hidden = true;
@@ -556,9 +593,9 @@
   /* On a single-column screen that is too short for everything, the Inspector gives up some of his
      height so that `last` (the bottom-most thing the player needs) stays on the screen. */
   var INSP_MIN = 84;
-  function squeezeInspector(last) {
+  function squeezeInspector(last, page, whole) {
     if (docked || wideLayout() || !last) { return; }
-    var pinned = last.classList.contains("stick");
+    var pinned = !!page || last.classList.contains("stick");
     for (var n = 0; n < 8; n++) {
       /* a bar that is pinned to the bottom of the screen is always "on screen": there the page itself must fit */
       var over = pinned ? pageOver() : Math.ceil(last.getBoundingClientRect().bottom + (window.pageYOffset || 0) - window.innerHeight);
@@ -566,7 +603,7 @@
       if (over <= 0 || h <= INSP_MIN) { return; }
       app.style.setProperty("--insp", Math.max(INSP_MIN, h - Math.max(over, 8)) + "px");
       fitInspector();
-      applyReserve();
+      applyReserve(whole);
     }
   }
 
@@ -808,9 +845,20 @@
     gloss.style.left = "0px"; gloss.style.top = "0px";
     var r = btn.getBoundingClientRect(), wr = wrap.getBoundingClientRect(), gw = gloss.offsetWidth, gh = gloss.offsetHeight;
     var left = Math.max(0, Math.min(wr.width - gw, r.left + r.width / 2 - wr.left - gw / 2));
-    var above = !!(row && row.nextElementSibling);
+    var above = !!(row && row.nextElementSibling), top = above ? r.top - wr.top - gh - 2 : r.bottom - wr.top + 3;
+    if (!above && lowLayout()) {
+      /* The last row: under the word. But on a phone on its side the answers begin right there, and the
+         meaning would lie on their names. There it opens under the answers, where the tip about tapping
+         words stands (the clue button is in his column), or else above the word if that is clear of the
+         top bar. */
+      var ans = desk.querySelector(".answers:not(.ghost)"), ar = ans && ans.getClientRects().length ? ans.getBoundingClientRect() : null;
+      if (ar && ar.top - r.bottom - 3 < gh && ar.top >= r.bottom - 1) {
+        if (ar.bottom + 4 + gh <= window.innerHeight - 2) { top = ar.bottom - wr.top + 4; }
+        else if (r.top - gh - 2 >= tbMid.parentNode.getBoundingClientRect().bottom + 2) { top = r.top - wr.top - gh - 2; }
+      }
+    }
     gloss.style.left = left + "px";
-    gloss.style.top = (above ? r.top - wr.top - gh - 2 : r.bottom - wr.top + 3) + "px";
+    gloss.style.top = top + "px";
     gloss.classList.add("on");
     clearTimeout(glossTimer);
     glossTimer = setTimeout(hideGloss, 4500);
@@ -872,6 +920,7 @@
     var wrap = btns[0].closest ? btns[0].closest(".scroll-wrap") : null;
     if (!walk || reduced() || !wrap) {
       btns.forEach(ringWord);
+      if (walk) { btns.forEach(function (b) { scenePulse(+b.getAttribute("data-word")); }); }
       lookAtNode(btns[0], 1500);
       done();
       return;
@@ -890,6 +939,7 @@
         if (i) { placeLens(b); }
         lookAtNode(b, step + 300);
       }, i * step));
+      lensTimers.push(setTimeout(function () { scenePulse(+b.getAttribute("data-word")); }, i * step + 300));
       lensTimers.push(setTimeout(function () { ringWord(b); b.classList.add("seen"); }, i * step + 380));
     });
     lensTimers.push(setTimeout(function () {
@@ -898,6 +948,188 @@
     }, btns.length * step + 150));
     lensTimers.push(setTimeout(dropLens, btns.length * step + 650));
   }
+  /* ------------------------------------------- pictures of the sentence (request 4)
+     scenes.js draws a small animated picture of what a sentence says: who does it, what gets the
+     action, who receives it, whose it is, who is spoken to. The game decides where it lies and when.
+     - A question whose prompt already says the sentence in English (a choice question with Latin
+       words: files 1 and 2) has its picture from the start, with a "?" on the mystery word's figure,
+       and the picture is solved when the answer is in.
+     - A sentence question (files 3 and 4) and the training case get it only after the answer: before,
+       the picture would give the job away.
+     Where it lies is the stylesheet's word (--scn on .app): "stack", a strip under the evidence (tall
+     phones, tablets held upright), or "side", a place of its own at the right foot of the desk: beside
+     the clue button, and after the answer beside the case note with the way on under it (laptops,
+     tablets on their side). Anything else: this screen has no room for a picture.
+     Its box is laid down first, in the picture's shape (Scenes.aspect), and the picture is drawn only
+     when the screen has been seen to hold it, so nothing jumps. The picture never takes anything from
+     the question: where the screen would have to give up a line, a label or the calm of its stage, the
+     picture goes instead. Without scenes.js, or for words it cannot draw, none of this happens and the
+     game is as it was. */
+  var SC = null, SIDE_NOTE_MIN = 260, SCN_MIN = 326;
+  function scenesOn() { var S = window.Scenes; return !!(S && typeof S.create === "function" && typeof S.canDraw === "function"); }
+  function canScene(words, hints) {
+    try { return scenesOn() && !!(words && words.length) && !!window.Scenes.canDraw(words, hints || null); } catch (e) { return false; }
+  }
+  function sceneLay() {
+    var s = "";
+    try { s = String(getComputedStyle(app).getPropertyValue("--scn")).replace(/[\s"']/g, ""); } catch (e) { s = ""; }
+    return s === "stack" || s === "side" || s === "late" ? s : "";
+  }
+  function sceneRatio() { var a = scenesOn() ? +window.Scenes.aspect : 0; return a > 1 && a < 8 ? a : 3.2; }
+  /* each size of a picture has its own layout of the labels: the box's width says which one is meant */
+  function sceneSizeOf(box) { var w = box.clientWidth; return w >= 640 ? "l" : (w >= 480 ? "m" : "s"); }
+  function sceneSrc(o) { return { words: o.words, hints: o.scene || null, gap: !!o.gap, alt: plain(o.translation || "") }; }
+  function dropScene() {
+    if (!SC) { return; }
+    var s = SC, v = s.box.parentNode;
+    SC = null;
+    try { if (s.ctl) { s.ctl.destroy(); } } catch (e) { /* ignore */ }
+    if (v) { v.removeChild(s.box); v.classList.remove("scn-side"); v.classList.remove("scn-stack"); }
+  }
+  /* the box of the picture, in its place and in its shape, still empty (lay: "stack" or "side") */
+  function layScene(v, src, lay) {
+    dropScene();
+    if (!v || !lay || !canScene(src.words, src.hints)) { return false; }
+    var box = el("div", "scn-box"), ev = v.querySelector(".scroll-wrap"), dock = v.querySelector(".dock");
+    box.style.setProperty("--scn-ar", String(sceneRatio()));
+    if (lay === "side" && dock) { v.insertBefore(box, dock); } else { v.insertBefore(box, ev ? ev.nextSibling : v.firstChild); }
+    v.classList.add("scn-" + lay);
+    SC = { box: box, ctl: null, src: src, lay: lay, tier: sceneLay(), size: "", mode: "" };
+    /* the smallest picture is drawn for a width of 320: much narrower, and its labels get too small */
+    if (box.clientWidth < SCN_MIN) { dropScene(); return false; }
+    return true;
+  }
+  /* the picture itself, drawn into its box once the box has been seen to fit */
+  function drawScene(mode) {
+    if (!SC || SC.ctl) { return; }
+    var s = SC, ctl = null;
+    s.size = sceneSizeOf(s.box);
+    try { ctl = window.Scenes.create(s.src.words, { cases: D.cases, hints: s.src.hints, mode: mode, gap: s.src.gap, size: s.size, alt: s.src.alt }); } catch (e) { ctl = null; }
+    if (!ctl || !ctl.el) { dropScene(); return; }
+    s.ctl = ctl;
+    s.mode = mode;
+    s.box.appendChild(ctl.el);
+  }
+  function sceneResize() {
+    if (!SC || !SC.ctl) { return; }
+    var size = sceneSizeOf(SC.box);
+    if (size !== SC.size) { SC.size = size; try { SC.ctl.setSize(size); } catch (e) { /* ignore */ } }
+  }
+  /* the figure of word i beats once: the glass is on that word, or a finger */
+  function scenePulse(i) { if (SC && SC.ctl && i >= 0) { try { SC.ctl.pulse(i); } catch (e) { /* ignore */ } } }
+  /* A tablet's Inspector takes the room the desk leaves him (the stylesheet sizes him by the height of
+     the screen). There he gives some of it back, to the picture or to a long case note, down to the
+     size he has on the smallest tablet. (whole: the stage keeps its full height for the lines to come.) */
+  function spareInspector(whole) {
+    if (docked || wideLayout() || window.innerWidth < 600) { return; }
+    var floor = inspVariant === "full" ? 190 : 120;
+    for (var n = 0; n < 6; n++) {
+      var over = pageOver(), h = Math.round(inspFig.clientHeight);
+      if (over <= 0 || h <= floor) { return; }
+      app.style.setProperty("--insp", Math.max(floor, h - over) + "px");
+      fitInspector();
+      applyReserve(whole);
+    }
+  }
+  /* before the answer: a question that says its sentence in English may show it as a picture */
+  function sceneAsk() {
+    var c = R && R.cur, v = desk.querySelector(".v-play"), lay = sceneLay();
+    if (view !== "play" || !c || c.answered || !v || !lay || lay === "late" || SC || !c.q.words || c.q.type === "sentence") { return; }
+    /* a screen that had to make room for the question itself has none for a picture */
+    if (v.classList.contains("snug") || v.classList.contains("tight") || v.classList.contains("no-ev") || app.classList.contains("terse") || app.style.getPropertyValue("--insp")) { return; }
+    var wide = wideLayout();
+    applyReserve(true);
+    if (pageOver() <= 0 && layScene(v, sceneSrc(c.q), lay)) {
+      applyReserve(true);
+      if (pageOver() > 0) { spareInspector(true); }
+      if (pageOver() > 0) { dropScene(); app.style.removeProperty("--insp"); fitInspector(); } else { drawScene("ask"); }
+    }
+    applyReserve(wide);
+    fitKeys();
+  }
+  /* The answer is in. The picture that is on the desk stays where the answered screen has it; a
+     sentence question gets its box now. (It is drawn, or solved, by sceneSettle when the screen has
+     been fitted: the note, the Inspector's place and the spacing come first.) */
+  function sceneAnswered(v, q) {
+    var lay = sceneLay(), src = sceneSrc(q), keep = !!(SC && SC.tier === lay && SC.box.parentNode === v);
+    if (!lay || lay === "late" || !canScene(src.words, src.hints)) { dropScene(); return; }
+    if (!keep && !layScene(v, src, lay)) { return; }
+    /* beside the case note only where the note keeps at least the width it has on a phone */
+    if (lay === "side") {
+      var sheet = v.querySelector(".sheet");
+      if (sheet && sheet.getBoundingClientRect().width < SIDE_NOTE_MIN) { dropScene(); }
+    }
+  }
+  /* A phone of middle height ("late") has no room for a picture beside the question. It gets one after
+     the answer, as a strip under the sentence, where the answered screen (fitted without it) still has
+     the room as it stands: after most right answers, seldom after a wrong one, whose note is longer. */
+  function sceneLate(v, q) {
+    if (sceneLay() !== "late" || !v) { return; }
+    if (SC) { SC.box.hidden = false; } else if (!layScene(v, sceneSrc(q), "stack")) { return; }
+    if (pageOver() > 0) { dropScene(); }
+  }
+  function sceneSettle() {
+    if (!SC) { return; }
+    if (!SC.ctl) { drawScene("solved"); return; }
+    if (SC.mode === "ask") { SC.mode = "solved"; try { SC.ctl.solve(); } catch (e) { /* ignore */ } }
+    sceneResize();
+  }
+  /* the answered screen cannot hold the picture: it goes, and the screen is fitted again without it */
+  function sceneGiveAnswered() {
+    dropScene();
+    if (app.classList.contains("compact")) { app.classList.remove("compact"); undockInspector(); }
+    app.style.removeProperty("--insp");
+    fitInspector();
+    sayReaction(true);
+    fitAnswered(false);
+    trimAnswered();
+  }
+  /* The training case: its picture comes when the suspect is found, as a strip under the sentence, and
+     only where the screen holds it as it stands (trainFit takes it away again if a later step needs
+     the room). */
+  function sceneTrain() {
+    var v = T && T.view, wide = wideLayout();
+    if (!v || SC || !sceneLay() || pageOver() > 0) { return; }
+    var was = app.style.getPropertyValue("--insp"), from = inspFig.getBoundingClientRect();
+    if (!layScene(v, sceneSrc(T.tr), "stack")) { return; }
+    applyReserve();
+    trainHold(wide);
+    /* (a tablet's Inspector gives some of his height, as he does for the picture of a question) */
+    if (pageOver() > 0) { spareInspector(false); }
+    if (pageOver() > 0) { dropScene(); inspBack(was); applyReserve(); trainHold(wide); return; }
+    SC.inspWas = was;
+    if (Math.abs(inspFig.getBoundingClientRect().height - from.height) > 3) { hopFrom(inspFig, from); }
+    drawScene("solved");
+  }
+  /* his height as it was before he made room for a picture that has gone again */
+  function inspBack(was) {
+    if (app.style.getPropertyValue("--insp") === was) { return; }
+    if (was) { app.style.setProperty("--insp", was); } else { app.style.removeProperty("--insp"); }
+    fitInspector();
+  }
+  /* The lesson card of a briefing has the picture of its sentence too (mode "lesson": only the word of
+     this lesson stands in the light). One sentence, one picture: the next lesson on the same sentence
+     moves the light. */
+  var LS = null;
+  function dropLessonScene() {
+    if (!LS) { return; }
+    var s = LS;
+    LS = null;
+    try { s.ctl.destroy(); } catch (e) { /* ignore */ }
+    if (s.ctl.el && s.ctl.el.parentNode) { s.ctl.el.parentNode.removeChild(s.ctl.el); }
+  }
+  function lessonScene(holder, ls, ti) {
+    if (LS && !sameWords(LS.words, ls.words)) { dropLessonScene(); }
+    if (!LS) {
+      if (!canScene(ls.words, ls.scene)) { return; }
+      var ctl = null;
+      try { ctl = window.Scenes.create(ls.words, { cases: D.cases, hints: ls.scene || null, mode: "lesson", gap: false, size: "s", alt: plain(ls.translation || "") }); } catch (e) { ctl = null; }
+      if (!ctl || !ctl.el) { return; }
+      LS = { words: ls.words, ctl: ctl };
+    } else { try { LS.ctl.setTarget(ti); } catch (e2) { /* ignore */ } }
+    if (LS.ctl.el.parentNode !== holder) { holder.appendChild(LS.ctl.el); }
+  }
+
   /* The three -ae suspects get a face: an owner holding a name tag (whose?), someone holding a gift
      (who receives?), and a pair (who does it? more than one). Only where the answers are those three. */
   function portraitFor(o) {
@@ -1120,7 +1352,17 @@
     D.method.forEach(function (m) { h += "<li><b>" + txt(m.title) + "</b>" + txt(m.text) + "</li>"; });
     h += "</ol></section>";
     h += '<section class="nb-sec"><h3>Field notes</h3><p>' + esc(D.inspector.nameNote) + '</p><ul class="nb-tips"><li>' + esc(L.glossHint) + "</li><li>Clues never cost stars. Ask as often as you like.</li>" +
-      '<li class="kb-tip">On a keyboard: <kbd>1</kbd> to <kbd>4</kbd> answer, <kbd>Enter</kbd> continues, <kbd>C</kbd> asks for a clue, <kbd>N</kbd> opens this Notebook and <kbd>M</kbd> turns the sound on or off.</li></ul></section>';
+      '<li class="kb-tip">On a keyboard: <kbd>1</kbd> to <kbd>4</kbd> answer, <kbd>Enter</kbd> continues, <kbd>C</kbd> asks for a clue, <kbd>N</kbd> opens this Notebook and <kbd>M</kbd> turns the sound effects on or off.</li></ul></section>';
+    if (MUSIC) {
+      var muN = 0, muC = "";
+      try { muN = MUSIC.count(); muC = typeof MUSIC.credit === "function" ? String(MUSIC.credit() || "") : ""; } catch (e) { muC = ""; }
+      h += '<section class="nb-sec nb-music"><h3>The music</h3>' +
+        "<p>That violin is playing " + (muN >= 24 ? "the" : muN === 1 ? "one of the" : muN + " of the") + " <b>24 Caprices</b> by Niccolò Paganini, who wrote them about 200 years ago. Nobody recorded it: the game makes every note itself.</p>" +
+        '<p class="mu-now"><svg class="ic" aria-hidden="true"><use href="#i-music"></use></svg><span id="muTitle"></span></p>' +
+        '<p class="mu-row"><button type="button" class="btn sm mu-btn" id="muToggle" data-action="music" aria-pressed="true">Music: on</button>' +
+        '<button type="button" class="btn sm mu-btn" id="muNext" data-action="music-next">Next piece</button></p>' +
+        '<p class="mu-credit">' + (muC ? esc(muC) + " " : "") + '<a href="music/credits.html#from-game" target="_blank" rel="noopener">More about the music</a></p></section>';
+    }
     nbPages.innerHTML = h;
     nbPages.setAttribute("tabindex", "0");
     nbPages.setAttribute("aria-label", "Notebook pages");
@@ -1311,7 +1553,8 @@
   /* The lesson of one case: the case and its question, one Latin example in which only that case's word
      wears its label, what it says, and the case's row of the chart. A lesson whose sentence is already
      on the card keeps the card and moves the label: one sentence, several jobs.
-     (.ls-scene is the place of the picture of the sentence; it stays shut until scenes.js is loaded.) */
+     .ls-scene is the place of the picture of the sentence. It is open only where the fitted briefing
+     still holds the strip (lessonSceneFit), and the picture is drawn when the lesson is on show. */
   function setLesson(ls) {
     var box = B.lessonEl, c = D.cases[ls.k], dc = D.declension, keep = !!(B.lesson && sameWords(B.lesson.words, ls.words)), ti = -1, i;
     if (!box || !c || !ls.words) { return; }
@@ -1331,6 +1574,10 @@
       if (b) { b.classList[i === ti ? "add" : "remove"]("t"); }
     }
     box.querySelector(".ls-tr").innerHTML = ls.translation ? "“" + rich(ls.translation) + "”" : "";
+    var holder = box.querySelector(".ls-scene");
+    holder.hidden = !B.scnOn;
+    holder.style.setProperty("--scn-ar", String(sceneRatio()));
+    if (B.scnOn && B.lessonLive && !B.measuring) { lessonScene(holder, ls, ti); }
     var dr = null;
     dc.rows.forEach(function (r) { if (r.k === ls.k) { dr = r; } });
     box.querySelector(".ls-row").innerHTML = dr ? '<span class="ls-row-h">In the chart:</span><span class="ls-end" lang="la">' + esc(dc.stem) + "<b>" + esc(dr.sg) + '</b></span><small>one</small><span class="ls-end" lang="la">' + esc(dc.stem) + "<b>" + esc(dr.pl) + "</b></span><small>many</small>" : "";
@@ -1362,12 +1609,14 @@
     if (!box) { return; }
     box.style.minHeight = "";
     box.style.alignSelf = "start";
+    B.measuring = true;
     B.lines.forEach(function (ln) {
       if (!ln.lesson) { return; }
       first = first || ln.lesson;
       setLesson(ln.lesson);
       max = Math.max(max, box.offsetHeight);
     });
+    B.measuring = false;
     box.style.alignSelf = "";
     if (cur || first) { setLesson(cur || first); }
     if (max) { box.style.minHeight = max + "px"; }
@@ -1407,9 +1656,12 @@
     if (start) {
       BF_STEPS.forEach(function (c) { v.classList.remove(c); });
       briefSmall(false);
+      B.scnOn = false;
       sizeLessons();
       applyReserve(true);
     }
+    /* (a line that turns out too tall later: the picture goes before any step is taken for it) */
+    if (B.scnOn && pageOver() > 0) { B.scnOn = false; dropLessonScene(); sizeLessons(); applyReserve(); }
     step(BF_STEPS[0]); step(BF_STEPS[1]); step(BF_STEPS[2]);
     if (start && !wideLayout()) {
       for (n = 0; n < 8; n++) {
@@ -1421,6 +1673,25 @@
       }
     }
     step(BF_STEPS[3]);
+    applyReserve();
+    if (start) { lessonSceneFit(); }
+  }
+  /* The picture in the lesson card: only where the briefing, fitted as it is, still holds the strip.
+     No step of the fit is taken for it, and the stage keeps its full height: it takes nothing away.
+     (Always the small size: the card has no lower format in this version.) */
+  function lessonSceneFit() {
+    var box = B.lessonEl, was = app.style.getPropertyValue("--insp");
+    B.scnOn = false;
+    if (!box || pageOver() > 0 || !B.lines.some(function (ln) { return !!ln.lesson && canScene(ln.lesson.words, ln.lesson.scene); })) { return; }
+    applyReserve(true);
+    if (pageOver() > 0) { applyReserve(); return; }
+    B.scnOn = true;
+    sizeLessons();
+    applyReserve(true);
+    /* (a tablet's Inspector has the room the desk leaves him: there he gives some of it back, as he
+       does for the picture of a question) */
+    if (pageOver() > 0) { spareInspector(true); }
+    if (pageOver() > 0) { B.scnOn = false; dropLessonScene(); sizeLessons(); inspBack(was); }
     applyReserve();
   }
   function briefing(file, opts) {
@@ -1471,7 +1742,8 @@
       else if (bl.show === "chart" && B.chart) { which = "chart"; }
       else if (bl.show === "recap") { which = "recap"; }
     }
-    if (which === "lesson") { setLesson(lesson); }
+    B.lessonLive = which === "lesson";
+    if (which === "lesson") { setLesson(lesson); } else { dropLessonScene(); }
     var changed = showCard(which, !instant && !!(ln.show || ln.lesson));
     pointAt(ln.point);
     B.skip.hidden = atEnd;
@@ -1621,12 +1893,39 @@
     reserve = anchored ? null : { list: T.lines, opts: null };
     applyReserve();
     trainHold(wide);
-    if (wide) { v.classList.remove("tight"); fitKeys(); return; }
+    /* the picture of the solved case never costs the case anything */
+    if (SC && pageOver() > 0) {
+      var was = SC.inspWas, f0 = inspFig.getBoundingClientRect();
+      if (typeof was === "string") { spareInspector(false); }
+      if (pageOver() > 0) {
+        dropScene();
+        if (typeof was === "string") { inspBack(was); }
+        applyReserve(); trainHold(wide);
+      }
+      if (Math.abs(inspFig.getBoundingClientRect().height - f0.height) > 3) { hopFrom(inspFig, f0); }
+    }
+    if (wide) {
+      v.classList.remove("tight");
+      /* (a phone on its side: the cards let go of the question under their names, for the rest of the case) */
+      if (pageOver() > 0 && !v.classList.contains("bare")) { v.classList.add("bare"); applyReserve(); trainHold(wide); }
+      fitKeys();
+      return;
+    }
     /* a short phone keeps the tighter spacing for the whole case, so nothing changes size half way */
     if (anchored && window.innerHeight < 700) { v.classList.add("tight"); }
     if (pageOver() > 0) { v.classList.add("tight"); }
     var from = inspFig.getBoundingClientRect();
     squeezeInspector(v.lastElementChild);
+    /* The shortest phones: even at his smallest size the case does not fit. Then the cards keep their
+       names and let go of their faces and of the questions under the names, and the written method at
+       the end goes (he says it in his last line): for the rest of the case, so nothing comes and goes. */
+    if (pageOver() > 0 && !v.classList.contains("bare")) {
+      v.classList.add("bare");
+      app.style.removeProperty("--insp");
+      fitInspector();
+      applyReserve();
+      squeezeInspector(v.lastElementChild);
+    }
     if (T.i > 0 && Math.abs(inspFig.getBoundingClientRect().height - from.height) > 3) { hopFrom(inspFig, from); }
     fitKeys();
   }
@@ -1671,6 +1970,7 @@
     /* the suspect is ruled out when he says so, not before: he turns to the card, then the stamp lands */
     say([{ html: s.right }], { onDone: function () { outKeys(s).forEach(function (key) { T.out[key] = true; stampOut(key, true, true); }); } });
     trainFit();
+    if (s.kind === "answer") { sceneTrain(); }
     flipGlide(marks);
     if (kb) { try { T.primary.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
   }
@@ -1691,6 +1991,7 @@
     }
     Sfx.play("tap");
     showGloss(btn, T.tr.words[idx]);
+    scenePulse(idx);
   }
   function trainChoice(idx, btn) {
     var s = T.tr.steps[T.i];
@@ -1723,6 +2024,7 @@
     if (box) { box.insertAdjacentHTML("afterend", methodHtml("full")); T.view.removeChild(box); }
     T.view.classList.add("outro");
     T.view.classList.remove("tight");
+    var stood = inspFig.getBoundingClientRect();
     app.style.removeProperty("--insp");
     fitInspector();
     trainSlot();
@@ -1730,6 +2032,8 @@
     mood(T.tr.outro.mood);
     sayLine(T.tr.outro.say);
     trainFit();
+    /* (he takes his new size from the one he had, not from the full one the fit started with) */
+    if (Math.abs(inspFig.getBoundingClientRect().height - stood.height) > 3) { hopFrom(inspFig, stood); } else { inspFig.classList.remove("hop"); }
     lookAtNode(T.view.querySelector(".method"), 1800);
     if (kb) { try { T.primary.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
   }
@@ -1854,6 +2158,7 @@
       return [{ html: it.retry ? L.secondChance[0] : LEAD_MAX, cls: "b-lead" }, { html: it.q.prompt }];
     }), null);
     if (c.clues) { showClue(c.clues, false); } else { fitPlay(); }
+    sceneAsk();
     later(nudge, 14000);
   }
   /* Before the answer everything has to be on the screen at once: the Inspector, the question, the whole
@@ -1865,19 +2170,59 @@
     if (view !== "play" || !c || c.answered || !v) { return; }
     /* Beside the desk (wide screens) he cannot give up height, and the calm of one stage height for the
        whole round is worth more than the method strip: there the strip goes before the stage gives way. */
-    var wide = wideLayout();
-    applyReserve(wide);
-    if (pageOver() > 0 && !v.classList.contains("snug")) { v.classList.add("snug"); applyReserve(wide); }
-    if (pageOver() > 0 && !v.classList.contains("snug2")) { v.classList.add("snug2"); applyReserve(wide); }
+    var wide = wideLayout(), whole = wide;
+    if (SC) {
+      /* The picture is the first thing to make way. Only for a clue does the stage give back the room
+         it keeps for later lines, and he some of his own height, before the picture goes: his glass is
+         out on the words, and the picture shows where. */
+      applyReserve(true);
+      if (pageOver() > 0) { spareInspector(true); }
+      if (pageOver() > 0 && v.classList.contains("has-clue")) {
+        whole = false;
+        applyReserve();
+        if (!wide && pageOver() > 0) { squeezeInspector(v.lastElementChild); }
+      }
+      if (pageOver() > 0) { dropScene(); app.style.removeProperty("--insp"); fitInspector(); whole = wide; }
+    }
+    applyReserve(whole);
+    /* (a tablet's Inspector has the room the desk leaves him: he gives some of it back before the
+       method under the sentence, or anything else, makes way) */
+    if (pageOver() > 0) { spareInspector(whole); }
+    if (pageOver() > 0 && !v.classList.contains("snug")) { v.classList.add("snug"); applyReserve(whole); }
+    if (pageOver() > 0 && !v.classList.contains("snug2")) { v.classList.add("snug2"); applyReserve(whole); }
     if (wide) { applyReserve(); }
     if (!wide && pageOver() > 0) { squeezeInspector(v.lastElementChild); applyReserve(); }
     if (pageOver() > 0 && !v.classList.contains("tight")) { v.classList.add("tight"); applyReserve(); }
     /* last of all, on a second look, the line about it having slipped away goes: the question stays */
     if (pageOver() > 0) { app.classList.add("terse"); applyReserve(); }
+    /* On a phone that is still too short for a question with its clue, the button for the next clue
+       moves up into the head of the clue note ("cb-up" in the stylesheet): nothing is lost by that, so
+       it comes before anything is. (After such a step he takes the room that is left over, and gives the
+       page what it still lacks.) */
+    function lastStep(name) {
+      if (wide || pageOver() <= 0 || !v.classList.contains("has-clue")) { return; }
+      if (!v.classList.contains(name)) {
+        v.classList.add(name);
+        app.style.removeProperty("--insp");
+        fitInspector();
+        applyReserve();
+      }
+      squeezeInspector(v.lastElementChild, true);
+    }
+    lastStep("cb-up");
     /* A choice question can be answered from its prompt alone: its Latin example is the first thing
        that is worth less than the prompt and the answers. So where even all of the above is not enough,
        the evidence makes way (it is back, with its labels, once the answer is in). */
     if (pageOver() > 0 && v.classList.contains("q-choice")) { v.classList.add("no-ev"); hideGloss(); dropLens(); applyReserve(); }
+    /* A phone on its side: with a clue at the foot of his column, the column can be too short for his
+       bubble. There too the line about the second look goes first, and the question stays. */
+    if (lowOn && !app.classList.contains("terse")) {
+      fitInspector();
+      if (lowOver() > 0) { app.classList.add("terse"); fitInspector(); applyReserve(); }
+    }
+    /* And last of all, with a clue on the desk: the cards keep their names and let go of their faces
+       and of the questions under the names ("bare"). */
+    lastStep("bare");
     fitKeys();
   }
   /* after a quiet while he gets thoughtful and the clue button glints */
@@ -1952,7 +2297,7 @@
       v.insertBefore(note, v.firstChild);
       v.classList.add("has-clue");
     }
-    var h = '<div class="cn-head"><span class="cn-tag">' + icon("glass") + "<span>Clue " + n + " of " + total + "</span></span>";
+    var h = '<div class="cn-head' + (c.clues < total ? " more" : "") + '"><span class="cn-tag">' + icon("glass") + "<span>Clue " + n + " of " + total + "</span></span>";
     if (c.clues > 1) {
       h += '<span class="cn-tabs">';
       for (i = 1; i <= c.clues; i++) { h += '<button type="button" class="cn-tab" data-clue-tab="' + i + '" aria-pressed="' + (i === n ? "true" : "false") + '" aria-label="Show clue ' + i + '">' + i + "</button>"; }
@@ -1973,6 +2318,8 @@
           if (!fresh || c.answered || R.cur !== c) { return; }
           mood("think");
           outKeys(clue).forEach(function (key) { stampOut(key, true); });
+          /* (a stamp makes its card a little taller: the screen is fitted once more) */
+          fitPlay();
         });
       }
     });
@@ -2088,6 +2435,7 @@
   /* The answered screen has to show the whole lesson at once: the sentence with every job label, the
      verdict, the meaning, the whole explanation and the way on. On a single-column screen that cannot
      hold all of that under the big scene, the scene folds away and the Inspector hops into the note. */
+  var hopRect = null;
   function fitAnswered(first) {
     var c = R && R.cur, v = desk.querySelector(".v-play.answered");
     if (view !== "play" || !c || !c.answered || !v) { return; }
@@ -2099,9 +2447,26 @@
       return;
     }
     if (compact || wide) { return; }
-    var need = (v.classList.contains("is-sentence") && window.innerHeight < 700) || pageOver() > 0;
+    var low = v.classList.contains("is-sentence") && window.innerHeight < 700;
+    /* on a tablet he first gives back some of his own height: the scene does not fold away for a few
+       pixels, to leave half a desk bare */
+    if (!low && pageOver() > 0) { spareInspector(false); }
+    /* and there the picture of the sentence makes way before his scene does (a picture takes nothing
+       away). If the screen is too long even without it, the scene folds as on a phone and the picture
+       stays. */
+    if (!low && SC && pageOver() > 0 && window.innerWidth >= 600) {
+      var pb = SC.box;
+      pb.hidden = true;
+      app.style.removeProperty("--insp");
+      fitInspector();
+      applyReserve();
+      if (pageOver() > 0) { spareInspector(false); }
+      if (pageOver() > 0) { pb.hidden = false; } else { dropScene(); }
+    }
+    var need = low || pageOver() > 0;
     if (!need) { return; }
     var from = first ? inspFig.getBoundingClientRect() : null;
+    hopRect = from;
     app.classList.add("compact");
     stage.style.minHeight = "";
     dockInspector(v.querySelector(".sh-insp"), from);
@@ -2110,15 +2475,23 @@
   /* if even the folded screen is too long, it closes ranks ("dense"), and then the reminder that the
      question will come back gives way: he says so again when it does. (On a wide screen the reminder is
      the one thing that can go.) */
-  function trimAnswered() {
+  function trimAnswered(gentle) {
     var sheet = desk.querySelector(".sheet"), v = sheet ? sheet.parentNode : null;
     if (!sheet || !v) { return; }
     sheet.classList.remove("terse");
     v.classList.remove("dense");
     v.classList.remove("dense2");
-    /* first the spacing closes up, which costs nothing; only then does the reminder go; and if a long
-       alibi still needs a few pixels, the lines of the two texts stand closer (the type keeps its size) */
+    if (v.classList.contains("lean")) { v.classList.remove("lean"); layoutScroll(); }
+    /* Beside the Inspector, on a tall laptop screen or a tablet on its side, the words of the sentence
+       are large. There they first take the size they have on a lower laptop screen ("lean"), which
+       brings a sentence of two rows back into one. (30 px: still far above the smallest size for Latin.) */
+    if (pageOver() > 0 && v.classList.contains("is-sentence") && wideLayout()) { v.classList.add("lean"); layoutScroll(); }
+    /* then the spacing closes up, which costs nothing; only then does the reminder go; and if a long
+       alibi still needs a few pixels, the lines of the two texts stand closer (the type keeps its size).
+       gentle: only what costs nothing. That is all a picture of the sentence may ask for: if the screen
+       is still too long with it, the picture goes (sceneGiveAnswered) before the reminder does. */
     if (pageOver() > 0) { v.classList.add("dense"); }
+    if (gentle) { return; }
     if (pageOver() > 0) { sheet.classList.add("terse"); }
     if (pageOver() > 0) { v.classList.add("dense2"); }
   }
@@ -2145,7 +2518,7 @@
     var marks = flipMark(v), boxRect = box.getBoundingClientRect();
     var note = v.querySelector(".clue-note");
     if (note) { v.removeChild(note); }
-    v.classList.remove("has-clue"); v.classList.remove("snug"); v.classList.remove("snug2"); v.classList.remove("tight"); v.classList.remove("no-ev");
+    v.classList.remove("has-clue"); v.classList.remove("snug"); v.classList.remove("snug2"); v.classList.remove("tight"); v.classList.remove("no-ev"); v.classList.remove("cb-up"); v.classList.remove("bare");
     app.classList.remove("terse");
     box.classList.add("locked");
     for (i = 0; i < list.length; i++) {
@@ -2167,6 +2540,7 @@
     dock.innerHTML = '<button type="button" class="btn primary" data-primary>' + (R.pos >= R.queue.length - 1 ? "See the verdict" : "Next") + icon("next") + "</button>";
     app.style.removeProperty("--insp");
     fitInspector();
+    sceneAnswered(v, q);
 
     c.line = pickLine(ok ? L.correct : L.wrong, ok ? "ok" : "no");
     c.extra = ok && !c.retry && L.streak && L.streak[String(R.streak)] ? L.streak[String(R.streak)] : "";
@@ -2174,8 +2548,6 @@
     say(reactionParts(false), { instant: true, live: false });
     applyReserve();
     fitAnswered(true);
-    if (sentence) { ghostAnswers(box, boxRect, v); }
-    flipGlide(marks);
     if (kb) {
       var p = dock.querySelector("[data-primary]");
       try { if (p) { p.focus({ preventScroll: true }); } } catch (e) { /* ignore */ }
@@ -2197,7 +2569,15 @@
       later(function () { mood("idle"); }, 4200);
     }
     sayReaction(false);
-    trimAnswered();
+    trimAnswered(!!SC);
+    if (SC && pageOver() > 0) { sceneGiveAnswered(); }
+    sceneLate(v, q);
+    sceneSettle();
+    /* now the screen has its shape: what moved glides from where it was, and he hops from where he stood */
+    if (docked && hopRect) { hopFrom(docked, hopRect); }
+    hopRect = null;
+    if (sentence) { ghostAnswers(box, boxRect, v); }
+    flipGlide(marks);
     /* a screen reader hears it in the order of the screen: his line, the alibi of the pick, the right
        answer, the meaning of the sentence, the reason */
     var right = optByKey(c.opts, q.answer), al = alibiOf(c);
@@ -2228,6 +2608,21 @@
     }
     showResults(res);
   }
+  /* a word of one or two letters right before the bold name stays with the word before it (the name
+     starts a line of its own in the gold box: "now a" / "Junior Detective.") */
+  function tieShort(html) { return String(html).replace(/ (\S{1,2}) (<b>)/, "\u00a0$1 $2"); }
+  /* how far the main button of the results ends below the first screen */
+  function mainOver(actions) {
+    var b = actions ? actions.querySelector(".btn.primary") : null;
+    if (!b || !b.getClientRects().length) { return 0; }
+    return Math.max(0, Math.ceil(b.getBoundingClientRect().bottom + (window.pageYOffset || 0) - window.innerHeight));
+  }
+  /* ... and if it does, it is pinned to the foot of the screen (stylesheet: .res-actions.pin) */
+  function resPin(actions) {
+    if (!actions) { return; }
+    actions.classList.remove("pin");
+    if (mainOver(actions) > 0) { actions.classList.add("pin"); }
+  }
   function showResults(res) {
     var file = R.file, n = R.n, missed = R.missed.slice(), stars = res.stars, i;
     var nextF = FILES[FILES.indexOf(file) + 1] || null;
@@ -2242,9 +2637,9 @@
     }
     h += '<ul class="vd-stats"><li><b>' + R.right + "/" + n + "</b><span>" + (res.practice ? "fixed" : "first try") + "</span></li><li><b>" + R.best + "</b><span>best streak</span></li><li><b>" + R.clues + "</b><span>" + (R.clues === 1 ? "clue used" : "clues used") + "</span></li></ul>";
     if (res.solo) { h += '<p class="vd-extra vd-solo"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-ribbon"></use></svg><span>' + esc(L.solo) + "</span></p>"; }
-    var rankLine = res.rankUp ? fill(L.rankUp, { rank: res.rankUp }) : "";
+    var rankLine = res.rankUp ? fill(L.rankUp, { rank: res.rankUp }) : "", sayRank = !!rankLine;
     if (res.rankUp) {
-      h += '<div class="vd-extra vd-rank"><svg viewBox="0 0 48 52" aria-hidden="true" focusable="false"><use href="#i-badge"></use></svg><p>' + rich(rankLine) + "</p>" + rankRowHtml(totalStars()) + "</div>";
+      h += '<div class="vd-extra vd-rank"><svg viewBox="0 0 48 52" aria-hidden="true" focusable="false"><use href="#i-badge"></use></svg><p>' + tieShort(rich(rankLine)) + "</p>" + rankRowHtml(totalStars()) + "</div>";
     }
     if (res.best) { h += '<p class="vd-best">New best</p>'; }
     else if (res.keep) { h += '<p class="vd-best keep">Your best here is still ' + res.keep + (res.keep === 1 ? " star" : " stars") + "</p>"; }
@@ -2309,7 +2704,7 @@
         Sfx.play("rankup");
         burst(extras[idx].querySelector("svg"), 18);
         act("cheer", 2400);
-        say([{ html: line, type: false }, { html: rankLine, cls: "b-lead" }]);
+        if (sayRank) { say([{ html: line, type: false }, { html: rankLine, cls: "b-lead" }]); }
       } else { Sfx.play("star"); }
     }
     var line, t = 250;
@@ -2337,9 +2732,29 @@
         for (i = 0; i < extras.length; i++) { later(extraOn.bind(null, i), t + 500 + i * 260); }
       }
     }
-    if (rankLine && (res.practice || reduced())) { say([{ html: line }, { html: rankLine, cls: "b-lead" }]); } else { sayLine(line); }
-    if (rankLine) { reserveStage([[{ html: line }, { html: rankLine, cls: "b-lead" }]], null); }
-    squeezeInspector(actions);
+    /* The main way on has to be on the screen when the verdict is in. Where even his smallest size
+       leaves the page too long for that (a promotion on a short phone, a low laptop window), he first
+       leaves the promotion to the gold box, which says it in the same words, and then the main button
+       is pinned to the foot of the screen. */
+    var both = [{ html: line }, { html: rankLine, cls: "b-lead" }];
+    function settle() {
+      actions.classList.remove("pin");
+      if (sayRank && (res.practice || reduced())) { say(both); } else { sayLine(line); }
+      reserveStage(sayRank ? [both] : null, null);
+      /* (with a promotion to come the stage keeps the room of both lines, also while he gives up
+         height: the button must still be on the screen when he says the second one) */
+      if (sayRank) { applyReserve(true); }
+      squeezeInspector(actions, false, sayRank);
+    }
+    settle();
+    if (sayRank && mainOver(actions) > 0) {
+      sayRank = false;
+      app.style.removeProperty("--insp");
+      fitInspector();
+      settle();
+      announce(plain(line) + " " + plain(rankLine));
+    }
+    resPin(actions);
   }
 
   /* ------------------------------------------------------------ actions */
@@ -2350,10 +2765,20 @@
     syncSound();
     if (save.sound) { Sfx.play("tap"); }
   }
+  function toggleMusic() {
+    if (!MUSIC) { return; }
+    save.music = !save.music;
+    try { MUSIC.setEnabled(save.music); } catch (e) { /* the game works without music */ }
+    persist();
+    syncMusic();
+  }
+  function nextPiece() { if (MUSIC && save.music) { try { MUSIC.next(); } catch (e) { /* ignore */ } } }
   var ACT = {
     home: goHome,
     notebook: openNotebook,
     sound: toggleSound,
+    music: toggleMusic,
+    "music-next": nextPiece,
     clue: askClue,
     reset: openConfirm,
     skip: function () { if (view === "briefing" && B) { briefSkip(); } else if (view === "training" && T) { finishTraining(); } },
@@ -2412,8 +2837,12 @@
     if (t.hasAttribute("data-word")) {
       var wi = +t.getAttribute("data-word");
       if (view === "training" && T) { trainWord(wi, t); }
-      else if (view === "play" && R && R.cur && R.cur.q.words && R.cur.q.words[wi]) { Sfx.play("tap"); showGloss(t, R.cur.q.words[wi]); }
-      else if (view === "briefing" && B && B.lesson && B.lesson.words[wi]) { Sfx.play("tap"); showGloss(t, B.lesson.words[wi]); }
+      else if (view === "play" && R && R.cur && R.cur.q.words && R.cur.q.words[wi]) { Sfx.play("tap"); showGloss(t, R.cur.q.words[wi]); scenePulse(wi); }
+      else if (view === "briefing" && B && B.lesson && B.lesson.words[wi]) {
+        Sfx.play("tap");
+        showGloss(t, B.lesson.words[wi]);
+        if (LS) { try { LS.ctl.pulse(wi); } catch (e2) { /* ignore */ } }
+      }
       return;
     }
     if (t.hasAttribute("data-choice") && view === "training" && T) { trainChoice(+t.getAttribute("data-choice"), t); }
@@ -2475,25 +2904,37 @@
     layoutScroll();
     fitAnswers();
     if (c && c.answered) {
+      var av = desk.querySelector(".v-play.answered"), tier = sceneLay(), late = tier === "late";
+      if (SC && SC.tier !== tier) { dropScene(); }
+      /* (late: the screen is fitted without the picture, which then stays only if it still has the room) */
+      if (late) { if (SC) { SC.box.hidden = true; } } else if (!SC && av) { sceneAnswered(av, c.q); }
+      if (!docked) { app.style.removeProperty("--insp"); fitInspector(); applyReserve(); }
       fitAnswered(false);
+      hopRect = null;
       if (!docked) { fitInspector(); applyReserve(); }
-      trimAnswered();
+      trimAnswered(!!SC && !late);
+      if (SC && !late && pageOver() > 0) { sceneGiveAnswered(); }
+      sceneLate(av, c.q);
+      sceneSettle();
       return;
     }
     app.style.removeProperty("--insp");
     fitInspector();
     if (c) {
       var v = desk.querySelector(".v-play");
-      if (v) { v.classList.remove("snug"); v.classList.remove("snug2"); v.classList.remove("tight"); }
+      if (v) { v.classList.remove("snug"); v.classList.remove("snug2"); v.classList.remove("tight"); v.classList.remove("cb-up"); v.classList.remove("bare"); }
       app.classList.remove("terse");
+      if (SC && SC.tier !== sceneLay()) { dropScene(); }
       fitPlay();
+      sceneAsk();
+      sceneResize();
       placeLens();
       return;
     }
     applyReserve();
     if (view === "training" && T) { trainFit(); }
     else if (view === "briefing" && B) { briefFit(true); squeezeInspector(B.view.lastElementChild); applyReserve(); }
-    else if (view === "results") { squeezeInspector(desk.querySelector(".res-actions")); }
+    else if (view === "results") { var ra = desk.querySelector(".res-actions"); if (ra) { ra.classList.remove("pin"); squeezeInspector(ra); resPin(ra); } }
   }
   var resizeRaf = 0;
   function onResize() { resizeRaf = 0; refit(); }
@@ -2535,6 +2976,14 @@
   try { Sfx.setMuted(!save.sound); } catch (e) { /* ignore */ }
   syncSound();
   buildNotebook();
+  try {
+    if (MUSIC) {
+      MUSIC.onchange = function (m) { if (m && m.playing && m.n && m.n !== save.piece) { save.piece = m.n; persist(); } syncMusic(); };
+      MUSIC.start(save.piece);
+      MUSIC.setEnabled(save.music);
+    }
+  } catch (e) { /* the game works without music */ }
+  syncMusic();
   home();
   /* Both fonts come in two files (plain letters, and the letters with a long mark). All four are asked
      for now, so that no line changes its height in the middle of a case, and every screen fits itself
