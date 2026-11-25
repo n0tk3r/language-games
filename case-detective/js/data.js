@@ -15,7 +15,10 @@
  *   version, storageKey,
  *   cases:   { nom|gen|dat|acc|abl|voc: { key, name, abbr, question, job, tag, color, hook } },
  *   verb:    { key:'verb', name, tag, color },
- *   declension: { word, stem, meaning, rows:[{ k, sg, pl }], sneaky:'ae' },
+ *   declension: { models:[{ word, stem, gender, meaning }], adjective:{ word, stem, meaning }, rows:[{ k, sg, pl }], sneaky:'ae' },
+ *                                                   // models[0] is the model noun of the book (porta); the chart can show any of them
+ *   wordList: { intro, groups:[{ title, items:[{ la, note?, en }] }] },   // the Notebook's word list: full dictionary entries
+ *                                                   // (title and en may contain <i>; la is Latin, shown in italics)
  *   method:  [{ title, text }],                     // the 3-step detective method
  *   ranks:   [{ min, title }],                      // by total stars, ascending
  *   starRules: [{ min, stars }],                    // share of first-try answers -> stars
@@ -70,7 +73,7 @@
     acc: { key: "acc", name: "Accusative", abbr: "Acc.", question: "What gets the action?", job: "the direct object", tag: "gets the action", color: "#7b3fc4",
            hook: "The verb points right at it, like an <b>acc</b>used suspect." },
     abl: { key: "abl", name: "Ablative", abbr: "Abl.", question: "By, with or from what?", job: "“by”, “with” or “from” (it modifies adverbially)", tag: "by / with / from", color: "#0f8aa0",
-           hook: "You will investigate this one another day." },
+           hook: "The by-with-from case. <i>Sine</i>, “without”, always takes it: <i>sine pecūniā</i>. In the chart its singular ends in <b>-ā</b>: a long a with a macron (the line on top)." },
     voc: { key: "voc", name: "Vocative", abbr: "Voc.", question: "Who is being talked to?", job: "direct address (some tests say “direct speech”)", tag: "talked to", color: "#b0399a",
            hook: "The calling case. From <i>vocō</i>, “I call”. In the chart it looks just like the nominative, so watch for <b>Ō</b> or a comma." }
   };
@@ -80,11 +83,13 @@
   var LEX = {
     "poēta": "poet", "puella": "girl", "nauta": "sailor", "rosa": "rose",
     "fāma": "fame, reputation", "patria": "country, fatherland", "vīta": "life",
-    "pecūnia": "money", "magnus": "big, great",
+    "pecūnia": "money", "philosophia": "philosophy", "magnus": "big, great",
     "poena": "penalty, punishment", "īra": "anger"
   };
   /** the little word that calls out to someone */
   function O() { return { w: "Ō", r: null, lemma: "ō", g: "O! (calling out to someone)" }; }
+  /** the preposition of chapter 2: the noun after it is in the ablative */
+  function SINE(capital) { return { w: capital ? "Sine" : "sine", r: null, lemma: "sine", g: "without" }; }
   /** the five jobs under their grammar names, with the detective question as the second line */
   var JOB_NAMES = { nom: "Subject", gen: "Possession", dat: "Indirect object", acc: "Direct object", voc: "Direct address" };
   function jobNames(keys) { return keys.map(function (k) { return { k: k, label: JOB_NAMES[k], sub: CASES[k].question }; }); }
@@ -129,7 +134,7 @@
       blurb: "Match each case to its job in the sentence.",
       briefing: [
         { mood: "point", say: "In a Latin sentence, every noun has a <b>job</b>. Its ending points to its <b>case</b>, and the case tells you which job.", show: "chart" },
-        { mood: "wave", say: "This chart has every ending of <i>puella</i>, “girl”. No need to learn it by heart today: it is always in your <b>Notebook</b>. See the book button light up?", point: "notebook" },
+        { mood: "wave", say: "This is the chart from your book: <i>porta</i>, “gate”. All my nouns use its endings. It is always in your <b>Notebook</b>. See the book button light up?", point: "notebook" },
         { mood: "think", say: "So I question every noun like a suspect. First: <b>Who does it?</b> The doer is the <b>subject</b>, in the <b>nominative</b>. Here it is <i>poēta</i>.",
           lesson: { k: "nom", words: giveStory(0), translation: "<b>The poet</b> gives a rose to the girl." } },
         { mood: "point", say: "<b>What gets the action?</b> That is the <b>direct object</b>, in the <b>accusative</b>: <i>rosam</i>, the rose he gives.",
@@ -140,7 +145,10 @@
           lesson: { k: "gen", words: [n("rosa", null, "rosa"), T(n("puellae", "gen", "puella"))], translation: "the rose <b>of the girl</b>" } },
         { mood: "wave", say: "<b>Who is being talked to?</b> That is <b>direct address</b>, in the <b>vocative</b>. The poet says goodbye: <i>Valē, puella!</i>",
           lesson: { k: "voc", words: [P(v("Valē", "valeō", "goodbye! (be well)"), ","), P(T(n("puella", "voc", "puella")), "!")], translation: "Goodbye, <b>girl</b>!", scene: { speaker: "poēta" } } },
-        { mood: "search", say: "The <b>ablative</b> (“by”, “with” or “from”) waits for another day. Now your first case: match each job to its case. If you get stuck, tap <b>Ask the Inspector</b>.", show: "recap" }
+        { mood: "think", say: "<b>By, with or from what?</b> That is the <b>ablative</b>. For now you meet it after <i>sine</i>, “without”, the opposite of “with”: <i>sine pecūniā</i>.",
+          lesson: { k: "abl", words: [n("Nauta", "nom", "nauta"), SINE(), T(n("pecūniā", "abl", "pecūnia", { tag: "after sine" })), P(v("errat", "errō", "wanders"), ".")],
+            translation: "The sailor wanders without <b>money</b>." } },
+        { mood: "search", say: "Now your first case: match each job to its case. If you get stuck, tap <b>Ask the Inspector</b>.", show: "recap" }
       ],
       recap: {
         kind: "questions",
@@ -149,7 +157,8 @@
           { k: "acc", text: "What gets the action?" },
           { k: "dat", text: "Who receives it?" },
           { k: "gen", text: "Whose is it?" },
-          { k: "voc", text: "Who is being talked to?" }
+          { k: "voc", text: "Who is being talked to?" },
+          { k: "abl", text: "By, with or from what? Also after sine." }
         ]
       },
       questions: [
@@ -284,9 +293,24 @@
           },
           clues: [
             { say: "“To” or “for” belongs to the <b>dative</b>, the giving case. This one is “by”, “with” or “from”.", eliminates: "dat" },
-            { say: "It is the one case you have not investigated yet. Your <b>Notebook</b> lists it right after the accusative." }
+            { say: "It is the case you find after <i>sine</i>, “without”. Your <b>Notebook</b> lists it right after the accusative." }
           ],
-          why: "The <b>ablative</b> modifies adverbially: it tells by, with or from what. You will investigate it another day." }
+          why: "The <b>ablative</b> modifies adverbially: it tells by, with or from what. You also find it after <i>sine</i>, “without”." },
+        { id: "jobs-10", type: "choice", shuffle: true,
+          prompt: "The noun that goes with <i>sine</i> (“without <u>money</u>”) is in the…",
+          words: [SINE(), T(n("pecūniā", "abl", "pecūnia", { tag: "after sine" }))],
+          translation: "without <b>money</b>",
+          options: caseNames(["abl", "acc", "gen", "nom"]), answer: "abl",
+          whyNot: {
+            acc: "The accusative gets the action of a verb, and it would end in <b>-am</b>: <i>pecūniam</i>. This word follows <i>sine</i> and ends in a long -ā.",
+            gen: "The genitive tells <b>whose</b>, and it would end in <b>-ae</b>: <i>pecūniae</i>. Nothing belongs to the money here.",
+            nom: "The nominative is the doer, and it would end in a plain -a: <i>pecūnia</i>. Here the word follows <i>sine</i> and has a long <b>-ā</b>."
+          },
+          clues: [
+            { say: "The genitive means “<b>of</b>”: it tells whose. “Without” is the opposite of “with”, so think of the by-with-from case.", eliminates: "gen" },
+            { say: "Look at the ending: <b>-ā</b>, a long a with a line on top. A nominative would have a plain -a, an accusative -am.", eliminates: "acc" }
+          ],
+          why: "<i>Sine</i>, “without”, is a preposition. Its object is always in the <b>ablative</b>: <i>pecūniā</i>. The line over the last a shows its long <b>-ā</b>." }
       ]
     },
 
@@ -619,7 +643,7 @@
       blurb: "Any case can turn up. Read the whole sentence first.",
       briefing: [
         { mood: "wave", say: "Last file, detective. This time <b>any</b> case can turn up." },
-        { mood: "think", say: "Use the whole method. Find the verb first, then ask the five detective questions about the highlighted word.", show: "recap" },
+        { mood: "think", say: "Use the whole method. Find the verb first, then ask the six detective questions about the highlighted word.", show: "recap" },
         { mood: "proud", say: "Solve this one and the case is closed for good. Let’s go!" }
       ],
       recap: {
@@ -629,7 +653,8 @@
           { k: "acc", text: "What gets the action?" },
           { k: "dat", text: "Who receives it?" },
           { k: "gen", text: "Whose is it?" },
-          { k: "voc", text: "Who is being talked to?" }
+          { k: "voc", text: "Who is being talked to?" },
+          { k: "abl", text: "By, with or from what? Also after sine." }
         ]
       },
       questions: [
@@ -637,11 +662,11 @@
           words: [P(v("Salvē", "salveō", "hello! (a greeting)"), ","), O(), P(T(n("patria", "voc", "patria")), "!")],
           translation: "Hello, <b>O fatherland</b>!",
           scene: { speaker: "nauta" },
-          options: caseJobs(["voc", "nom", "acc", "gen"]), answer: "voc",
+          options: caseJobs(["voc", "nom", "acc", "abl"]), answer: "voc",
           whyNot: {
             nom: "The nominative <b>does</b> the action of a verb. The country is not doing anything: someone is greeting it.",
             acc: "The accusative <b>gets the action</b> and would end in -am: <i>patriam</i>. <i>Salvē</i> is only a greeting, “hello”, so nothing gets an action.",
-            gen: "The genitive tells <b>whose</b> and would be <i>patriae</i>, “of the country”. Nothing belongs to anything here."
+            abl: "The ablative would end in a long <b>-ā</b>: <i>patriā</i>. This word ends in a plain -a."
           },
           clues: [
             { say: "<i>Salvē</i> just means “hello”. Nobody is doing anything to the country, so nothing gets the action.", eliminates: "acc" },
@@ -679,10 +704,10 @@
         { id: "fin-4", type: "sentence", shuffle: true, prompt: CASE_PROMPT,
           words: [n("Puella", "nom", "puella"), T(n("poētīs", "dat", "poēta")), n("rosās", "acc", "rosa"), P(v("dat", "dō", "gives"), ".")],
           translation: "The girl gives roses <b>to the poets</b>.",
-          options: caseJobs(["dat", "acc", "gen", "nom"]), answer: "dat",
+          options: caseJobs(["dat", "acc", "abl", "nom"]), answer: "dat",
           whyNot: {
             acc: "What gets given is the roses, <i>rosās</i>. Poets who get the action would be <i>poētās</i>. <b>-īs</b> is for the ones who receive.",
-            gen: "“Of the poets” would be <i>poētārum</i>. And a giving verb needs a receiver: the poets get the roses.",
+            abl: "<b>-īs</b> can be ablative plural too: same ending. But a giving verb needs a receiver, and the poets get the roses.",
             nom: "The giver is the girl, <i>puella</i>: <i>dat</i> has one doer. Poets who do something would be <i>poētae</i>."
           },
           clues: [
@@ -745,7 +770,21 @@
             { say: "Look at the verb’s ending: da<b>nt</b>. More than one person gives." },
             { say: "No <b>Ō</b> and no comma, so nobody is being called. A plural verb needs a plural subject, and only <i>Puellae</i> can be one here.", eliminates: "voc" }
           ],
-          why: "<i>Dant</i> is plural, so we need a plural subject, and only <b>Puellae</b> can be one. The poets, <i>poētīs</i>, receive the roses." }
+          why: "<i>Dant</i> is plural, so we need a plural subject, and only <b>Puellae</b> can be one. The poets, <i>poētīs</i>, receive the roses." },
+        { id: "fin-9", type: "sentence", shuffle: true, prompt: CASE_PROMPT,
+          words: [SINE(true), T(n("philosophiā", "abl", "philosophia", { tag: "after sine" })), { w: "saepe", r: null, lemma: "saepe", g: "often" }, P(v("errāmus", "errō", "we go astray"), ".")],
+          translation: "Without <b>philosophy</b> we often go astray.",
+          options: caseJobs(["abl", "nom", "acc", "gen"]), answer: "abl",
+          whyNot: {
+            nom: "The doers are “we”: the ending <b>-mus</b> of <i>errāmus</i> says so. And a nominative would end in a plain -a: <i>philosophia</i>.",
+            acc: "A direct object would end in <b>-am</b>: <i>philosophiam</i>. This word follows <i>sine</i> and ends in a long -ā.",
+            gen: "The genitive would end in <b>-ae</b>: <i>philosophiae</i>, “of philosophy”. This word follows <i>sine</i>, “without”."
+          },
+          clues: [
+            { say: "The verb is <b>errāmus</b>, “we go astray”. The ending -mus means <b>we</b> do it, so no noun here is the doer.", eliminates: "nom" },
+            { say: "The word before <i>philosophiā</i> is <i>sine</i>, “without”. Which case follows <i>sine</i>?" }
+          ],
+          why: "<i>Sine</i>, “without”, always takes the <b>ablative</b>: <i>philosophiā</i>, with a long -ā. Without what do we go astray? Without philosophy." }
       ]
     }
   ];
@@ -801,7 +840,16 @@
     cases: CASES,
     verb: VERB,
     declension: {
-      word: "puella", stem: "puell", meaning: "girl", sneaky: "ae",
+      /* the model noun of Wheelock's chapter 2 first; the others show that every noun of this declension takes the same endings */
+      models: [
+        { word: "porta", stem: "port", gender: "f.", meaning: "gate" },
+        { word: "puella", stem: "puell", gender: "f.", meaning: "girl" },
+        { word: "rosa", stem: "ros", gender: "f.", meaning: "rose" },
+        { word: "nauta", stem: "naut", gender: "m.", meaning: "sailor" },
+        { word: "poēta", stem: "poēt", gender: "m.", meaning: "poet" }
+      ],
+      adjective: { word: "magna", stem: "magn", meaning: "big, great" },
+      sneaky: "ae",
       rows: [
         { k: "nom", sg: "a", pl: "ae" },
         { k: "gen", sg: "ae", pl: "ārum" },
@@ -809,6 +857,44 @@
         { k: "acc", sg: "am", pl: "ās" },
         { k: "abl", sg: "ā", pl: "īs" },
         { k: "voc", sg: "a", pl: "ae" }
+      ]
+    },
+    /* the Notebook's word list: every word of the Latin sentences with its full dictionary entry, as the school asks
+       for it (a noun with its genitive and gender, a verb with its principal parts) */
+    wordList: {
+      intro: "Every Latin word from the sentences in these case files, with its full dictionary entry. For a noun: the word, its genitive, its gender (f. = feminine, m. = masculine) and its meaning.",
+      groups: [
+        { title: "Nouns (first declension)", items: [
+          { la: "fāma, fāmae", note: "f.", en: "fame, reputation" },
+          { la: "īra, īrae", note: "f.", en: "anger" },
+          { la: "nauta, nautae", note: "m.", en: "sailor" },
+          { la: "patria, patriae", note: "f.", en: "country, fatherland" },
+          { la: "pecūnia, pecūniae", note: "f.", en: "money" },
+          { la: "philosophia, philosophiae", note: "f.", en: "philosophy" },
+          { la: "poena, poenae", note: "f.", en: "penalty, punishment" },
+          { la: "poēta, poētae", note: "m.", en: "poet" },
+          { la: "porta, portae", note: "f.", en: "gate" },
+          { la: "puella, puellae", note: "f.", en: "girl" },
+          { la: "rosa, rosae", note: "f.", en: "rose" },
+          { la: "vīta, vītae", note: "f.", en: "life" }
+        ] },
+        { title: "Verbs (principal parts; <i>salveō</i> has only two)", items: [
+          { la: "amō, amāre, amāvī, amātum", en: "to love" },
+          { la: "dō, dare, dedī, datum", en: "to give" },
+          { la: "errō, errāre, errāvī, errātum", en: "to wander, to go astray" },
+          { la: "laudō, laudāre, laudāvī, laudātum", en: "to praise" },
+          { la: "salveō, salvēre", en: "to be well (<i>salvē</i>: hello)" },
+          { la: "servō, servāre, servāvī, servātum", en: "to save, to keep" },
+          { la: "valeō, valēre, valuī, valitūrum", en: "to be strong, to be well (<i>valē</i>: goodbye)" },
+          { la: "videō, vidēre, vīdī, vīsum", en: "to see" }
+        ] },
+        { title: "Other words", items: [
+          { la: "est", en: "is" },
+          { la: "magnus, magna, magnum", en: "big, great" },
+          { la: "Ō", en: "O! (calling out to someone)" },
+          { la: "saepe", en: "often" },
+          { la: "sine", note: "preposition (takes the ablative)", en: "without" }
+        ] }
       ]
     },
     method: [

@@ -402,7 +402,9 @@
     } catch (e) { /* ignore */ }
   }
 
-  /* hand over every note that begins within the next third of a second (never more than a handful at a time) */
+  /* hand over every note that begins within the next third of a second (never more than a handful at a time).
+     A note whose moment has come starts a moment later, never in the past: the clock is read again for each
+     note, because it can move on in a jump while the notes before it are being built */
   function pump() {
     if (!running || !song || !ctx) { return; }
     try {
@@ -411,7 +413,7 @@
       while (next < N && t0 + song.t[next] < horizon && given < 24) {
         j = next++;                                   /* moved on first: a note that fails is not tried again */
         t = t0 + song.t[j];
-        if (t > now - 0.05) { given++; violin.note(Math.max(t, now + 0.005), song.d[j], song.p[j], song.v[j], song.k[j], song.c[j]); }
+        if (t > now - 0.05) { given++; violin.note(Math.max(t, ctx.currentTime + 0.02), song.d[j], song.p[j], song.v[j], song.k[j], song.c[j]); }
       }
       pos = now - t0;
       if (next >= N && now > t0 + song.end + 1.6) { advance(1); }

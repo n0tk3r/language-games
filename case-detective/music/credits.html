@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where the music comes from | Case Detective</title>
+<style>
+@font-face { font-family: 'Nunito Variable'; font-style: normal; font-display: swap; font-weight: 200 1000; src: url(../fonts/nunito-latin-wght-normal.woff2) format('woff2-variations'); }
+@font-face { font-family: 'Alegreya Variable'; font-style: normal; font-display: swap; font-weight: 400 900; src: url(../fonts/alegreya-latin-wght-normal.woff2) format('woff2-variations'); }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: linear-gradient(180deg, #070d1f, #13244a); color: #2b1d14; font: 500 18px/1.5 'Nunito Variable', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
+main { max-width: 700px; margin: 0 auto; padding: 22px 14px 48px; }
+.card { padding: 20px 22px 24px; border: 2px solid #b89a5e; border-radius: 18px; background: #fbf3dc; box-shadow: 0 12px 30px rgba(0, 0, 0, .45); }
+h1 { margin: 0 0 10px; font: 800 30px/1.15 'Alegreya Variable', Georgia, serif; color: #7c121b; }
+h2 { margin: 22px 0 6px; font: 800 22px/1.2 'Alegreya Variable', Georgia, serif; color: #7c121b; }
+p { margin: 0 0 10px; }
+ul { margin: 0 0 10px; padding-left: 22px; }
+li { margin-bottom: 8px; }
+a { color: #7c121b; font-weight: 700; text-underline-offset: 3px; }
+.back { display: inline-flex; align-items: center; min-height: 48px; margin-bottom: 14px; padding: 0 18px; border: 2px solid #7a4e10; border-radius: 14px; background: linear-gradient(180deg, #ffe596, #f0bb4c 48%, #d99a2b); color: #2c1a05; font-weight: 800; text-decoration: none; box-shadow: 0 4px 0 #7a4e10; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" id="back" href="../index.html">Back to the game</a>
+  <div class="card">
+    <h1>Where the music comes from</h1>
+    <p>The violin in Case Detective plays the <b>24 Caprices for solo violin, Op. 1</b>, by Niccolò Paganini (1782 to 1840). He wrote them between about 1802 and 1817, and they were first printed in 1820. The music itself belongs to everyone now: it is in the public domain.</p>
+    <p>Nobody recorded what you hear. The game holds the notes of each piece, and a small violin made of code (<code>js/music.js</code>) plays them on your device.</p>
+    <h2>The notes</h2>
+    <p>Somebody has to type a score into a computer before a program can play it. The notes in this game were taken from these free editions:</p>
+    <ul>
+      <li><b>Nos. 1, 2 and 3</b>: typeset by Andrew Buck for <a href="https://www.mutopiaproject.org/">the Mutopia Project</a>, shared under the <a href="https://creativecommons.org/licenses/by-sa/3.0/">Creative Commons Attribution-ShareAlike 3.0</a> license (CC BY-SA 3.0). Pages of the editions: <a href="https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=995">No. 1</a>, <a href="https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=996">No. 2</a>, <a href="https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1459">No. 3</a>.</li>
+      <li><b>Nos. 23 and 24</b>: typeset by Samuel Rummel for <a href="https://www.mutopiaproject.org/">the Mutopia Project</a>, shared under the <a href="https://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0</a> license (CC BY-SA 4.0). Pages of the editions: <a href="https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=1999">No. 23</a>, <a href="https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=2000">No. 24</a>.</li>
+    </ul>
+    <p>What was changed: the MIDI file of each edition was turned into a short list of notes (the files <code>caprice-NN.js</code> in this folder). Those lists are shared under the same license as the edition they come from. The MIDI files of Nos. 1, 2 and 3 give no tempo, so a tempo was chosen from the tempo words of the score (Andante, Moderato, Sostenuto and Presto).</p>
+    <p>Nos. 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 and 22 are not in the game yet.</p>
+  </div>
+</main>
+<script>
+/* The game opens this page in a tab of its own, so that a case in progress is not lost. Going back then means
+   closing this tab. Opened any other way, the link simply leads to the game. */
+(function () {
+  var a = document.getElementById("back");
+  if (!a || location.hash !== "#from-game" || history.length > 1) { return; }
+  a.addEventListener("click", function (e) {
+    try { window.close(); } catch (err) { /* the link does its work */ }
+    if (window.closed) { e.preventDefault(); }
+  });
+})();
+</script>
+</body>
+</html>

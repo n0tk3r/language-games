@@ -965,8 +965,24 @@ function create(words, opts) {
     clearAll();
     el.classList.remove("scn-go", "scn-bk");
     if (dead || off || doc.hidden || still()) { return; }
-    if (left > 0 && made.ms) { later(function () { play(true); }, wait); }
+    if (left > 0 && made.ms) { later(function () { play(true); }, wait); } else { calmQ(); }
     blink();
+  }
+  /* The "?" on the mystery word's figure beats while plays are left. With the last one it comes to rest:
+     its beat ends where it began, so it does not jump (where getAnimations is missing, it simply stops). */
+  function calmQ() {
+    var l = el.querySelectorAll(".scn-q"), j;
+    for (j = 0; j < l.length; j++) {
+      var an = null;
+      try { an = l[j].getAnimations ? l[j].getAnimations() : null; } catch (e) { an = null; }
+      if (!an) { l[j].style.animation = "none"; continue; }
+      an.forEach(function (x) {
+        try {
+          var tm = x.effect.getComputedTiming();
+          if (tm.iterations === Infinity) { x.effect.updateTiming({ iterations: Math.floor(tm.currentIteration || 0) + 1 }); }
+        } catch (e) { /* ignore */ }
+      });
+    }
   }
   function onVis() { rest(700); }
   function onTap() { api.replay(); }

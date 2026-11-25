@@ -134,9 +134,11 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .mu-btn[aria-pressed="false"] { background: transparent; }
 .mu-btn:disabled { opacity: .5; cursor: default; }
 .mu-credit { font-size: 15px; }
-.mu-credit a { color: var(--ink-2); font-weight: 700; text-underline-offset: 3px; }
+.mu-credit a { display: inline-block; box-sizing: border-box; min-height: 44px; padding: 12px 0; margin: -12px 0; color: var(--ink-2); font-weight: 700; text-underline-offset: 3px; }   /* a 44 px target that does not open up the line */
 .logo { display: flex; align-items: center; gap: 8px; padding-left: 6px; font: 800 21px/1 var(--f-serif); color: var(--brass-lt); letter-spacing: .2px; white-space: nowrap; }
 .logo .ic { width: 26px; height: 26px; color: var(--brass); }
+.logo > span { display: flex; flex-direction: column; }
+.logo small { margin-top: 3px; color: var(--cream-2); font: 700 11.5px/1 var(--f-ui); letter-spacing: .2px; }
 .app:not([data-view="home"]) .logo { display: none; }
 .tb-mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .tb-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 16px/1.2 var(--f-serif); color: var(--cream); }
@@ -325,12 +327,13 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .bf-cards > .wait, .bf-cards > .recap.wait { display: block; visibility: hidden; animation: none; }
 .bf-cards > .wait * { visibility: hidden !important; }   /* (a label that is on show in a waiting lesson would shine through) */
 .bf-cards > .bf-lesson.wait { display: flex; }
+.bf-cards > .recap.wait { display: none; }
 .bf-card { padding: 12px; border-radius: 4px 14px 14px 14px; background: linear-gradient(180deg, var(--parch), var(--parch-2)); color: var(--ink); box-shadow: 0 3px 0 #4a2f14, 0 8px 14px rgba(20, 10, 4, .35); animation: view-in .34s ease backwards; }
 .bf-chart .rc-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-bottom: 4px; }
 .bf-chart .rc-h small { color: var(--ink-2); font: 700 14.5px/1.2 var(--f-ui); }
 .bf-chart .decl { border-spacing: 0 3px; }
-.bf-chart .decl td { padding: 3px 8px; font-size: 19px; }
-.bf-chart .decl td:first-child { font-size: 14px; }
+.bf-chart .decl td, .bf-chart .decl tbody th { padding: 3px 8px; font-size: 19px; }
+.bf-chart .decl tbody th { font-size: 14px; }
 .bf-lesson { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .ls-head { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; }
 .ls-head .c-pic { flex: none; width: 34px; height: 34px; }
@@ -347,7 +350,9 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .ls-tr:empty, .ls-row:empty { display: none; }
 .ls-end { color: var(--ink); font: 500 20px/1.15 var(--f-serif); }
 .ls-end b { color: var(--ci); font-weight: 800; }
-.ls-row small { margin: 0 6px 0 -3px; font-size: 13px; }
+.ls-row small { font-size: 13px; }
+.ls-row-h i { color: var(--ink); }
+.ls-forms { white-space: nowrap; }
 /* too tall for the screen (briefFit): first the cover folds to its title, then the cards close ranks */
 .v-brief.bf-tight .bf-blurb, .v-brief.bf-tight .bf-meta { display: none; }
 .v-brief.bf-tight .bf-cover { padding-top: 8px; padding-bottom: 8px; }
@@ -355,7 +360,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .bf-tight2 .bf-card { padding-top: 8px; padding-bottom: 9px; }
 .bf-tight2 .bf-lesson { gap: 6px; }
 .bf-tight2 .bf-chart .decl { border-spacing: 0 2px; }
-.bf-tight2 .bf-chart .decl td { padding-top: 2px; padding-bottom: 2px; }
+.bf-tight2 .bf-chart .decl td, .bf-tight2 .bf-chart .decl tbody th { padding-top: 2px; padding-bottom: 2px; }
 .bf-tight2 .rc-list { gap: 3px; }
 .bf-tight2 .rc-list li { min-height: 30px; }
 .v-brief.bf-nocover .bf-cover { display: none; }
@@ -369,9 +374,13 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .bf-tight3 .bf-lesson { gap: 5px; }
 .bf-tight3 .rc-h { margin-bottom: 4px; font-size: 17px; }
 .bf-tight3 .bf-chart .rc-h { margin-bottom: 2px; }
-.bf-tight3 .bf-chart .decl td { padding-top: 1px; padding-bottom: 1px; }
+.bf-tight3 .bf-chart .decl td, .bf-tight3 .bf-chart .decl tbody th { padding-top: 1px; padding-bottom: 1px; }
 .bf-tight3 .rc-list { gap: 2px; }
 .bf-tight3 .rc-list li { min-height: 28px; padding-top: 2px; padding-bottom: 2px; }
+.bf-rc .rc-list { gap: 3px; }
+.bf-rc .rc-list li { min-height: 30px; padding: 2px 8px 2px 3px; }
+.bf-rc .rc-list .c-pic { display: none; }
+.bf-rc .rc-list .chip { min-width: 96px; }
 /* "that is where the chart lives": the Notebook button, lit for as long as he points at it */
 .tb-btn.point { background: rgba(244, 183, 48, .26); color: #fff; }
 .tb-btn.point::after { content: ""; position: absolute; left: -3px; right: -3px; top: -3px; bottom: -3px; border-radius: 15px; box-shadow: 0 0 0 3px #f4b730, 0 0 16px 5px rgba(244, 183, 48, .75); pointer-events: none; animation: nb-glow 1.1s ease-in-out infinite alternate; }
@@ -877,14 +886,59 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .nb-job { display: block; margin-top: 3px; line-height: 1.3; }
 .nb-hook { display: block; margin-top: 2px; font-size: 16px; line-height: 1.3; color: var(--ink-2); }
 .decl { width: 100%; border-collapse: separate; border-spacing: 0 4px; }
-.decl th { padding: 2px 6px; text-align: left; font: 800 13px/1.2 var(--f-ui); letter-spacing: 1px; text-transform: uppercase; color: var(--ink-2); }
-.decl td { padding: 5px 6px; background: rgba(255, 255, 255, .6); font: 500 20px/1.15 var(--f-serif); }
-.decl td:first-child { border-radius: 9px 0 0 9px; border-left: 8px solid var(--c); font: 800 14px/1.2 var(--f-ui); color: var(--ci); }
+.decl thead th { padding: 2px 6px; text-align: left; font: 800 13px/1.2 var(--f-ui); letter-spacing: 1px; text-transform: uppercase; color: var(--ink-2); }
+.decl td, .decl tbody th { padding: 5px 6px; background: rgba(255, 255, 255, .6); font: 500 20px/1.15 var(--f-serif); }
+.decl tbody th { border-radius: 9px 0 0 9px; border-left: 8px solid var(--c); font: 800 14px/1.2 var(--f-ui); color: var(--ci); text-align: left; }
 .decl td:last-child { border-radius: 0 9px 9px 0; }
 .decl td b { font-weight: 800; }
 .decl .sn b { padding: 0 4px; border-radius: 6px; background: #ffe08a; box-shadow: inset 0 0 0 1.5px #b9801c; }
 .decl-key { display: flex; align-items: center; gap: 7px; margin-top: 4px; font-size: 16px; line-height: 1.3; }
 .decl-key b { flex: none; padding: 0 5px; border-radius: 6px; background: #ffe08a; box-shadow: inset 0 0 0 1.5px #b9801c; font: 800 18px/1.3 var(--f-serif); }
+/* The chart of the first declension (phase 3). A head may carry a small help; a form is a noun and, if
+   asked for, its adjective: neither breaks, and the adjective stands under its noun where a cell cannot
+   hold both on one line (.stack, set by declFit for all cells alike). */
+.decl thead th small { font: 700 12.5px/1.2 var(--f-ui); letter-spacing: 0; text-transform: none; white-space: nowrap; }
+.d-n, .d-a { display: inline-block; white-space: nowrap; }
+.dc-table.stack .d-a { display: block; margin-top: 4px; }
+.nb-decl .dc-entry { margin-bottom: 2px; font: 500 22px/1.2 var(--f-serif); }
+.dc-entry i { font-size: 1em; font-weight: 700; }
+/* (the line about the model noun keeps its room when another noun is on show, so the chips stay put) */
+.dc-about { display: grid; margin-bottom: 10px; }
+.dc-about > p { grid-area: 1 / 1; line-height: 1.38; }
+.dc-about > p[aria-hidden] { visibility: hidden; }
+.dc-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+.dc-lab { grid-column: 1 / -1; flex-basis: 100%; color: var(--ink-2); font-size: 15px; font-weight: 800; }
+.dc-chip { flex: 0 0 auto; min-width: 64px; min-height: 44px; padding: 0 8px; border: 2px solid var(--ink-2); border-radius: 22px; background: #fff; color: var(--ink); font: italic 600 20px/1 var(--f-serif); cursor: pointer; }
+.dc-chip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
+.dc-opts { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 8px; }
+.dc-switch { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px 0 9px; border: 2px solid var(--ink-2); border-radius: 22px; background: #fff; color: var(--ink); font-weight: 800; cursor: pointer; }
+.dc-knob { position: relative; flex: none; width: 38px; height: 22px; border-radius: 11px; background: #a8997c; box-shadow: inset 0 0 0 1.5px rgba(43, 29, 20, .35); }
+.dc-knob::after { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .45); transition: transform .15s ease; }
+.dc-switch[aria-pressed="true"] { border-color: var(--ink); }
+.dc-switch[aria-pressed="true"] .dc-knob { background: var(--brass-dk); }
+.dc-switch[aria-pressed="true"] .dc-knob::after { transform: translateX(16px); }
+.dc-masc { flex-basis: 100%; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, .6); line-height: 1.35; }
+.nb-decl .dc-base { margin: 6px 0; line-height: 1.38; }
+/* Test yourself: every form is under a box, and a press opens it. The form is in the box all along,
+   unseen, so the box is the form's own size and the chart does not move when it opens; at least 44 px
+   high to tap. */
+.nb-decl .dc-say { margin: 0 0 6px; font-weight: 800; line-height: 1.3; }
+.dc-table.test .decl td { padding: 2px 3px; }
+.d-box { position: relative; display: block; width: 100%; min-height: 44px; padding: 3px 4px; border: 2px dashed #8a6d3b; border-radius: 9px; background: #fff; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.d-box .d-f { visibility: hidden; }
+.d-q { position: absolute; left: 0; right: 0; top: 50%; margin-top: -11px; color: var(--ink-2); font: 800 20px/22px var(--f-ui); text-align: center; }
+.d-box.open { border-color: transparent; background: none; cursor: default; }
+.d-box.open .d-f { visibility: visible; }
+.d-box.open .d-q { display: none; }
+.d-box .sr[hidden] { display: none; }
+/* the word list: one dictionary entry a line; a long entry hangs under its first word */
+.wl-groups { display: grid; gap: 10px; }
+.wl-group h4 { margin: 0 0 3px; color: var(--ink-2); font: 800 17px/1.25 var(--f-serif); }
+.wl { margin: 0; padding: 0; list-style: none; }
+.wl li { padding: 2px 0 2px 16px; text-indent: -16px; line-height: 1.32; }
+.wl li > i:first-child { font-weight: 600; }
+.wl-group h4 i { margin-right: .14em; }
+.wl li > i:not(:first-child) { margin-right: .08em; }
 .nb-method { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: m; }
 .nb-method li { position: relative; padding: 8px 10px 9px 48px; border-radius: 10px; background: rgba(255, 255, 255, .6); line-height: 1.35; counter-increment: m; }
 .nb-method li::before { content: counter(m); position: absolute; left: 10px; top: 9px; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--brass); color: var(--brass-ink); font: 800 16px/1 var(--f-ui); box-shadow: 0 0 0 2px #7a4e10; }
@@ -952,6 +1006,21 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .clue-note { padding-left: 10px; padding-right: 10px; }
   .sheet { padding-left: 11px; padding-right: 11px; }
   .res-more .btn { font-size: 14px; }
+}
+@media (max-width: 374.98px) {
+  .rc-list .c-pic { display: none; }
+  .rc-list li { padding-left: 3px; }
+  .rc-list .chip { min-width: 96px; }
+  .logo { position: relative; padding-bottom: 13px; }
+  .logo small { position: absolute; left: 6px; bottom: 0; margin: 0; }
+}
+@media (max-width: 345px) {
+  .logo small { left: 2px; }
+  .nb-decl .decl thead th { padding-left: 4px; padding-right: 2px; font-size: 12.5px; letter-spacing: .3px; }
+  .nb-decl .decl td, .nb-decl .decl tbody th { padding-left: 5px; padding-right: 3px; }
+  .nb-decl .decl tbody th { border-left-width: 6px; font-size: 13.5px; }
+  .dc-table.test .decl td { padding-left: 1px; padding-right: 1px; }
+  .d-box { padding-left: 2px; padding-right: 2px; border-width: 1.5px; }
 }
 @media (max-width: 379.98px) {
   .train-dock .skip .ic { display: none; }
@@ -1153,6 +1222,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .miss-tr { font-size: 18px; }
   .nb { left: 50%; right: auto; width: min(760px, 100vw); margin-left: calc(min(760px, 100vw) / -2); }
   .nb-pages { padding: 20px 24px 28px; }
+  .dc-chips { display: flex; flex-wrap: wrap; align-items: center; }
   .nb-case .c-pic { width: 44px; height: 44px; }
 }
 
@@ -1305,7 +1375,9 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .nb-pages { border-radius: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 28px; align-content: start; }
   .nb-sec + .nb-sec { margin-top: 0; padding-top: 0; border-top: 0; }
   .nb-sec { margin-bottom: 20px; }
-  .nb-sec.span { grid-column: 1 / -1; }
+  .nb-sec.span, .nb-how, .nb-words { grid-column: 1 / -1; }
+  .nb-how .nb-method { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .wl-groups { grid-template-columns: 1fr 1.3fr .9fr; gap: 0 24px; }
 }
 @media (min-width: 1220px) {
   .files { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
@@ -1558,8 +1630,8 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 }
 @media (min-width: 600px) {
   .bf-card { padding: 16px; }
-  .bf-chart .decl td { padding: 5px 10px; font-size: 22px; }
-  .bf-chart .decl td:first-child { font-size: 16px; }
+  .bf-chart .decl td, .bf-chart .decl tbody th { padding: 5px 10px; font-size: 22px; }
+  .bf-chart .decl tbody th { font-size: 16px; }
   .bf-chart .rc-h small { font-size: 16px; }
   .ls-head .c-pic { width: 42px; height: 42px; }
   .ls-head .chip { font-size: 17px; }
@@ -1573,9 +1645,9 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 @media (min-width: 640px) and (max-height: 520px), (min-width: 900px) and (max-height: 619.98px) {
   .bf-card { padding: 8px 12px 9px; }
   .bf-chart .decl { border-spacing: 0 2px; }
-  .bf-chart .decl td { padding: 1px 8px; font-size: 18px; }
-  .bf-chart .decl td:first-child { font-size: 13.5px; }
-  .bf-chart .decl th { padding-top: 0; padding-bottom: 0; }
+  .bf-chart .decl td, .bf-chart .decl tbody th { padding: 1px 8px; font-size: 18px; }
+  .bf-chart .decl tbody th { font-size: 13.5px; }
+  .bf-chart .decl thead th { padding-top: 0; padding-bottom: 0; }
   .ls-head .c-pic { width: 30px; height: 30px; }
   .ls-head .chip { font-size: 15px; }
   .ls-q { font-size: 20px; }

@@ -77,6 +77,8 @@
   .desc { margin: 0 0 16px; max-width: 30em; color: var(--ink-2); }
   .ae { white-space: nowrap; color: var(--red-dk); font: 800 1.12em/1 var(--f-serif); }
   .play { margin: 0; line-height: 0; }
+  /* which course and which chapter of the school's book the game goes with: the last line of the folder */
+  .course { margin: 14px 0 0; max-width: 30em; color: var(--tab-ink); font: 700 16px/1.4 var(--f-ui); }
   .btn {
     display: inline-flex; align-items: center; gap: 6px; min-height: 50px; padding: 9px 16px 9px 24px; border: 2px solid var(--brass-edge); border-radius: 14px;
     background: linear-gradient(180deg, #ffe596 0%, #f0bb4c 48%, #d99a2b 100%); color: var(--brass-ink); font: 800 19px/1.15 var(--f-ui); text-decoration: none;
@@ -169,6 +171,7 @@
     .cd h2 { margin-bottom: 10px; }
     .cd .play { order: 1; margin-bottom: 14px; }
     .cd .desc { order: 2; margin-bottom: 0; }
+    .cd .course { order: 3; margin-top: 10px; }
   }
   /* A phone on its side: the same, with less room above the folder. */
   @media (min-width: 600px) and (max-height: 480px) {
@@ -181,6 +184,7 @@
     .cd h2 { margin-bottom: 10px; }
     .cd .play { order: 1; margin-bottom: 14px; }
     .cd .desc { order: 2; margin-bottom: 0; }
+    .cd .course { order: 3; margin-top: 10px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .cd { transition: none; }
@@ -225,6 +229,7 @@
         <h2>Case Detective</h2>
         <p class="desc">Every noun has a job. Help Inspector Cāsus figure out who does it, who gets it, and whose it is. Then crack the sneaky <span class="ae">-ae</span> ending.</p>
         <p class="play"><a class="btn cover" href="case-detective/index.html">Play<span class="vh"> Case Detective</span> <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></a></p>
+        <p class="course">Latin IA (6th grade) · Wheelock’s Latin, chapter 2: the first declension and the jobs of the cases</p>
       </div>
     </li>
     <li class="game soon">

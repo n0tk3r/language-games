@@ -499,6 +499,7 @@
     var box = tbMid.querySelector(".pips");
     if (!box) { return; }
     box.style.removeProperty("--pip");
+    box.style.removeProperty("gap");
     var n = box.children.length, first = box.firstElementChild;
     if (!n || !first || !tbMid.clientWidth) { return; }
     var full = first.offsetWidth, gap = 0, used = 0;
@@ -507,13 +508,19 @@
     for (var c = tbMid.firstElementChild; c; c = c.nextElementSibling) { if (c !== box && c.getClientRects().length) { room -= c.offsetWidth + used; } }
     /* (the pip of the question on show is drawn a little larger: 4 px of air for it) */
     var size = Math.floor((room - 4 - gap * (n - 1)) / n);
+    /* still no room at the smallest size (ten pips, the streak and the music button on a 360 px phone):
+       the gaps between the pips close up as well */
+    if (size < 5 && gap > 2) { gap = 2; box.style.gap = "2px"; size = Math.floor((room - 4 - gap * (n - 1)) / n); }
     if (size < full) { box.style.setProperty("--pip", Math.max(5, size) + "px"); }
   }
   function midFile(f, extra) { setMid('<span class="tb-file"><b>File ' + f.n + "</b>" + txt(extra || f.title) + "</span>"); }
   function setStreak(n) {
+    var wide = String(streakN.textContent).length !== String(n).length;
     streakN.textContent = n;
     var show = n >= 2;
+    /* the counter takes room from the pips when it comes out, and again when it grows a digit (9 to 10) */
     if (streakEl.hidden === show) { streakEl.hidden = !show; fitPips(); }
+    else if (show && wide) { fitPips(); }
     if (show) { streakEl.classList.remove("bump"); void streakEl.offsetWidth; streakEl.classList.add("bump"); }
   }
   function syncSound() {
@@ -967,8 +974,14 @@
      game is as it was. */
   var SC = null, SIDE_NOTE_MIN = 260, SCN_MIN = 326;
   function scenesOn() { var S = window.Scenes; return !!(S && typeof S.create === "function" && typeof S.canDraw === "function"); }
+  /* (No picture for a sentence with an ablative in it: scenes.js cannot show "without", "by", "with" or
+     "from", and would draw the thing itself as if it were there. Hints from the data would lift that.) */
   function canScene(words, hints) {
-    try { return scenesOn() && !!(words && words.length) && !!window.Scenes.canDraw(words, hints || null); } catch (e) { return false; }
+    try {
+      if (!scenesOn() || !(words && words.length)) { return false; }
+      if (!hints && words.some(function (w) { return !!w && w.r === "abl"; })) { return false; }
+      return !!window.Scenes.canDraw(words, hints || null);
+    } catch (e) { return false; }
   }
   function sceneLay() {
     var s = "";
@@ -1031,10 +1044,18 @@
       applyReserve(whole);
     }
   }
+  /* A question whose options are jobs asks what the picture would tell: its figures carry the jobs ("who
+     does it", "gets the action") and the mystery word's figure shows its own (the ribbon of an owner, the
+     hands of a receiver). Such a question gets its picture after the answer, like a sentence question.
+     Options are jobs when not one of them is named after its case ("Possession", not "Genitive"). */
+  function optsAreJobs(q) {
+    var o = (q && q.options) || [];
+    return o.length > 0 && o.every(function (x) { var c = x && D.cases[x.k]; return !!c && plain(String(x.label || "")).indexOf(c.name) < 0; });
+  }
   /* before the answer: a question that says its sentence in English may show it as a picture */
   function sceneAsk() {
     var c = R && R.cur, v = desk.querySelector(".v-play"), lay = sceneLay();
-    if (view !== "play" || !c || c.answered || !v || !lay || lay === "late" || SC || !c.q.words || c.q.type === "sentence") { return; }
+    if (view !== "play" || !c || c.answered || !v || !lay || lay === "late" || SC || !c.q.words || c.q.type === "sentence" || optsAreJobs(c.q)) { return; }
     /* a screen that had to make room for the question itself has none for a picture */
     if (v.classList.contains("snug") || v.classList.contains("tight") || v.classList.contains("no-ev") || app.classList.contains("terse") || app.style.getPropertyValue("--insp")) { return; }
     var wide = wideLayout();
@@ -1087,16 +1108,31 @@
   /* The training case: its picture comes when the suspect is found, as a strip under the sentence, and
      only where the screen holds it as it stands (trainFit takes it away again if a later step needs
      the room). */
+  /* where the things to tap are: the suspects and the bar (Skip, Next). The picture comes when the
+     child has just tapped a suspect and is about to tap Next: it must not move either. */
+  function trainSpots() {
+    var l = T.view.querySelectorAll(".answers .opt, .dock button"), out = [], i, r;
+    for (i = 0; i < l.length; i++) { r = l[i].getBoundingClientRect(); out.push([Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)].join(",")); }
+    return out.join(" ");
+  }
   function sceneTrain() {
     var v = T && T.view, wide = wideLayout();
     if (!v || SC || !sceneLay() || pageOver() > 0) { return; }
-    var was = app.style.getPropertyValue("--insp"), from = inspFig.getBoundingClientRect();
+    var was = app.style.getPropertyValue("--insp"), from = inspFig.getBoundingClientRect(), spots = trainSpots();
+    var stood = { stage: stage.style.minHeight, view: v.style.minHeight, hold: T.hold, holdW: T.holdW };
     if (!layScene(v, sceneSrc(T.tr), "stack")) { return; }
     applyReserve();
     trainHold(wide);
     /* (a tablet's Inspector gives some of his height, as he does for the picture of a question) */
     if (pageOver() > 0) { spareInspector(false); }
-    if (pageOver() > 0) { dropScene(); inspBack(was); applyReserve(); trainHold(wide); return; }
+    /* where the strip would push the suspects or the bar (laptops, tablets), this layout has no picture
+       in the training case */
+    if (pageOver() > 0 || trainSpots() !== spots) {
+      dropScene();
+      inspBack(was);
+      stage.style.minHeight = stood.stage; v.style.minHeight = stood.view; T.hold = stood.hold; T.holdW = stood.holdW;
+      return;
+    }
     SC.inspWas = was;
     if (Math.abs(inspFig.getBoundingClientRect().height - from.height) > 3) { hopFrom(inspFig, from); }
     drawScene("solved");
@@ -1314,20 +1350,126 @@
   /* ------------------------------------------------------- the Notebook */
   var nbOpen = false, cfOpen = false, lastFocus = null;
   /* The declension chart: one build for the Notebook and for the briefing that opens with it (request 6).
-     sneaky: mark the cells with the sneaky ending (the Notebook explains them; the first briefing does not). */
-  function declTable(sneaky) {
-    var dc = D.declension, n = 0, h = '<table class="decl"><thead><tr><th scope="col">Case</th><th scope="col">One</th><th scope="col">Many</th></tr></thead><tbody>';
+     It is the chart of the school's book: the model noun (the first of D.declension.models), with the
+     book's adjective beside it where that is asked for. Any other noun of the list takes the same endings.
+     o.model: the noun (default: the model noun); o.adj: noun and adjective in every cell; o.sneaky: mark
+     the cells with the sneaky ending (the Notebook explains them; the first briefing does not);
+     o.helps: "(one)" and "(many)" beside the column heads; o.test: every form under a box that a press
+     opens (an object: the cells that are open already, "gen.sg": true).
+     A screen reader gets every form as one text ("porta magna"): the letters with the bold ending are
+     for the eye only. */
+  function declRow(k) {
+    var out = null;
+    D.declension.rows.forEach(function (r) { if (r.k === k) { out = r; } });
+    return out;
+  }
+  function declForm(stem, end) { return esc(stem) + "<b>" + esc(end) + "</b>"; }
+  function declTable(o) {
+    o = o || {};
+    var dc = D.declension, m = o.model || dc.models[0], adj = o.adj ? dc.adjective : null, n = 0;
+    var h = '<table class="decl' + (adj ? " with-adj" : "") + (o.test ? " is-test" : "") + '"><thead><tr><th scope="col">Case</th><th scope="col">Singular' + (o.helps ? " <small>(one)</small>" : "") +
+      '</th><th scope="col">Plural' + (o.helps ? " <small>(many)</small>" : "") + "</th></tr></thead><tbody>";
     dc.rows.forEach(function (row) {
       var c = D.cases[row.k];
       if (!c) { return; }
-      function cell(end) {
-        var sn = sneaky && end === dc.sneaky;
+      function cell(end, num) {
+        var sn = !!o.sneaky && end === dc.sneaky;
         if (sn) { n++; }
-        return "<td" + (sn ? ' class="sn"' : "") + ' lang="la">' + esc(dc.stem) + "<b>" + esc(end) + "</b>" + (sn ? '<span class="sr" lang="en"> (the sneaky ending)</span>' : "") + "</td>";
+        var eye = '<span class="d-f" aria-hidden="true"><span class="d-n">' + declForm(m.stem, end) + "</span>" + (adj ? ' <span class="d-a">' + declForm(adj.stem, end) + "</span>" : "") + "</span>";
+        var said = esc(m.stem + end + (adj ? " " + adj.stem + end : "")) + (sn ? '<span lang="en"> (the sneaky ending)</span>' : "");
+        if (o.test) {
+          /* Test yourself: the form is in its box, unseen, so the box has the form's own size. The box
+             stays a button when it is open: the focus keeps its place, and what the button says changes
+             from "covered" to the form. */
+          var id = row.k + "." + num, open = o.test[id] === true, what = esc(c.name + " " + (num === "sg" ? "singular" : "plural"));
+          return "<td" + (sn ? ' class="sn"' : "") + ' lang="la"><button type="button" class="d-box' + (open ? " open" : "") + '" data-box="' + id + '"' + (open ? ' aria-disabled="true"' : "") + ">" +
+            '<span class="sr" lang="en"' + (open ? " hidden" : "") + ">" + what + ', covered. Show the form.</span><span class="d-q" aria-hidden="true">?</span>' + eye +
+            '<span class="sr"' + (open ? "" : " hidden") + '><span lang="en">' + what + ": </span>" + said + "</span></button></td>";
+        }
+        return "<td" + (sn ? ' class="sn"' : "") + ' lang="la">' + eye + '<span class="sr">' + said + "</span></td>";
       }
-      h += '<tr class="c-' + c.key + '"><td>' + esc(c.name) + "</td>" + cell(row.sg) + cell(row.pl) + "</tr>";
+      h += '<tr class="c-' + c.key + '"><th scope="row">' + esc(c.name) + "</th>" + cell(row.sg, "sg") + cell(row.pl, "pl") + "</tr>";
     });
     return { html: h + "</tbody></table>", sneaky: n };
+  }
+  /* The chart in the Notebook can be asked things: another noun of the list (the chips), the book's
+     adjective beside the noun (a switch), and every form under a box, to say it from memory first
+     ("Test yourself", a second switch). Nothing of it is saved: every time the Notebook opens it shows
+     the model noun alone, uncovered. */
+  var nbDecl = { model: 0, adj: false, test: false, open: {}, shown: -1 };
+  var DC_TEST = "Say each form out loud, then tap a box to check.";
+  var DC_MODEL = "The model noun in Wheelock’s Latin, chapter 2.", DC_JOB = "The ending changes with the job.";
+  function capital(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
+  /* the dictionary entry of a noun, in the form of the word list: porta, portae, f., gate */
+  function declEntry(m) {
+    var g = declRow("gen");
+    return '<i lang="la">' + esc(m.word) + (g ? ", " + esc(m.stem + g.sg) : "") + "</i>, " + esc(m.gender) + ", " + esc(m.meaning);
+  }
+  /* the masculine of the chart's adjective, as the word list has it (magnus, magna, magnum) */
+  function adjMasc() {
+    var a = D.declension.adjective, out = a.stem + "us";
+    ((D.wordList && D.wordList.groups) || []).forEach(function (g) {
+      (g.items || []).forEach(function (it) { var f = String(it.la).split(/,\s*/); if (f.length > 1 && f.indexOf(a.word) > 0) { out = f[0]; } });
+    });
+    return out;
+  }
+  function declShow() {
+    var box = $("dcTable"), dc = D.declension, i;
+    if (!box) { return; }
+    var m = dc.models[nbDecl.model] || dc.models[0], g = declRow("gen"), agrees = m.gender === dc.models[0].gender;
+    /* (the entry line is read out when the noun changes, not every time the Notebook opens) */
+    if (nbDecl.shown !== nbDecl.model) { $("dcEntry").innerHTML = declEntry(m); nbDecl.shown = nbDecl.model; }
+    $("dcAbout").textContent = (m === dc.models[0] ? DC_MODEL + " " : "") + DC_JOB;
+    var chips = nbPages.querySelectorAll(".dc-chip");
+    for (i = 0; i < chips.length; i++) { chips[i].setAttribute("aria-pressed", dc.models[i] === m ? "true" : "false"); }
+    /* the adjective is the feminine one: a masculine noun gets a line that says so in place of the switch */
+    var sw = $("dcAdj"), masc = $("dcMasc"), isMasc = !agrees && m.gender === "m.";
+    sw.hidden = !agrees;
+    sw.setAttribute("aria-pressed", nbDecl.adj ? "true" : "false");
+    masc.hidden = !isMasc;
+    masc.innerHTML = isMasc ? '<i lang="la">' + esc(capital(m.word)) + "</i> is masculine (" + esc(m.gender) + '), so it does not take <i lang="la">' + esc(dc.adjective.word) +
+      '</i>. It takes <i lang="la">' + esc(adjMasc()) + "</i>, and you learn those endings in chapter 3." : "";
+    var tsw = $("dcTest"), say = $("dcSay");
+    if (tsw) { tsw.setAttribute("aria-pressed", nbDecl.test ? "true" : "false"); }
+    if (say) { say.hidden = !nbDecl.test; }
+    box.classList[nbDecl.test ? "add" : "remove"]("test");
+    box.innerHTML = declTable({ model: m, adj: nbDecl.adj && agrees, sneaky: true, helps: true, test: nbDecl.test ? nbDecl.open : null }).html;
+    $("dcBase").innerHTML = g ? 'To decline any noun of the first declension, drop <b class="nw">-' + esc(g.sg) + '</b> from its genitive: <i lang="la">' + esc(m.stem + g.sg) +
+      '</i> gives the base <i lang="la" class="nw">' + esc(m.stem) + "-</i>. Then add the endings." : "";
+    declFit();
+  }
+  /* Noun and adjective stand side by side where every cell holds both on one line. Where one cell
+     cannot, the adjective stands under its noun, in all cells alike. */
+  function declFit() {
+    var box = $("dcTable"), t = box ? box.firstChild : null, i;
+    if (!t || !t.classList) { return; }
+    box.classList.remove("stack");
+    if (!t.classList.contains("with-adj")) { return; }
+    var over = t.offsetWidth > box.clientWidth + 1, fs = t.querySelectorAll(".d-f");
+    for (i = 0; i < fs.length && !over; i++) { if (fs[i].getClientRects().length > 1) { over = true; } }
+    if (over) { box.classList.add("stack"); }
+  }
+  /* (another chart, by its noun or by a switch, is a new test: every box is closed again) */
+  function declPick(i) {
+    if (!D.declension.models[i] || i === nbDecl.model) { return; }
+    nbDecl.model = i;
+    nbDecl.open = {};
+    declShow();
+  }
+  function declSwitch(what) {
+    if (what === "adj") { nbDecl.adj = !nbDecl.adj; }
+    if (what === "test") { nbDecl.test = !nbDecl.test; }
+    nbDecl.open = {};
+    declShow();
+  }
+  /* a box is pressed: its form shows. Only this one cell changes, so the focus stays on its button. */
+  function declOpen(btn) {
+    var id = btn.getAttribute("data-box"), sr = btn.querySelectorAll(".sr");
+    if (!nbDecl.test || nbDecl.open[id] === true) { return; }
+    nbDecl.open[id] = true;
+    btn.classList.add("open");
+    btn.setAttribute("aria-disabled", "true");
+    if (sr.length === 2) { sr[0].hidden = true; sr[1].hidden = false; announce(sr[1].textContent); }
   }
   function buildNotebook() {
     var dc = D.declension, h = "", sneakyCells = 0;
@@ -1339,19 +1481,42 @@
         '<span class="nb-job">Job: ' + esc(c.job) + '</span><span class="nb-hook">' + rich(c.hook) + "</span></div></li>";
     });
     h += "</ul></section>";
-    var chart = declTable(true);
-    sneakyCells = chart.sneaky;
-    h += '<section class="nb-sec"><h3>The <i lang="la">' + esc(dc.word) + "</i> chart</h3><p>" + '<i lang="la">' + esc(dc.word) + "</i> means “" + esc(dc.meaning) + "”. The ending changes with the job.</p>" + chart.html;
+    /* the chart of the first declension: what it shows (which noun, with the adjective or without) is
+       put in by declShow() */
+    h += '<section class="nb-sec nb-decl"><h3>The first declension</h3><p class="dc-entry" id="dcEntry" aria-live="polite"></p>' +
+      '<div class="dc-about"><p aria-hidden="true">' + esc(DC_MODEL + " " + DC_JOB) + '</p><p id="dcAbout"></p></div>' +
+      '<div class="dc-chips" role="group" aria-labelledby="dcChipsLab"><span class="dc-lab" id="dcChipsLab">Try another noun:</span>';
+    dc.models.forEach(function (m, i) { h += '<button type="button" class="dc-chip" data-noun="' + i + '" aria-pressed="' + (i ? "false" : "true") + '" lang="la">' + esc(m.word) + "</button>"; });
+    h += '</div><div class="dc-opts"><button type="button" class="dc-switch" id="dcAdj" data-decl="adj" aria-pressed="false"><span class="dc-knob" aria-hidden="true"></span><span>with <i lang="la">' + esc(dc.adjective.word) + "</i></span></button>" +
+      '<p class="dc-masc" id="dcMasc" hidden></p><button type="button" class="dc-switch" id="dcTest" data-decl="test" aria-pressed="false"><span class="dc-knob" aria-hidden="true"></span><span>Test yourself</span></button></div>' +
+      '<p class="dc-say" id="dcSay" hidden>' + esc(DC_TEST) + '</p><div class="dc-table" id="dcTable"></div><p class="dc-base" id="dcBase"></p>';
     /* the chart marks every cell with the sneaky ending; he speaks of three suspects, because the fourth
        cell (the vocative plural) is the nominative's twin. The caption says so. */
     var twin = false;
-    dc.rows.forEach(function (row) { if (row.k === "voc" && row.pl === dc.sneaky) { twin = true; } });
+    dc.rows.forEach(function (row) {
+      if (!D.cases[row.k]) { return; }
+      if (row.sg === dc.sneaky) { sneakyCells++; }
+      if (row.pl === dc.sneaky) { sneakyCells++; }
+      if (row.k === "voc" && row.pl === dc.sneaky) { twin = true; }
+    });
     h += '<p class="decl-key"><b lang="la">-' + esc(dc.sneaky) + "</b><span>The sneaky ending. It turns up " + sneakyCells + " times" +
       (twin && sneakyCells === 4 ? ": the three suspects, and the vocative plural, which always looks like the nominative." : ", so the rest of the sentence has to tell you which job it has.") + "</span></p></section>";
-    h += '<section class="nb-sec"><h3>The detective method</h3><ol class="nb-method">';
+    h += '<section class="nb-sec nb-how"><h3>The detective method</h3><ol class="nb-method">';
     D.method.forEach(function (m) { h += "<li><b>" + txt(m.title) + "</b>" + txt(m.text) + "</li>"; });
     h += "</ol></section>";
-    h += '<section class="nb-sec"><h3>Field notes</h3><p>' + esc(D.inspector.nameNote) + '</p><ul class="nb-tips"><li>' + esc(L.glossHint) + "</li><li>Clues never cost stars. Ask as often as you like.</li>" +
+    /* the word list: every Latin word of the sentences with its full dictionary entry, one entry a
+       line, in the form of the chart's own entry line */
+    var wl = D.wordList;
+    if (wl && wl.groups && wl.groups.length) {
+      h += '<section class="nb-sec nb-words"><h3>Word list</h3>' + (wl.intro ? "<p>" + rich(wl.intro) + "</p>" : "") + '<div class="wl-groups">';
+      wl.groups.forEach(function (g) {
+        h += '<div class="wl-group"><h4>' + rich(g.title) + '</h4><ul class="wl">';
+        (g.items || []).forEach(function (it) { h += '<li><i lang="la">' + esc(it.la) + "</i>" + (it.note ? ", " + esc(it.note) : "") + ", " + rich(it.en) + "</li>"; });
+        h += "</ul></div>";
+      });
+      h += "</div></section>";
+    }
+    h += '<section class="nb-sec nb-notes' + (MUSIC ? "" : " span") + '"><h3>Field notes</h3><p>' + esc(D.inspector.nameNote) + '</p><ul class="nb-tips"><li>' + esc(L.glossHint) + "</li><li>Clues never cost stars. Ask as often as you like.</li>" +
       '<li class="kb-tip">On a keyboard: <kbd>1</kbd> to <kbd>4</kbd> answer, <kbd>Enter</kbd> continues, <kbd>C</kbd> asks for a clue, <kbd>N</kbd> opens this Notebook and <kbd>M</kbd> turns the sound effects on or off.</li></ul></section>';
     if (MUSIC) {
       var muN = 0, muC = "";
@@ -1366,6 +1531,8 @@
     nbPages.innerHTML = h;
     nbPages.setAttribute("tabindex", "0");
     nbPages.setAttribute("aria-label", "Notebook pages");
+    nbDecl.shown = -1;
+    declShow();
   }
   function setInert(on) {
     try {
@@ -1377,6 +1544,8 @@
     nbOpen = true;
     lastFocus = document.activeElement;
     hideGloss();
+    nbDecl.model = 0; nbDecl.adj = false; nbDecl.test = false; nbDecl.open = {};
+    declShow();
     nb.classList.add("open");
     nb.setAttribute("aria-hidden", "false");
     nbScrim.hidden = false;
@@ -1431,7 +1600,8 @@
   });
   /* keep Tab inside an open dialog */
   function trapTab(e, box) {
-    var list = box.querySelectorAll('button:not([disabled]), a[href], [tabindex="0"]');
+    /* (a control that is not on show, like the switch a masculine noun has no use for, is no stop) */
+    var list = Array.prototype.filter.call(box.querySelectorAll('button:not([disabled]), a[href], [tabindex="0"]'), function (n) { return n.getClientRects().length > 0; });
     if (!list.length) { e.preventDefault(); return; }
     var first = list[0], last = list[list.length - 1], a = document.activeElement;
     if (!box.contains(a)) { e.preventDefault(); first.focus(); return; }
@@ -1512,6 +1682,31 @@
   }
 
   /* ----------------------------------------------------------- briefing */
+  /* A plain line may name a Latin word of the word list ("Also after sine."): it is printed as Latin,
+     like everywhere else. Only a whole word that is a headword of the list, letter for letter. */
+  var LATIN = null;
+  function latinText(s) {
+    if (!LATIN) {
+      LATIN = {};
+      ((D.wordList && D.wordList.groups) || []).forEach(function (g) {
+        (g.items || []).forEach(function (it) { var w = String(it.la).split(/[,\s]/)[0]; if (w.length > 1) { LATIN[w] = true; } });
+      });
+    }
+    return keep(String(s === undefined || s === null ? "" : s).split(/([A-Za-zÀ-ſ]+)/).map(function (part, i) {
+      return i % 2 && LATIN[part] === true ? '<i lang="la">' + esc(part) + "</i>" : esc(part);
+    }).join(""));
+  }
+  /* The word the three suspects share (file 3) is the file's own: the Latin word of the beat that lays
+     the recap on the desk. (The chart's noun is the book's model noun, which is another word.) */
+  function suspectWord(file) {
+    var w = "", dc = D.declension;
+    (file.briefing || []).forEach(function (b) {
+      var m = !w && b.show === "recap" ? /<i>([^<]+)<\/i>/.exec(String(b.say || "")) : null;
+      if (m) { w = m[1]; }
+    });
+    if (!w) { w = dc.models[0].stem + dc.sneaky; }
+    return w.charAt(0).toLowerCase() + w.slice(1);
+  }
   function recapHtml(file) {
     var rc = file.recap, h = "";
     if (!rc || !rc.items) { return ""; }
@@ -1519,7 +1714,7 @@
       h += '<h2 class="rc-h">The detective questions</h2><ul class="rc-list">';
       rc.items.forEach(function (it) {
         var c = D.cases[it.k];
-        h += '<li class="c-' + esc(it.k) + '">' + (c ? pic("c-" + c.key, "c-pic") : "") + '<span class="chip c-' + esc(it.k) + '">' + esc(c ? c.name : it.k) + "</span><span>" + txt(it.text) + "</span></li>";
+        h += '<li class="c-' + esc(it.k) + '">' + (c ? pic("c-" + c.key, "c-pic") : "") + '<span class="chip c-' + esc(it.k) + '">' + esc(c ? c.name : it.k) + "</span><span>" + latinText(it.text) + "</span></li>";
       });
       h += "</ul>";
     } else if (rc.kind === "endings") {
@@ -1531,7 +1726,7 @@
       });
       h += "</div>";
     } else {
-      h += '<h2 class="rc-h"><i lang="la">' + esc(D.declension.stem + D.declension.sneaky) + "</i>: three suspects</h2>" + '<div class="sus-row">';
+      h += '<h2 class="rc-h"><i lang="la">' + esc(suspectWord(file)) + "</i>: three suspects</h2>" + '<div class="sus-row">';
       rc.items.forEach(function (it) {
         h += '<div class="sus c-' + esc(it.k) + '">' + portraitFor(it) + "<b>" + esc(it.label) + "</b><span>" + txt(it.meaning) + "</span><small>" + txt(it.text) + "</small></div>";
       });
@@ -1542,8 +1737,7 @@
   /* A briefing may teach with cards (file 1): the chart first (request 6), then one mini lesson per case,
      all of one build (request 5), and the recap at the end. The cards lie on one spot of the desk. */
   function chartCardHtml() {
-    var dc = D.declension;
-    return '<h2 class="rc-h">The <i lang="la">' + esc(dc.word) + "</i> chart<small>“" + esc(dc.meaning) + "”: one, and many</small></h2>" + declTable(false).html;
+    return '<h2 class="rc-h">The first declension<small>' + declEntry(D.declension.models[0]) + "</small></h2>" + declTable({}).html;
   }
   function sameWords(a, b) {
     if (!a || !b || a.length !== b.length) { return false; }
@@ -1575,12 +1769,23 @@
     }
     box.querySelector(".ls-tr").innerHTML = ls.translation ? "“" + rich(ls.translation) + "”" : "";
     var holder = box.querySelector(".ls-scene");
-    holder.hidden = !B.scnOn;
+    holder.hidden = !B.scnOn || !canScene(ls.words, ls.scene);
     holder.style.setProperty("--scn-ar", String(sceneRatio()));
     if (B.scnOn && B.lessonLive && !B.measuring) { lessonScene(holder, ls, ti); }
-    var dr = null;
-    dc.rows.forEach(function (r) { if (r.k === ls.k) { dr = r; } });
-    box.querySelector(".ls-row").innerHTML = dr ? '<span class="ls-row-h">In the chart:</span><span class="ls-end" lang="la">' + esc(dc.stem) + "<b>" + esc(dr.sg) + '</b></span><small>one</small><span class="ls-end" lang="la">' + esc(dc.stem) + "<b>" + esc(dr.pl) + "</b></span><small>many</small>" : "";
+    /* The row of the chart for this case, on the lesson's own noun (its dictionary form without the
+       last -a), and the form of the model noun it goes like: "Like portam in the chart:". Where that
+       label costs the row a line more than the short one would, the short one stands. */
+    var dr = declRow(ls.k), row = box.querySelector(".ls-row"), tw = ti >= 0 ? ls.words[ti] : null, m0 = dc.models[0];
+    var stem = tw && /.a$/.test(String(tw.lemma || "")) ? String(tw.lemma).slice(0, -1) : "";
+    function lsForm(end) { return '<span class="ls-end" lang="la"><span aria-hidden="true">' + declForm(stem, end) + '</span><span class="sr">' + esc(stem + end) + "</span></span>"; }
+    if (dr && stem) {
+      var forms = ' <span class="ls-forms">' + lsForm(dr.sg) + " <small>(singular),</small> " + lsForm(dr.pl) + " <small>(plural)</small></span>";
+      var rowShort = '<span class="ls-row-h">Same endings as <i lang="la">' + esc(m0.word) + "</i>:</span>" + forms;
+      row.innerHTML = rowShort;
+      var hShort = row.offsetHeight;
+      row.innerHTML = '<span class="ls-row-h">Like <i lang="la">' + esc(m0.stem + dr.sg) + "</i> in the chart:</span>" + forms;
+      if (hShort > 0 && row.offsetHeight > hShort + 2) { row.innerHTML = rowShort; }
+    } else { row.innerHTML = ""; }
     if (!keep) { layoutScroll(); }
   }
   /* which card lies on the desk: "chart", "lesson", "recap" or none; true when that changed */
@@ -1644,17 +1849,27 @@
       sizeLessons();
       if (start) { applyReserve(true); }
     }
+    /* The recap is on show and the page is too long: before anything more is asked of the briefing, the
+       recap closes ranks and gives up its pictograms, so that its lines have the width (six lines since
+       the ablative has one, and the sixth is long). */
+    function rcStep() {
+      if (pageOver() <= 0 || v.classList.contains("bf-rc") || !B.recap || B.recap.classList.contains("wait")) { return; }
+      v.classList.add("bf-rc");
+      applyReserve();
+    }
     if (!B.cards) {
       /* A briefing without cards looks as it always did. Only where its recap would still run under the
          screen after he has made himself small, the cover goes, and then he and his type get smaller. */
-      if (start) { v.classList.remove("bf-nocover"); briefSmall(false); applyReserve(); }
+      if (start) { v.classList.remove("bf-nocover"); v.classList.remove("bf-rc"); briefSmall(false); applyReserve(); }
       squeezeInspector(v.lastElementChild);
       if (pageOver() > 0 && !v.classList.contains("bf-nocover")) { v.classList.add("bf-nocover"); applyReserve(); }
+      rcStep();
       if (pageOver() > 0) { briefSmall(true); applyReserve(); }
       return;
     }
     if (start) {
       BF_STEPS.forEach(function (c) { v.classList.remove(c); });
+      v.classList.remove("bf-rc");
       briefSmall(false);
       B.scnOn = false;
       sizeLessons();
@@ -1662,6 +1877,7 @@
     }
     /* (a line that turns out too tall later: the picture goes before any step is taken for it) */
     if (B.scnOn && pageOver() > 0) { B.scnOn = false; dropLessonScene(); sizeLessons(); applyReserve(); }
+    rcStep();
     step(BF_STEPS[0]); step(BF_STEPS[1]); step(BF_STEPS[2]);
     if (start && !wideLayout()) {
       for (n = 0; n < 8; n++) {
@@ -2817,16 +3033,42 @@
     lastTap = { t: tm, x: e.clientX, y: e.clientY, el: t };
     return false;
   }
+  /* A press on Next brings the next question, and its clue button or an answer may now lie under the
+     pointer; a press on "Ask the Inspector" opens the clue above the answers and pushes them down, so an
+     answer card may now lie where the button was. A press at that same spot (24 px) soon after is meant for
+     what was there: the second click of a slow double click, or a click for another clue. So for a moment
+     it may not answer or spend a clue: 1 s after Next (no one has read a new question by then), 2 s after
+     a clue (the clue is still being written out); and only at that spot, only by pointer: a mouse that has
+     not moved more than 4 px since the press (once it has moved, it aims anew and the guard is off), a
+     finger within 24 px. The clue button itself stays pressable after a clue: a click for another clue
+     gets one. Keys always go through. */
+  var shift = { t: 0, x: 0, y: 0, ms: 0, clue: false, near: 24 }, SHIFT_NEXT = 1000, SHIFT_CLUE = 2000;
+  document.addEventListener("pointermove", function (e) {
+    if (shift.ms && e.pointerType === "mouse" && (Math.abs(e.clientX - shift.x) > shift.near || Math.abs(e.clientY - shift.y) > shift.near)) { shift.ms = 0; }
+  }, true);
+  function shiftTap(e, t, byPointer) {
+    if (!byPointer || !shift.ms || now() - shift.t > shift.ms) { return false; }
+    if (Math.abs(e.clientX - shift.x) > shift.near || Math.abs(e.clientY - shift.y) > shift.near) { return false; }
+    if (t.hasAttribute("data-k") || t.hasAttribute("data-choice")) { return true; }
+    return !shift.clue && t.getAttribute("data-action") === "clue";
+  }
   document.addEventListener("click", function (e) {
     var t = e.target && e.target.closest ? e.target.closest("button, a") : null;
     if (!t || t.disabled) { return; }
     if (strayTap(e, t)) { e.preventDefault(); return; }
-    var a = t.getAttribute("data-action");
+    /* (a click made by a script is no pointer: it has no spot, and is never held back) */
+    var byPointer = e.isTrusted !== false && (e.detail > 0 || now() - ptrAt < 700);
+    if (shiftTap(e, t, byPointer)) { e.preventDefault(); return; }
+    var a = t.getAttribute("data-action"), isClue = a === "clue" && view === "play" && !!(R && R.cur && !R.cur.answered);
+    shift = byPointer && (t.hasAttribute("data-primary") || isClue) ? { t: now(), x: e.clientX, y: e.clientY, ms: isClue ? SHIFT_CLUE : SHIFT_NEXT, clue: isClue, near: ptrKind === "mouse" ? 4 : 24 } : { t: 0, x: 0, y: 0, ms: 0, clue: false, near: 24 };
     if (a && ACT[a]) {
       if (!QUIET[a]) { Sfx.play("tap"); }
       ACT[a](t);
       return;
     }
+    if (t.hasAttribute("data-noun")) { Sfx.play("tap"); declPick(+t.getAttribute("data-noun")); return; }
+    if (t.hasAttribute("data-decl")) { Sfx.play("tap"); declSwitch(t.getAttribute("data-decl")); return; }
+    if (t.hasAttribute("data-box")) { if (!t.classList.contains("open")) { Sfx.play("tap"); declOpen(t); } return; }
     if (t.hasAttribute("data-clue-tab")) { Sfx.play("tap"); if (R && R.cur && !R.cur.answered) { showClue(+t.getAttribute("data-clue-tab"), false); } return; }
     if (t.hasAttribute("data-primary")) { primary(t); return; }
     if (t.hasAttribute("data-file")) { Sfx.play("tap"); openFile(t.getAttribute("data-file")); return; }
@@ -2897,6 +3139,7 @@
   /* when the window changes size (or the fonts arrive) every screen fits itself again */
   function refit() {
     hideGloss();
+    declFit();
     var c = view === "play" && R ? R.cur : null, pv = c && !c.answered ? desk.querySelector(".v-play") : null;
     /* (the evidence may have made way for the old size: it has to be back before it is measured) */
     if (pv) { pv.classList.remove("no-ev"); }

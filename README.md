@@ -4,7 +4,22 @@ Small browser games for practicing languages. Each game is a folder of static fi
 
 | Game | Folder | What it practices |
 | --- | --- | --- |
-| Case Detective | [`case-detective/`](case-detective/) | Latin first declension noun cases (Wheelock's Latin, early chapters), with Inspector Cāsus as the guide |
+| Case Detective | [`case-detective/`](case-detective/) | Latin: the first declension and the jobs of the cases (Wheelock's Latin, chapter 2), with Inspector Cāsus as the guide |
+
+## Curriculum
+
+The Latin games follow *Wheelock's Latin* (7th edition), one game for one chapter, so that a class can play the game of the chapter it is on.
+
+**Case Detective is chapter 2**: the first declension and the jobs of the cases.
+
+- The chart is the book's own: the model noun *porta*, with the adjective *magna*, and the cases in the book's order (nominative, genitive, dative, accusative, ablative, vocative). Four more nouns of the chapter can be put into the same chart.
+- Every sentence uses only words from the vocabularies of chapters 1 and 2. The Notebook in the game lists each of them with its full dictionary entry.
+- The ablative comes in the way chapter 2 brings it in: as the "by, with, from" case, and after the preposition *sine*. Its named uses belong to later chapters and are not asked here.
+- There are four case files: the job each case does in a sentence, singular and plural endings, the three look-alike forms in *-ae* (told apart from the sentence), and a mixed final round.
+
+## Music
+
+Case Detective plays Niccolò Paganini's 24 Caprices for solo violin in the background, on a violin that the browser synthesizes from note lists (no recordings). Five of them are in so far: Nos. 1, 2, 3, 23 and 24, made from free editions of the Mutopia Project (CC BY-SA 3.0 and CC BY-SA 4.0). `case-detective/music/README.md` and the game's credits page say where each piece comes from. The music has its own button, apart from the sound effects, and starts only after the first tap.
 
 ## Publishing
 
