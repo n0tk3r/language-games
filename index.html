@@ -2,68 +2,261 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#4a2170">
-<meta name="description" content="Small, quick games for practising languages.">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070d1f">
+<meta name="description" content="Small, quick games for practicing languages.">
 <title>Language Games</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏛️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23b3202a'/%3E%3Cpath d='M40 40l14 14' stroke='%232b1d14' stroke-width='8' stroke-linecap='round'/%3E%3Ccircle cx='27' cy='27' r='15' fill='%23c6ecfa' stroke='%23e2a93c' stroke-width='6'/%3E%3C/svg%3E">
 <style>
+  /* Fonts are the game's own files, so nothing is fetched from another site. */
+  @font-face { font-family: "Nunito Variable"; font-style: normal; font-display: swap; font-weight: 200 1000; src: url(case-detective/fonts/nunito-latin-ext-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+  @font-face { font-family: "Nunito Variable"; font-style: normal; font-display: swap; font-weight: 200 1000; src: url(case-detective/fonts/nunito-latin-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+  @font-face { font-family: "Alegreya Variable"; font-style: normal; font-display: swap; font-weight: 400 900; src: url(case-detective/fonts/alegreya-latin-ext-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+  @font-face { font-family: "Alegreya Variable"; font-style: normal; font-display: swap; font-weight: 400 900; src: url(case-detective/fonts/alegreya-latin-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
+  /* The game's palette (case-detective/css/game.css): midnight blue, walnut, parchment, brass, a red accent. */
   :root {
-    --bg: #f5eedd; --bg2: #ece2c9; --card: #fffdf8; --ink: #2a2233; --muted: #6f667a; --line: #e2d6bb;
-    --purple: #4a2170; --purple2: #6b35a0; --purple-soft: #f1e8fa; --terra: #c8553d; --gold: #e0a526;
-    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --night-0: #070d1f; --night-1: #0c1630; --night-2: #13244a; --night-3: #1e3a6e;
+    --wood-0: #3a2015; --wood-1: #54301d; --wood-2: #6f4126; --wood-edge: #2a160c;
+    --parch: #fbf3dc; --folder: #f8e2ae; --folder-2: #ecc983; --folder-edge: #6b4a22;
+    --ink: #2b1d14; --ink-2: #4a3626; --tab-ink: #5a3a12;
+    --cream: #f8ecd0; --mist: #d5dcec;
+    --brass: #e2a93c; --brass-lt: #ffe39a; --brass-dk: #a8721e; --brass-ink: #2c1a05; --brass-edge: #7a4e10;
+    --red: #b3202a; --red-dk: #7c121b;
+    --focus: #ffe08a;
+    --f-ui: "Nunito Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --f-serif: "Alegreya Variable", Georgia, "Times New Roman", serif;
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; background: #0a1228; }
   body {
-    margin: 0; font-family: var(--sans); color: var(--ink); line-height: 1.5; min-height: 100vh;
-    background: radial-gradient(1200px 500px at 50% -200px, #fff7e2 0%, transparent 70%), linear-gradient(180deg, var(--bg), var(--bg2));
-    background-attachment: fixed;
+    display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; margin: 0;
+    color: var(--cream); font: 500 17px/1.5 var(--f-ui); -webkit-font-smoothing: antialiased;
+    /* the study wall: a warm lamp glow top left, a faint diamond wallpaper, midnight blue */
+    background-color: #0a1228;
+    background-image:
+      radial-gradient(95% 460px at 14% 210px, rgba(255, 184, 92, .2), rgba(255, 184, 92, 0) 64%),
+      repeating-linear-gradient(45deg, rgba(255, 255, 255, .024) 0, rgba(255, 255, 255, .024) 2px, rgba(255, 255, 255, 0) 2px, rgba(255, 255, 255, 0) 28px),
+      repeating-linear-gradient(-45deg, rgba(255, 255, 255, .024) 0, rgba(255, 255, 255, .024) 2px, rgba(255, 255, 255, 0) 2px, rgba(255, 255, 255, 0) 28px),
+      linear-gradient(180deg, #172a55 0%, #101e40 46%, #0a1228 100%);
   }
-  header { background: var(--purple); color: #fff; padding: 14px 16px; box-shadow: 0 2px 12px rgba(42,34,51,.25); }
-  header div { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 700; font-size: 1.2rem; }
-  header span { width: 36px; height: 36px; border-radius: 10px; background: var(--gold); display: grid; place-items: center; font-size: 20px; }
-  main { max-width: 760px; margin: 0 auto; padding: 28px 16px 48px; }
-  h1 { font-family: var(--serif); color: var(--purple); font-size: clamp(1.7rem, 5vw, 2.3rem); line-height: 1.2; margin: 0 0 6px; }
-  .lead { color: var(--muted); margin: 0 0 24px; max-width: 50ch; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding-left: 16px; padding-right: 16px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+
+  /* top bar */
+  .top { position: relative; z-index: 2; background: linear-gradient(180deg, #070d1f, #0e1a38); box-shadow: 0 1px 0 rgba(226, 169, 60, .4), 0 6px 14px rgba(3, 7, 18, .45); }
+  .top-in { display: flex; align-items: center; gap: 10px; min-height: 56px; }
+  .logo { flex: none; width: 28px; height: 28px; }
+  .brand { margin: 0; color: var(--brass-lt); font: 800 1.32rem/1.1 var(--f-serif); letter-spacing: .01em; }
+
+  /* welcome */
+  main { flex: 1 0 auto; padding-top: 28px; padding-bottom: 46px; }
+  h1 { margin: 0 0 8px; max-width: 16em; color: var(--brass-lt); font: 800 2rem/1.12 var(--f-serif); }
+  .lead { margin: 0 0 46px; max-width: 34em; }
+
+  /* the games: each one is a case folder lying against the wall */
+  .games { display: grid; grid-template-columns: minmax(0, 1fr); gap: 46px 22px; margin: 0; padding: 0; list-style: none; }
   .game {
-    display: grid; grid-template-columns: auto 1fr; gap: 14px; padding: 18px; text-decoration: none; color: inherit;
-    background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 8px 24px rgba(74,33,112,.08);
-    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px 20px; padding: 16px 16px 20px;
+    border: 2px solid var(--folder-edge); border-radius: 4px 16px 16px 16px; background: linear-gradient(180deg, var(--folder) 0%, var(--folder-2) 100%); color: var(--ink);
+    box-shadow: 0 4px 0 #4a2f14, 0 14px 26px rgba(3, 7, 18, .5);
   }
-  a.game:hover { transform: translateY(-2px); border-color: var(--purple2); box-shadow: 0 12px 28px rgba(74,33,112,.16); }
-  a.game:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
-  .ico { width: 56px; height: 56px; border-radius: 16px; background: var(--purple-soft); display: grid; place-items: center; font-size: 28px; }
-  .tag { font-size: .7rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--terra); }
-  .game h2 { font-family: var(--serif); font-size: 1.25rem; margin: 1px 0 4px; }
-  .game p { margin: 0; font-size: .92rem; color: var(--muted); }
-  .play { grid-column: 1 / -1; border-top: 1px dashed var(--line); padding-top: 12px; font-weight: 800; color: var(--purple2); }
-  .soon { border-style: dashed; box-shadow: none; background: transparent; }
-  .soon .ico { background: transparent; border: 1px dashed var(--line); }
-  @media (prefers-reduced-motion: reduce) { .game { transition: none; } }
+  .game::before { content: ""; position: absolute; right: 16px; top: -10px; width: 30%; height: 10px; border: 2px solid var(--folder-edge); border-bottom: 0; border-radius: 5px 5px 0 0; background: #fffdf4; }
+  .tab {
+    position: absolute; left: -2px; top: -25px; height: 25px; margin: 0; padding: 0 13px; border: 2px solid var(--folder-edge); border-bottom: 0; border-radius: 9px 12px 0 0;
+    background: var(--folder); color: var(--tab-ink); font: 800 12.5px/22px var(--f-ui); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
+  }
+  .info { min-width: 0; }
+  h2 { margin: 0 0 6px; color: var(--ink); font: 800 1.7rem/1.1 var(--f-serif); }
+  /* The Play button is the link, and its box is stretched over the whole folder, so the folder opens the game
+     wherever it is pressed. (The link itself must stay unpositioned and untransformed for that.) */
+  .cover::after { content: ""; position: absolute; z-index: 1; top: -27px; right: -2px; bottom: -6px; left: -2px; border-radius: 12px; }
+  .cover:focus { outline: none; }
+  .cover:focus::after { outline: 3px solid var(--focus); outline-offset: 4px; }
+  .cover:focus:not(:focus-visible)::after { outline: none; }
+  .vh { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .desc { margin: 0 0 16px; max-width: 30em; color: var(--ink-2); }
+  .ae { white-space: nowrap; color: var(--red-dk); font: 800 1.12em/1 var(--f-serif); }
+  .play { margin: 0; line-height: 0; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 50px; padding: 9px 16px 9px 24px; border: 2px solid var(--brass-edge); border-radius: 14px;
+    background: linear-gradient(180deg, #ffe596 0%, #f0bb4c 48%, #d99a2b 100%); color: var(--brass-ink); font: 800 19px/1.15 var(--f-ui); text-decoration: none;
+    box-shadow: 0 4px 0 var(--brass-edge), 0 8px 14px rgba(20, 10, 4, .3);
+  }
+  .btn:active { background: linear-gradient(180deg, #f8dc85 0%, #e6ad3f 48%, #cc8d22 100%); box-shadow: 0 2px 0 var(--brass-edge); }
+  .btn svg { width: 22px; height: 22px; }
+
+  /* his portrait: a walnut frame, the night behind him, a brass name plate */
+  .portrait {
+    position: relative; margin-bottom: 8px; padding: 9px; border: 2px solid var(--wood-edge); border-radius: 14px;
+    background: linear-gradient(135deg, #7a4a2b 0%, var(--wood-1) 55%, var(--wood-0) 100%);
+    box-shadow: inset 0 0 0 2px rgba(226, 169, 60, .55), 0 3px 0 rgba(20, 10, 4, .3);
+  }
+  .canvas {
+    position: relative; display: flex; align-items: flex-end; justify-content: center; height: 178px; border-radius: 7px; box-shadow: inset 0 0 0 2px var(--wood-edge);
+    background-color: #0a1634;
+    background-image:
+      radial-gradient(1.6px 1.6px at 12% 30%, #eef4ff 98%, rgba(238, 244, 255, 0)),
+      radial-gradient(1.3px 1.3px at 27% 12%, #eef4ff 98%, rgba(238, 244, 255, 0)),
+      radial-gradient(1.6px 1.6px at 84% 16%, #eef4ff 98%, rgba(238, 244, 255, 0)),
+      radial-gradient(1.2px 1.2px at 93% 44%, #eef4ff 98%, rgba(238, 244, 255, 0)),
+      radial-gradient(1.2px 1.2px at 6% 58%, #eef4ff 98%, rgba(238, 244, 255, 0)),
+      radial-gradient(1.4px 1.4px at 70% 7%, #eef4ff 98%, rgba(238, 244, 255, 0)),
+      linear-gradient(180deg, #050a1c 0%, #0a1634 38%, #12295c 66%, #1f4587 86%, #3f6ba8 100%);
+  }
+  .moon { position: absolute; left: 12px; top: 11px; width: 30px; height: 30px; }
+  .slot { position: relative; line-height: 0; }
+  .emblem { position: absolute; left: 50%; top: 50%; width: 124px; height: 124px; margin: -64px 0 0 -62px; }
+  .live .emblem { display: none; }
+  .plate {
+    position: absolute; z-index: 1; left: 50%; bottom: -15px; margin: 0; padding: 2px 12px 3px; border: 2px solid var(--brass-edge); border-radius: 7px;
+    background: linear-gradient(180deg, #ffe596, #d99a2b); color: var(--brass-ink); font: 800 12.5px/1.35 var(--f-ui); letter-spacing: .04em; white-space: nowrap;
+    box-shadow: 0 2px 0 rgba(20, 10, 4, .4); -webkit-transform: translateX(-50%); transform: translateX(-50%);
+  }
+
+  /* the folder that is still empty */
+  .soon { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: 16px; border: 2px dashed rgba(248, 236, 208, .55); background: rgba(19, 36, 74, .6); color: var(--cream); box-shadow: none; }
+  .soon::before { display: none; }
+  .soon .tab { border: 2px dashed rgba(248, 236, 208, .55); border-bottom: 0; background: #15274f; color: var(--brass-lt); }
+  .soon h2 { color: var(--cream); font-size: 1.4rem; }
+  .soon .desc { margin: 0; color: var(--mist); }
+  .empty { display: flex; align-items: center; justify-content: center; width: 78px; height: 78px; border: 2px dashed rgba(255, 227, 154, .6); border-radius: 12px; color: var(--brass-lt); font: 800 2.3rem/1 var(--f-serif); }
+
+  /* the floor */
+  .foot { flex: none; border-top: 3px solid var(--wood-edge); background: linear-gradient(180deg, var(--wood-2) 0%, var(--wood-1) 34%, var(--wood-0) 100%); box-shadow: inset 0 2px 0 rgba(255, 220, 160, .18); color: var(--cream); font-size: 16px; }
+  .foot p { margin: 0; padding: 15px 0; padding-bottom: calc(15px + env(safe-area-inset-bottom)); }
+
+  @media (hover: hover) {
+    .cd { transition: transform .16s ease-out; }
+    .cd:hover { -webkit-transform: translateY(-3px); transform: translateY(-3px); }
+  }
+  @media (min-width: 600px) {
+    main { padding-top: 40px; }
+    h1 { font-size: 2.5rem; }
+    .lead { font-size: 18px; }
+    .cd { grid-template-columns: 252px minmax(0, 1fr); align-items: center; padding: 20px 22px 26px 20px; }
+    .canvas { height: 212px; }
+    h2 { font-size: 1.95rem; }
+  }
+  @media (min-width: 920px) {
+    main { padding-top: 48px; }
+    h1 { font-size: 3rem; }
+    .lead { font-size: 19px; margin-bottom: 54px; }
+    .games { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+    .cd { grid-template-columns: 300px minmax(0, 1fr); gap: 26px; padding: 24px 28px 32px 24px; }
+    .canvas { height: 258px; }
+    .emblem { width: 164px; height: 164px; margin: -86px 0 0 -82px; }
+    h2 { font-size: 2.3rem; }
+    .cd .desc { font-size: 18px; margin-bottom: 20px; }
+    .soon { margin-top: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cd { transition: none; }
+    .cd:hover { -webkit-transform: none; transform: none; }
+  }
 </style>
 </head>
 <body>
-<header><div><span aria-hidden="true">🏛️</span>Language Games</div></header>
-<main>
-  <h1>Pick a game and start practising</h1>
-  <p class="lead">Short games with instant feedback. They work on a phone, tablet or laptop, and nothing needs installing.</p>
-  <div class="grid">
-    <a class="game" href="case-detective/">
-      <span class="ico" aria-hidden="true">🔎</span>
-      <span><span class="tag">Latin · 1st declension</span>
-        <h2>Case Detective</h2>
-        <p>Every noun has a job. Work out who does it, who receives it and whose it is, and crack the sneaky <span style="white-space:nowrap">-ae</span> ending.</p></span>
-      <span class="play">Play →</span>
-    </a>
-    <div class="game soon">
-      <span class="ico" aria-hidden="true">✨</span>
-      <span><span class="tag">Coming soon</span>
-        <h2>More games</h2>
-        <p>New games will appear here as they are made.</p></span>
-    </div>
+<header class="top">
+  <div class="wrap top-in">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M20.5 20.5L28 28" fill="none" stroke="#a8721e" stroke-width="5" stroke-linecap="round"/><circle cx="13.5" cy="13.5" r="9" fill="#c6ecfa" fill-opacity=".28" stroke="#ffe39a" stroke-width="3.4"/><path d="M8.5 12.5A5.5 5.5 0 0 1 13 8" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" opacity=".85"/></svg>
+    <p class="brand">Language Games</p>
   </div>
+</header>
+
+<main class="wrap">
+  <h1>Pick a game and start practicing</h1>
+  <p class="lead">Short games with instant feedback, for a phone, a tablet, or a laptop.</p>
+
+  <ul class="games" id="games" role="list">
+    <li class="game cd" id="case-detective">
+      <div class="portrait" aria-hidden="true">
+        <div class="canvas">
+          <svg class="moon" viewBox="0 0 30 30" focusable="false"><circle cx="15" cy="15" r="12" fill="#f2f6ff"/><circle cx="20.5" cy="12" r="10.5" fill="#0a1634"/></svg>
+          <svg class="emblem" viewBox="0 0 124 124" focusable="false">
+            <defs><linearGradient id="lg-brass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe9a3"/><stop offset=".5" stop-color="#e2a93c"/><stop offset="1" stop-color="#a66f1c"/></linearGradient></defs>
+            <path d="M74 74L104 104" fill="none" stroke="#2a160c" stroke-width="19" stroke-linecap="round"/>
+            <path d="M74 74L104 104" fill="none" stroke="#6f4126" stroke-width="13" stroke-linecap="round"/>
+            <path d="M73 73L80 80" fill="none" stroke="#e2a93c" stroke-width="13"/>
+            <circle cx="50" cy="50" r="34" fill="#c6ecfa" fill-opacity=".8"/>
+            <circle cx="50" cy="50" r="34" fill="none" stroke="#2a160c" stroke-width="13"/>
+            <circle cx="50" cy="50" r="34" fill="none" stroke="url(#lg-brass)" stroke-width="8"/>
+            <path d="M30 46A21 21 0 0 1 46 30" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".9"/>
+            <path d="M101 22l2.8 7.2 7.2 2.8-7.2 2.8-2.8 7.2-2.8-7.2-7.2-2.8 7.2-2.8z" fill="#ffe58a"/>
+          </svg>
+          <div class="slot" id="inspector"></div>
+        </div>
+        <p class="plate">Inspector Cāsus</p>
+      </div>
+      <div class="info">
+        <p class="tab">Latin · noun cases</p>
+        <h2>Case Detective</h2>
+        <p class="desc">Every noun has a job. Help Inspector Cāsus figure out who does it, who gets it, and whose it is. Then crack the sneaky <span class="ae">-ae</span> ending.</p>
+        <p class="play"><a class="btn cover" href="case-detective/index.html">Play<span class="vh"> Case Detective</span> <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></a></p>
+      </div>
+    </li>
+    <li class="game soon">
+      <div class="empty" aria-hidden="true">?</div>
+      <div class="info">
+        <p class="tab">Coming soon</p>
+        <h2>More games</h2>
+        <p class="desc">New games will show up here as they are made.</p>
+      </div>
+    </li>
+  </ul>
 </main>
+
+<footer class="foot">
+  <div class="wrap"><p>No sign-in, no ads, and nothing to install.</p></div>
+</footer>
+
+<!-- The Inspector is a bonus: if this script does not load, the folder keeps its magnifying glass and still opens the game. -->
+<script src="case-detective/js/detective.js"></script>
+<script>
+(function () {
+  "use strict";
+  var D = window.Detective, slot = document.getElementById("inspector"), card = document.getElementById("case-detective");
+  if (!D || !slot || !card || typeof D.create !== "function") { return; }
+  var canvas = slot.parentNode, link = card.querySelector("a"), still = false, insp;
+  try { still = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { still = false; }
+  function size() { return Math.max(96, Math.min(260, canvas.clientHeight - 14)); }
+  try { insp = D.create({ size: size(), variant: "bust", mood: "wave" }); } catch (e) { return; }
+  slot.appendChild(insp);
+  card.className += " live";
+  window.addEventListener("resize", function () { insp.setSize(size()); });
+  /* someone who asked for less motion gets a still, friendly wave and nothing else */
+  if (still) { return; }
+
+  /* he waves when the page opens, then settles; and he waves again when the player comes back from a game */
+  setTimeout(function () { if (insp.getMood() === "wave") { insp.setMood("idle"); } }, 2600);
+  window.addEventListener("pageshow", function (e) { if (e.persisted) { insp.play("wave", 2200); } });
+
+  /* his eyes follow the pointer, a finger, or whatever has the keyboard focus */
+  var raf = 0, px = 0, py = 0, rest = 0;
+  function aim() { raf = 0; insp.lookAt(px, py); }
+  function lookTo(x, y) { px = x; py = y; clearTimeout(rest); if (!raf) { raf = requestAnimationFrame(aim); } }
+  function lookAway() { clearTimeout(rest); if (raf) { cancelAnimationFrame(raf); raf = 0; } insp.lookAt(null); }
+  document.addEventListener("pointermove", function (e) { lookTo(e.clientX, e.clientY); });
+  document.addEventListener("pointerdown", function (e) { lookTo(e.clientX, e.clientY); });
+  document.addEventListener("pointerup", function (e) { if (e.pointerType !== "mouse") { clearTimeout(rest); rest = setTimeout(lookAway, 1400); } });
+  document.documentElement.addEventListener("pointerleave", lookAway);
+  document.addEventListener("focusin", function (e) {
+    var t = e.target, keys = true;
+    if (!t || !t.getBoundingClientRect) { return; }
+    try { keys = t.matches(":focus-visible"); } catch (err) { keys = true; }
+    if (!keys) { return; }
+    var r = t.getBoundingClientRect();
+    lookTo(r.left + r.width / 2, r.top + r.height / 2);
+  });
+  document.addEventListener("focusout", lookAway);
+
+  /* on his own folder he points at it, when the words are beside him */
+  function beside() { return slot.getBoundingClientRect().bottom > card.querySelector("h2").getBoundingClientRect().top; }
+  function hot(on) { insp.setMood(on && beside() ? "point" : "idle"); }
+  card.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") { hot(true); } });
+  card.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") { hot(false); } });
+  link.addEventListener("focus", function () { var keys = true; try { keys = link.matches(":focus-visible"); } catch (err) { keys = true; } if (keys) { hot(true); } });
+  link.addEventListener("blur", function () { hot(false); });
+})();
+</script>
 </body>
 </html>

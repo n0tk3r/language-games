@@ -1,0 +1,2126 @@
+/*!
+ * Case Detective: the game.
+ * Plain script. Needs data.js (CD_DATA), detective.js (Detective) and sfx.js (Sfx) loaded first.
+ * All Latin and all of the Inspector's lines come from CD_DATA; only short English labels live here.
+ */
+(function () {
+  "use strict";
+
+  var D = window.CD_DATA;
+  if (!D || !window.Detective) { return; }
+  var Sfx = window.Sfx || { play: function () {}, isMuted: function () { return true; }, setMuted: function () {} };
+  var L = D.inspector.lines;
+  var FILES = D.files;
+  var CASE_KEYS = ["nom", "gen", "dat", "acc", "abl", "voc"];
+
+  /* ------------------------------------------------------------ helpers */
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, html) {
+    var n = document.createElement(tag);
+    if (cls) { n.className = cls; }
+    if (html !== undefined && html !== null) { n.innerHTML = html; }
+    return n;
+  }
+  function esc(s) {
+    return String(s === undefined || s === null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  /* data text may carry <b>, <i> and <u>: everything else is escaped. <i> is always Latin. */
+  function rich(s) {
+    return keep(esc(s).replace(/&lt;(\/?)([biu])&gt;/g, function (m, slash, tag) {
+      return "<" + slash + tag + (tag === "i" && !slash ? ' lang="la"' : "") + ">";
+    }));
+  }
+  /* an ending such as -ae or -nt stays in one piece: a line never breaks after its hyphen */
+  function keep(html) {
+    return html.replace(/(^|[\s(>\u201c\u2018\/])(-[A-Za-z\u0100-\u017f]{1,5})(?![A-Za-z\u0100-\u017f])/g, '$1<span class="nw">$2</span>');
+  }
+  function txt(s) { return keep(esc(s)); }
+  function plain(s) { return String(s || "").replace(/<\/?[biu]>/g, ""); }
+  function fill(s, map) { return String(s).replace(/\{(\w+)\}/g, function (m, k) { return map[k] !== undefined ? map[k] : m; }); }
+  function icon(name, cls) { return '<svg class="' + (cls || "ic") + '" aria-hidden="true" focusable="false"><use href="#i-' + name + '"></use></svg>'; }
+  function shuffle(a) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  var lastPick = {};
+  function pickLine(list, key) {
+    if (!list || !list.length) { return ""; }
+    var i = Math.floor(Math.random() * list.length);
+    if (list.length > 1 && lastPick[key] === i) { i = (i + 1) % list.length; }
+    lastPick[key] = i;
+    return list[i];
+  }
+  function now() { return window.performance && performance.now ? performance.now() : Date.now(); }
+  function mq(q) {
+    try { return window.matchMedia ? window.matchMedia(q) : { matches: false }; } catch (e) { return { matches: false }; }
+  }
+  var mqReduce = mq("(prefers-reduced-motion: reduce)");
+  function reduced() { return !!mqReduce.matches; }
+  function fileById(id) { for (var i = 0; i < FILES.length; i++) { if (FILES[i].id === id) { return FILES[i]; } } return null; }
+  function caseInfo(k) { return k === "verb" ? D.verb : D.cases[k]; }
+  function selEsc(s) { return String(s).replace(/["\\]/g, "\\$&"); }
+
+  /* ------------------------------------------------------------ storage */
+  var save = { stars: {}, solo: {}, seen: {}, sound: true };
+  function loadSave() {
+    try {
+      var raw = window.localStorage.getItem(D.storageKey);
+      if (!raw) { return; }
+      var o = JSON.parse(raw);
+      if (!o || typeof o !== "object") { return; }
+      FILES.forEach(function (f) {
+        var s = o.stars && typeof o.stars === "object" ? +o.stars[f.id] : 0;
+        if (s >= 1 && s <= 3) { save.stars[f.id] = Math.floor(s); }
+        if (o.solo && typeof o.solo === "object" && o.solo[f.id] === true && save.stars[f.id] === 3) { save.solo[f.id] = true; }
+      });
+      if (o.seen && typeof o.seen === "object") { for (var k in o.seen) { if (o.seen[k] === true) { save.seen[k] = true; } } }
+      if (typeof o.sound === "boolean") { save.sound = o.sound; }
+    } catch (e) { /* no storage: the game still works, it just forgets */ }
+  }
+  function persist() {
+    try { window.localStorage.setItem(D.storageKey, JSON.stringify(save)); } catch (e) { /* ignore */ }
+  }
+  function starsCopy() {
+    var o = {};
+    FILES.forEach(function (f) { if (save.stars[f.id]) { o[f.id] = save.stars[f.id]; } });
+    return o;
+  }
+  function totalStars() { var t = 0; FILES.forEach(function (f) { t += save.stars[f.id] || 0; }); return t; }
+  function maxStars() { return FILES.length * 3; }
+  function rankFor(total) {
+    var idx = 0;
+    D.ranks.forEach(function (r, i) { if (total >= r.min) { idx = i; } });
+    return { index: idx, title: D.ranks[idx].title, next: D.ranks[idx + 1] || null };
+  }
+  function starsFor(share) {
+    var rules = D.starRules.slice().sort(function (a, b) { return b.min - a.min; });
+    for (var i = 0; i < rules.length; i++) { if (share >= rules[i].min - 1e-9) { return rules[i].stars; } }
+    return 0;
+  }
+  function hasProgress() {
+    if (totalStars() > 0) { return true; }
+    for (var k in save.seen) { if (save.seen[k]) { return true; } }
+    return false;
+  }
+  /* the file the Inspector suggests next */
+  function nextFile() {
+    var i;
+    for (i = 0; i < FILES.length; i++) { if (!save.stars[FILES[i].id]) { return FILES[i]; } }
+    for (i = 0; i < FILES.length; i++) { if (save.stars[FILES[i].id] < 3) { return FILES[i]; } }
+    for (i = 0; i < FILES.length; i++) { if (!save.solo[FILES[i].id]) { return FILES[i]; } }
+    return FILES[FILES.length - 1];
+  }
+  function ribbonsLeft() { var n = 0; FILES.forEach(function (f) { if (!save.solo[f.id]) { n++; } }); return n; }
+
+
+  /* ---------------------------------------------------------------- DOM */
+  var app = $("app"), desk = $("desk"), stage = $("stage"), tbMid = $("tbMid");
+  var homeBtn = $("homeBtn"), soundBtn = $("soundBtn"), streakEl = $("streak"), streakN = $("streakN");
+  var inspFig = $("inspFig"), bubble = $("bubble"), bText = $("bText"), bName = $("bName"), bNext = $("bNext");
+  var live = $("live"), fx = $("fx");
+  var nb = $("notebook"), nbScrim = $("nbScrim"), nbClose = $("nbClose"), nbPages = $("nbPages");
+  var cf = $("confirm"), cfScrim = $("cfScrim"), cfNo = $("cfNo"), cfYes = $("cfYes");
+  var skA = document.querySelector(".sk-a"), skB = document.querySelector(".sk-b");
+  bName.textContent = D.inspector.name;
+
+  /* the case colours come from data.js; the stylesheet carries the same values as a fallback.
+     The verb is not a case: its tag keeps the stylesheet's warm grey (the grey in data.js leans violet,
+     and violet belongs to the accusative alone). */
+  try {
+    CASE_KEYS.forEach(function (k) { if (D.cases[k] && /^#[0-9a-f]{3,8}$/i.test(D.cases[k].color)) { document.documentElement.style.setProperty("--" + k, D.cases[k].color); } });
+  } catch (e) { /* keep the fallback */ }
+
+  var view = "home";
+  var R = null;        /* the round being played */
+  var B = null;        /* the briefing on screen */
+  var T = null;        /* the training case on screen */
+  var paused = null;   /* a round the player stepped away from */
+  var seq = null;      /* a run of bubble lines the player pages through (home greeting) */
+  var kb = false;      /* true while the player is driving with the keyboard */
+  var greeted = false; /* he says hello once per visit to the page */
+  var viewTimers = [];
+  function later(fn, ms) {
+    var t = setTimeout(function () { try { fn(); } catch (e) { /* a late timer must never break the game */ } }, ms);
+    viewTimers.push(t);
+    return t;
+  }
+  function clearViewTimers() { viewTimers.forEach(function (t) { clearTimeout(t); }); viewTimers = []; }
+
+  /* screen readers get each full line once; the text is cleared again so it is not found twice */
+  var liveSet = 0, liveClear = 0;
+  function announce(text) {
+    clearTimeout(liveSet);
+    clearTimeout(liveClear);
+    live.textContent = "";
+    liveSet = setTimeout(function () { live.textContent = text; }, 40);
+    liveClear = setTimeout(function () { live.textContent = ""; }, 7000);
+  }
+
+  /* How far the page runs past the bottom of the screen. Measured on the layout box of the page, not on
+     the scrolling height: a piece that is still sliding into place must not count as overflow. */
+  function pageOver() {
+    return Math.max(0, Math.ceil(app.getBoundingClientRect().height - window.innerHeight - 0.05));
+  }
+  /* true while the Inspector stands in his own column beside the desk (laptops, phones on their side) */
+  function wideLayout() {
+    try { return getComputedStyle(inspFig.parentNode).position === "fixed"; } catch (e) { return false; }
+  }
+
+  /* ------------------------------------------------------- the Inspector */
+  var insp = window.Detective.create({ size: 120, variant: "bust", mood: "idle" });
+  inspFig.appendChild(insp);
+  var inspVariant = "", inspSize = 0;
+  var docked = null;   /* the slot in the case note he has hopped into (see fitAnswered) */
+  /* Low and wide (a phone on its side, a zoomed-in laptop): his bubble hangs in his own column, above
+     him, and a clue lies at the foot of that column. He takes the room between the two. When a clue
+     leaves him too little he lets it cover his coat rather than hide his face behind the bubble. */
+  var LOW_MIN = 72, LOW_MIN_FULL = 150, lowMax = 0, lowOn = false;
+  function lowLayout() {
+    try { return getComputedStyle(bubble.parentNode).position === "fixed"; } catch (e) { return false; }
+  }
+  function lowFit() {
+    if (docked || !lowLayout()) {
+      if (lowOn) { lowOn = false; app.style.removeProperty("--low-b"); app.style.removeProperty("--low-bub"); app.style.removeProperty("--insp"); app.classList.remove("low-side"); }
+      return;
+    }
+    lowOn = true;
+    /* measured in the plain state: on the sill (low-side) the button beside him is narrower and may wrap */
+    app.style.removeProperty("--insp");
+    app.classList.remove("low-side");
+    var base = inspFig.clientHeight, br = bubble.getBoundingClientRect();
+    var note = view === "play" ? desk.querySelector(".clue-note") : null;
+    var bar = desk.querySelector(".dock.stick, .v-home .dock, .res-actions > .btn.primary, .play-dock .clue-btn");
+    /* (layout heights, not drawn ones: the clue is still growing into place when this runs) */
+    var nh = note ? note.offsetHeight : 0, sh = 0, side = false;
+    if (bar && bar.getClientRects().length && getComputedStyle(bar).position === "fixed") { sh = Math.ceil(window.innerHeight - bar.getBoundingClientRect().top) + (bar.tagName === "BUTTON" ? 7 : 0); }
+    /* From the foot of the screen up: the bar, the clue if there is one, then him, then his bubble, right
+       over his hat. Where a clue leaves him no room to stand there, he sits down on the sill beside the
+       button, under his clue. (While a clue is out only the question is in the bubble: what he says
+       after the answer needs no room yet.) */
+    var col = window.innerHeight - tbMid.parentNode.getBoundingClientRect().bottom - 18 - 6;
+    /* the whole figure (small laptop windows) stands on the sill; the bust (phones) rises from behind it */
+    var full = String(getComputedStyle(app).getPropertyValue("--insp-variant")).replace(/\s/g, "") === "full", min = full ? LOW_MIN_FULL : LOW_MIN;
+    var b = (sh ? sh - (full ? 1 : 5) : 0) + (nh ? nh + 4 : 0), h = Math.min(base, col - Math.max(nh ? 0 : lowMax, br.height) - b);
+    if (h < min) {
+      if (nh && sh) { side = true; h = Math.min(base, sh - 2); b = 0; }
+      /* his smallest size, for the whole screen; and only while a line is too tall for that does he
+         sink a little behind the bar */
+      else { h = Math.min(base, min); b = Math.max(0, Math.min(b, col - br.height - h)); }
+    }
+    if (side) { app.classList.add("low-side"); }
+    if (h < base) { app.style.setProperty("--insp", Math.round(h) + "px"); }
+    app.style.setProperty("--low-b", Math.round(b) + "px");
+    app.style.setProperty("--low-bub", Math.round(side ? sh + nh + 9 : b + h + 4) + "px");
+  }
+  function fitInspector() {
+    if (docked) { return; }
+    lowFit();
+    var v = "bust";
+    try { v = String(getComputedStyle(app).getPropertyValue("--insp-variant")).replace(/\s/g, "") === "full" ? "full" : "bust"; } catch (e) { v = "bust"; }
+    if (v !== inspVariant) { inspVariant = v; insp.setVariant(v); app.setAttribute("data-insp", v); }
+    var h = Math.round(inspFig.clientHeight) || 120;
+    if (h !== inspSize) { inspSize = h; insp.setSize(h); }
+  }
+  /* a piece that has just changed place appears to travel there from where it stood */
+  function hopFrom(node, from) {
+    if (reduced() || !from || !from.width) { return; }
+    var to = node.getBoundingClientRect();
+    if (!to.width) { return; }
+    node.style.setProperty("--hx", (from.left - to.left).toFixed(1) + "px");
+    node.style.setProperty("--hy", (from.top - to.top).toFixed(1) + "px");
+    node.style.setProperty("--hs", (from.height / to.height).toFixed(3));
+    node.classList.remove("hop");
+    void node.offsetWidth;
+    node.classList.add("hop");
+  }
+  /* On a small phone the scene folds away once the answer is in, and he hops down into the case note,
+     beside his verdict. He is one and the same figure: only his place and his size change. */
+  function dockInspector(slot, from) {
+    if (!slot || docked === slot) { return; }
+    docked = slot;
+    slot.appendChild(insp);
+    if (inspVariant !== "bust") { inspVariant = "bust"; insp.setVariant("bust"); }
+    inspSize = Math.round(slot.clientHeight) || 64;
+    insp.setSize(inspSize);
+    hopFrom(slot, from);
+  }
+  function undockInspector() {
+    if (!docked) { return; }
+    docked = null;
+    inspFig.appendChild(insp);
+    inspVariant = ""; inspSize = 0;
+    fitInspector();
+  }
+  function mood(m) { insp.setMood(m); }
+  function act(m, ms) { insp.play(m, ms); }
+  function talk(on) { insp.talk(on); }
+  function lookAt(x, y) { if (x === null) { insp.lookAt(null); } else { insp.lookAt(x, y); } }
+
+  var lookLock = 0, lookTimer = 0, ptrRaf = 0, ptrX = 0, ptrY = 0, ptrIdle = 0;
+  function lookAtNode(node, ms) {
+    if (!node || !node.getBoundingClientRect) { return; }
+    var r = node.getBoundingClientRect();
+    if (!r.width) { return; }
+    lookAt(r.left + r.width / 2, r.top + r.height / 2);
+    lookLock = now() + (ms || 1600);
+    clearTimeout(lookTimer);
+    lookTimer = setTimeout(function () { lookAt(null); }, ms || 1600);
+  }
+  var camNow = 0, parX = 0;
+  function parallax() {
+    if (!skA || !skB) { return; }
+    var k = reduced() ? 0 : 1;
+    skA.style.transform = "translate3d(" + ((camNow * -5 + parX * 5) * k).toFixed(1) + "px,0,0)";
+    skB.style.transform = "translate3d(" + ((camNow * -11 + parX * 11) * k).toFixed(1) + "px,0,0)";
+  }
+  function onPointerFrame() {
+    ptrRaf = 0;
+    if (now() > lookLock) { lookAt(ptrX, ptrY); }
+    parX = Math.max(-1, Math.min(1, (ptrX / Math.max(1, window.innerWidth)) * 2 - 1));
+    parallax();
+    clearTimeout(ptrIdle);
+    ptrIdle = setTimeout(function () { if (now() > lookLock) { lookAt(null); } }, 2400);
+  }
+  document.addEventListener("pointermove", function (e) {
+    if (e.pointerType && e.pointerType !== "mouse") { return; }
+    ptrX = e.clientX; ptrY = e.clientY;
+    if (!ptrRaf && window.requestAnimationFrame) { ptrRaf = requestAnimationFrame(onPointerFrame); }
+  }, { passive: true });
+
+  /* ---------------------------------------------------- speech bubble */
+  var speech = { id: 0, box: null, segs: [], total: 0, shown: 0, per: 20, t0: 0, raf: 0, safety: 0, tail: 0, done: true, onDone: null };
+
+  function partsNode(parts, opts) {
+    var frag = document.createDocumentFragment();
+    parts.forEach(function (p) {
+      if (!p || !p.html) { return; }
+      var node = el("p", p.cls || "");
+      var body = el("span", "b-body", rich(p.html));
+      body.setAttribute("data-type", p.type === false ? "0" : "1");
+      node.appendChild(body);
+      frag.appendChild(node);
+    });
+    if (opts && opts.dots) {
+      var d = el("div", "b-dots");
+      for (var i = 0; i < opts.dots[1]; i++) { d.appendChild(el("i", i === opts.dots[0] ? "on" : "")); }
+      frag.appendChild(d);
+    }
+    return frag;
+  }
+  /* The stage keeps the height of the tallest line still to come on this screen, so the desk below it
+     does not jump from line to line or from question to question. A calm layout must never cost the
+     player a control, though: where the screen is too short, the stage gives back what does not fit.
+     Called again when the window changes size or the desk grows. */
+  var reserve = null;
+  function reserveStage(list, opts) {
+    reserve = list && list.length ? { list: list, opts: opts || null } : null;
+    applyReserve();
+  }
+  function applyReserve(whole) {
+    stage.style.minHeight = "";
+    var low = !docked && lowLayout();
+    lowMax = 0;
+    if (!reserve || docked) { if (low || lowOn) { fitInspector(); } return; }
+    /* low and wide, the bubble is not part of the page's height: there the tallest line to come decides
+       how much room he has under it (lowFit) */
+    var box = low ? bubble : stage;
+    var natural = box.offsetHeight, keep = document.createDocumentFragment(), max = natural;
+    while (bText.firstChild) { keep.appendChild(bText.firstChild); }
+    reserve.list.forEach(function (parts) {
+      bText.textContent = "";
+      bText.appendChild(partsNode(parts, reserve.opts));
+      max = Math.max(max, box.offsetHeight);
+    });
+    bText.textContent = "";
+    bText.appendChild(keep);
+    if (low || lowOn) { lowMax = low ? max : 0; fitInspector(); if (low) { return; } }
+    /* (also when the line on show is the tallest one: the lines after it are shorter, and must not let go) */
+    stage.style.minHeight = max + "px";
+    if (whole) { return; }
+    var over = pageOver();
+    if (over > 0) { stage.style.minHeight = Math.max(natural, max - over) + "px"; }
+  }
+  function collectText(node, out) {
+    for (var c = node.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 3) { out.push(c); } else if (c.nodeType === 1) { collectText(c, out); }
+    }
+  }
+  /* each text node becomes a shown part and a hidden rest, so the bubble has its final size from the first letter */
+  function splitText(root, segs) {
+    var walker = [];
+    collectText(root, walker);
+    walker.forEach(function (tn) {
+      var s = tn.nodeValue;
+      if (!s) { return; }
+      var tv = document.createTextNode(""), th = el("span", "th");
+      th.textContent = s;
+      tn.parentNode.insertBefore(tv, tn);
+      tn.parentNode.insertBefore(th, tn);
+      tn.parentNode.removeChild(tn);
+      segs.push({ tv: tv, th: th.firstChild, s: s, n: s.length });
+    });
+  }
+  function revealTo(count) {
+    var left = count;
+    for (var i = 0; i < speech.segs.length; i++) {
+      var g = speech.segs[i], k = Math.max(0, Math.min(g.n, left));
+      if (g.k !== k) { g.k = k; g.tv.nodeValue = g.s.slice(0, k); g.th.nodeValue = g.s.slice(k); }
+      left -= g.n;
+    }
+    speech.shown = count;
+  }
+  function typeTick() {
+    speech.raf = 0;
+    if (speech.done) { return; }
+    var want = Math.floor((now() - speech.t0) / speech.per) + 1;
+    if (want >= speech.total) { finishTyping(true); return; }
+    if (want > speech.shown) { revealTo(want); Sfx.play("blip"); }
+    speech.raf = requestAnimationFrame(typeTick);
+  }
+  function stopTyping() {
+    if (speech.raf) { cancelAnimationFrame(speech.raf); speech.raf = 0; }
+    clearTimeout(speech.safety);
+    clearTimeout(speech.tail);
+    speech.done = true; speech.onDone = null;
+    talk(false);
+  }
+  /* natural: the line reached its end by itself. The words land fast so nobody waits to read, but his
+     mouth keeps going for about as long as the line takes to say. */
+  function finishTyping(natural) {
+    if (speech.done) { return; }
+    var cb = speech.onDone;
+    if (speech.raf) { cancelAnimationFrame(speech.raf); speech.raf = 0; }
+    clearTimeout(speech.safety);
+    clearTimeout(speech.tail);
+    revealTo(speech.total);
+    speech.done = true; speech.onDone = null;
+    if (natural === true) { speech.tail = setTimeout(function () { talk(false); }, Math.max(350, Math.min(1500, speech.total * 22))); } else { talk(false); }
+    if (cb) { cb(); }
+  }
+  /* parts: [{ html, cls, type }]. Only parts with type !== false are typed and read out.
+     opts.into: another element to speak into (a clue note, the case note). The bubble is the default. */
+  function say(parts, opts) {
+    opts = opts || {};
+    var box = opts.into || bText;
+    if (!speech.done && speech.box !== box) { revealTo(speech.total); }
+    stopTyping();
+    speech.id++;
+    speech.box = box;
+    box.textContent = "";
+    box.appendChild(partsNode(parts, opts));
+    if (lowOn) { fitInspector(); }
+    var segs = [], spoken = [];
+    parts.forEach(function (p) { if (p && p.html && p.type !== false) { spoken.push(plain(p.html)); } });
+    if (spoken.length && opts.live !== false) { announce(spoken.join(" ")); }
+    var instant = opts.instant || reduced() || !window.requestAnimationFrame;
+    if (!instant) {
+      var bodies = box.querySelectorAll('.b-body[data-type="1"]');
+      for (var i = 0; i < bodies.length; i++) { splitText(bodies[i], segs); }
+    }
+    speech.segs = segs; speech.total = 0; speech.shown = 0;
+    segs.forEach(function (g) { g.k = -1; speech.total += g.n; });
+    if (!speech.total) {
+      speech.done = true;
+      if (opts.onDone) { opts.onDone(); }
+      return;
+    }
+    revealTo(0);
+    speech.per = Math.max(3, Math.min(26, (opts.ms || 600) / speech.total));
+    speech.t0 = now();
+    speech.done = false;
+    speech.onDone = opts.onDone || null;
+    talk(true);
+    speech.raf = requestAnimationFrame(typeTick);
+    speech.safety = setTimeout(function () { finishTyping(true); }, speech.total * speech.per + 700);
+  }
+  function sayLine(html, opts) { say([{ html: html }], opts); }
+
+  /* a tap anywhere that is not a control finishes the line at once */
+  document.addEventListener("pointerdown", function (e) {
+    kb = false;
+    var t = e.target;
+    if (e.pointerType && e.pointerType !== "mouse" && now() > lookLock) {
+      lookAt(e.clientX, e.clientY);
+      clearTimeout(ptrIdle);
+      ptrIdle = setTimeout(function () { if (now() > lookLock) { lookAt(null); } }, 1500);
+    }
+    if (!(t && t.closest && t.closest("[data-word]"))) { hideGloss(); }
+    if (speech.done) { return; }
+    if (t && t.closest && t.closest("button, a, .nb, .confirm")) { return; }
+    finishTyping();
+  }, true);
+  bubble.addEventListener("click", function (e) {
+    if (e.target.closest && e.target.closest("button")) { return; }
+    if (!speech.done) { finishTyping(); return; }
+    if (seq) { seq.next(); }
+  });
+  bNext.addEventListener("click", function () {
+    Sfx.play("tap");
+    if (!speech.done) { finishTyping(); return; }
+    if (seq) { seq.next(); }
+  });
+  function runSequence(lines, moods, onShow) {
+    var i = 0;
+    function show() {
+      var m = moods[i] || "idle";
+      if (m.charAt(0) === "!") { act(m.slice(1), 2200); mood("idle"); } else { mood(m); }
+      say([{ html: lines[i] }], { dots: lines.length > 1 ? [i, lines.length] : null });
+      bNext.hidden = i >= lines.length - 1;
+      if (onShow) { onShow(i); }
+    }
+    seq = { next: function () { if (i < lines.length - 1) { i++; show(); } } };
+    show();
+  }
+  /* children poke the character first: a tap on him, while he has nothing to say, gets a little show.
+     Never his cheer or his wince: those two mean right and wrong. */
+  var POKES = ["wave", "search", "proud", "think"], pokeN = 0;
+  $("insp").addEventListener("click", function () {
+    if (!speech.done || docked) { return; }
+    act(POKES[pokeN++ % POKES.length], 1300);
+    Sfx.play("blip");
+  });
+
+  /* ---------------------------------------------------------- top bar */
+  function setMid(html) { tbMid.innerHTML = html || ""; }
+  function midFile(f, extra) { setMid('<span class="tb-file"><b>File ' + f.n + "</b>" + txt(extra || f.title) + "</span>"); }
+  function setStreak(n) {
+    streakN.textContent = n;
+    var show = n >= 2;
+    if (streakEl.hidden === show) { streakEl.hidden = !show; }
+    if (show) { streakEl.classList.remove("bump"); void streakEl.offsetWidth; streakEl.classList.add("bump"); }
+  }
+  function syncSound() {
+    soundBtn.setAttribute("aria-pressed", save.sound ? "true" : "false");
+    soundBtn.setAttribute("aria-label", "Sound");
+    soundBtn.setAttribute("title", save.sound ? "Sound is on" : "Sound is off");
+  }
+
+  /* ----------------------------------------------------------- views */
+  var CAM = { home: 0, briefing: 1, training: 2, play: 2, results: 3 };
+  function setView(name, node, opts) {
+    clearViewTimers();
+    stopTyping();
+    hideGloss();
+    dropLens();
+    undockInspector();
+    seq = null;
+    bNext.hidden = true;
+    reserve = null;
+    stage.style.minHeight = "";
+    app.classList.remove("compact");
+    app.classList.remove("terse");
+    app.style.removeProperty("--insp");
+    lookAt(null);
+    view = name;
+    app.setAttribute("data-view", name);
+    homeBtn.hidden = name === "home";
+    desk.textContent = "";
+    desk.appendChild(node);
+    if (!(opts && opts.keepScroll)) { try { window.scrollTo(0, 0); } catch (e) { /* ignore */ } }
+    fitInspector();
+    camNow = CAM[name] || 0;
+    parallax();
+    if (name !== "play") { setStreak(0); }
+    if (kb) { try { desk.focus({ preventScroll: true }); } catch (e2) { /* ignore */ } }
+  }
+  function primaryBtn() {
+    var list = document.querySelectorAll("[data-primary]");
+    for (var i = 0; i < list.length; i++) {
+      var b = list[i];
+      if (b.disabled || !b.getClientRects().length) { continue; }
+      if (getComputedStyle(b).visibility === "hidden") { continue; }
+      return b;
+    }
+    return null;
+  }
+  /* On a single-column screen that is too short for everything, the Inspector gives up some of his
+     height so that `last` (the bottom-most thing the player needs) stays on the screen. */
+  var INSP_MIN = 84;
+  function squeezeInspector(last) {
+    if (docked || wideLayout() || !last) { return; }
+    var pinned = last.classList.contains("stick");
+    for (var n = 0; n < 8; n++) {
+      /* a bar that is pinned to the bottom of the screen is always "on screen": there the page itself must fit */
+      var over = pinned ? pageOver() : Math.ceil(last.getBoundingClientRect().bottom + (window.pageYOffset || 0) - window.innerHeight);
+      var h = Math.round(inspFig.clientHeight);
+      if (over <= 0 || h <= INSP_MIN) { return; }
+      app.style.setProperty("--insp", Math.max(INSP_MIN, h - Math.max(over, 8)) + "px");
+      fitInspector();
+      applyReserve();
+    }
+  }
+
+  /* ---------------------------------------------------- sparkle effects */
+  var fxTimer = 0, PAPER = ["#f4b730", "#ffe39a", "#e2584f", "#fffaf0", "#b3202a", "#e2a93c", "#1e3a6e"];
+  /* Confetti falls over the scene and the verdict, and has faded before it reaches the buttons under
+     them: stopAt is the screen line where the last piece is gone. */
+  function confetti(count, stopAt) {
+    if (reduced()) { return; }
+    var w = window.innerWidth, fall = Math.max(160, Math.min(window.innerHeight, stopAt || window.innerHeight));
+    for (var i = 0; i < count; i++) {
+      var c = el("i", "cf");
+      c.style.left = (Math.random() * 100) + "%";
+      c.style.background = PAPER[i % PAPER.length];
+      c.style.setProperty("--dx", ((Math.random() - 0.5) * Math.min(260, w * 0.5)).toFixed(0) + "px");
+      c.style.setProperty("--fall", (fall * (0.7 + Math.random() * 0.3)).toFixed(0) + "px");
+      c.style.setProperty("--rot", (360 + Math.random() * 720).toFixed(0) + "deg");
+      c.style.setProperty("--d", (1.05 + Math.random() * 0.55).toFixed(2) + "s");
+      c.style.setProperty("--dl", (Math.random() * 0.22).toFixed(2) + "s");
+      if (i % 3 === 0) { c.style.borderRadius = "50%"; c.style.height = "9px"; }
+      fx.appendChild(c);
+    }
+    clearTimeout(fxTimer);
+    fxTimer = setTimeout(function () { fx.textContent = ""; }, 2300);
+  }
+  function fxAt(cls, node, n, spread, up) {
+    if (reduced() || !node) { return; }
+    var r = node.getBoundingClientRect();
+    if (!r.width) { return; }
+    var made = [], w = window.innerWidth, cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    for (var i = 0; i < n; i++) {
+      var s = el("i", cls), a = (Math.PI * 2 * i) / n + Math.random() * 0.5, d = spread * (0.55 + Math.random() * 0.45);
+      /* nothing that flies may leave the screen sideways */
+      var dx = Math.max(8 - cx, Math.min(w - 8 - cx, Math.cos(a) * d)), dy = Math.sin(a) * d * 0.8 - up;
+      s.style.left = cx + "px";
+      s.style.top = cy + "px";
+      s.style.setProperty("--dx", dx.toFixed(0) + "px");
+      s.style.setProperty("--dy", dy.toFixed(0) + "px");
+      if (cls === "bit") {
+        s.style.background = PAPER[i % PAPER.length];
+        s.style.setProperty("--rot", (180 + Math.random() * 540).toFixed(0) + "deg");
+      }
+      fx.appendChild(s);
+      made.push(s);
+    }
+    setTimeout(function () { made.forEach(function (s) { if (s.parentNode) { s.parentNode.removeChild(s); } }); }, 1000);
+  }
+  /* a few brass sparks around a small thing, or a burst of paper from a big moment */
+  function sparks(node, n) { if (node) { fxAt("spark", node, n, Math.min(46, node.getBoundingClientRect().width * 0.9), 0); } }
+  function burst(node, n) { fxAt("bit", node, n, Math.min(150, window.innerWidth * 0.36), 34); }
+
+  /* ---------------------------------------------- shared building blocks */
+  function starsHtml(n, cls) {
+    var h = '<span class="' + (cls || "stars") + '" role="img" aria-label="' + n + ' of 3 stars">';
+    for (var i = 0; i < 3; i++) { h += '<svg viewBox="0 0 24 24"' + (i < n ? ' class="on"' : "") + ' aria-hidden="true" focusable="false"><use href="#i-star"></use></svg>'; }
+    return h + "</span>";
+  }
+  function pic(id, cls) { return '<svg class="' + cls + '" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><use href="#' + id + '"></use></svg>'; }
+  /* an answer is shown in its case colour only when it names the case itself */
+  function caseOfOption(o) {
+    var c = D.cases[o.k];
+    if (!c) { return null; }
+    if (String(o.label).indexOf(c.name) === 0 || o.sub === c.name) { return o.k; }
+    return null;
+  }
+  function optionChip(o, extra) {
+    var ck = D.cases[o.k] ? o.k : null;
+    return '<span class="chip' + (o.latin ? " latin" : "") + (ck && !o.latin ? " c-" + ck : "") + (extra ? " " + extra : "") + '"' + (o.latin ? ' lang="la"' : "") + ">" + esc(o.label) + "</span>";
+  }
+  /* the words that tie an answer to its case: printed beside the right answer in the verdict */
+  function jobOf(o) {
+    var cs = D.cases[o.k];
+    if (o.sub) { return o.sub; }
+    if (!cs) { return ""; }
+    return String(o.label).indexOf(cs.name) === 0 ? cs.question : cs.name;
+  }
+  function sentenceString(words) { return words.map(function (w) { return w.w + (w.after || ""); }).join(" "); }
+  function sentenceText(words, markTarget) {
+    return words.map(function (w) {
+      var t = esc(w.w);
+      if (markTarget && w.t) { t = "<mark>" + t + "</mark>"; }
+      return t + (w.after ? esc(w.after) : "");
+    }).join(" ");
+  }
+  function wordLabel(w) {
+    if (!w.r) { return null; }
+    var c = caseInfo(w.r);
+    if (!c) { return null; }
+    var tag = w.tag || c.tag, s = el("span", "w-lab");
+    s.setAttribute("lang", "en");
+    s.innerHTML = "<b>" + esc(c.name) + "</b>" + (tag && String(tag).toLowerCase() !== String(c.name).toLowerCase() ? "<span>" + esc(tag) + "</span>" : "");
+    return s;
+  }
+  /* The sentence under investigation. Every word is a button (tap it for its meaning). The mystery
+     word is boxed in gold and wears a "?" until its job is known. Each word's job label hangs under it. */
+  var gloss = null, glossTimer = 0;
+  function buildScroll(words) {
+    var wrap = el("div", "scroll-wrap"), sc = el("div", "scroll"), row = el("div", "s-row");
+    sc.setAttribute("lang", "la");
+    sc.setAttribute("role", "group");
+    sc.setAttribute("aria-label", sentenceString(words));
+    var tag = el("span", "ev-tag", "Evidence");
+    tag.setAttribute("aria-hidden", "true");
+    wrap.appendChild(tag);
+    words.forEach(function (w, i) {
+      var u = el("span", "wu" + (w.r && caseInfo(w.r) ? " c-" + w.r : ""));
+      u.style.setProperty("--i", i);
+      var b = el("button", "w" + (w.t ? " t" : ""), '<span class="w-t">' + esc(w.w) + "</span>" + (w.after ? esc(w.after) : "") +
+        (w.t ? '<span class="sr" lang="en">, the highlighted word</span><span class="w-q" aria-hidden="true">?</span>' : ""));
+      b.type = "button";
+      b.setAttribute("data-word", i);
+      u.appendChild(b);
+      var lab = wordLabel(w);
+      if (lab) { u.appendChild(lab); }
+      row.appendChild(u);
+    });
+    sc.appendChild(row);
+    wrap.appendChild(sc);
+    gloss = el("div", "gloss");
+    gloss.setAttribute("role", "status");
+    wrap.appendChild(gloss);
+    return wrap;
+  }
+  /* Which words start a new row: as few rows as will hold the words, then the most even split. */
+  function rowCuts(w, avail) {
+    var n = w.length, i, k = 1, run = 0, best = [], bestScore = Infinity;
+    for (i = 0; i < n; i++) {
+      if (run && run + w[i] > avail) { k++; run = 0; }
+      run += w[i];
+    }
+    if (k === 1) { return best; }
+    function cut(start, rowsLeft, cuts, worst, over) {
+      var sum = 0, e;
+      if (rowsLeft === 1) {
+        for (e = start; e < n; e++) { sum += w[e]; }
+        var score = (over + Math.max(0, sum - avail)) * 1000 + Math.max(worst, sum);
+        if (score < bestScore) { bestScore = score; best = cuts; }
+        return;
+      }
+      for (e = start; e <= n - rowsLeft; e++) {
+        sum += w[e];
+        cut(e + 1, rowsLeft - 1, cuts.concat([e + 1]), Math.max(worst, sum), over + Math.max(0, sum - avail));
+      }
+    }
+    cut(0, k, [], 0, 0);
+    return best;
+  }
+  /* The rows are worked out from the width each word needs once its label hangs under it. So no word
+     changes row when the labels appear, and no label ever has to wrap, squeeze or touch its neighbour. */
+  function layoutScroll() {
+    var sc = desk.querySelector(".scroll");
+    if (!sc) { return; }
+    var units = sc.querySelectorAll(".wu"), n = units.length, i, w = [];
+    if (!n) { return; }
+    var gap = parseFloat(getComputedStyle(units[0]).marginLeft) * 2 || 0;
+    for (i = 0; i < n; i++) { w.push(Math.ceil(units[i].getBoundingClientRect().width + gap)); }
+    var cs = getComputedStyle(sc);
+    var avail = sc.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    var cuts = rowCuts(w, avail), key = "r" + cuts.join(",");
+    if (sc.getAttribute("data-rows") === key) { return; }
+    var a = document.activeElement, hadFocus = !!(a && sc.contains(a));
+    sc.setAttribute("data-rows", key);
+    var frag = document.createDocumentFragment(), row = null;
+    for (i = 0; i < n; i++) {
+      if (!row || cuts.indexOf(i) >= 0) { row = el("div", "s-row"); frag.appendChild(row); }
+      row.appendChild(units[i]);
+    }
+    sc.textContent = "";
+    sc.appendChild(frag);
+    if (hadFocus) { try { a.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    placeLens();
+  }
+  function hideGloss() {
+    clearTimeout(glossTimer);
+    if (gloss) { gloss.classList.remove("on"); }
+  }
+  /* the meaning opens beside the word, on the side where it covers no other word of the sentence */
+  function showGloss(btn, w) {
+    if (!gloss || !btn || !w) { return; }
+    var wrap = gloss.parentNode, row = btn.closest ? btn.closest(".s-row") : null;
+    gloss.innerHTML = '<b lang="la">' + esc(w.lemma) + ":</b> " + esc(w.g);
+    gloss.style.left = "0px"; gloss.style.top = "0px";
+    var r = btn.getBoundingClientRect(), wr = wrap.getBoundingClientRect(), gw = gloss.offsetWidth, gh = gloss.offsetHeight;
+    var left = Math.max(0, Math.min(wr.width - gw, r.left + r.width / 2 - wr.left - gw / 2));
+    var above = !!(row && row.nextElementSibling);
+    gloss.style.left = left + "px";
+    gloss.style.top = (above ? r.top - wr.top - gh - 2 : r.bottom - wr.top + 3) + "px";
+    gloss.classList.add("on");
+    clearTimeout(glossTimer);
+    glossTimer = setTimeout(hideGloss, 4500);
+    if (!save.seen.gloss) {
+      save.seen.gloss = true;
+      persist();
+      var h = desk.querySelector(".gloss-hint");
+      if (h) { h.classList.add("used"); }
+    }
+    lookAtNode(btn, 1200);
+  }
+  function revealWords(indexes) {
+    var units = desk.querySelectorAll(".wu");
+    for (var i = 0; i < units.length; i++) {
+      if (!indexes || indexes.indexOf(i) >= 0) { units[i].classList.add("show"); }
+    }
+  }
+  /* His magnifying glass. When a clue talks about words of the sentence, the glass leaves his hand and
+     visits them in the order he names them. It settles on the end of each word, because the ending is
+     where the evidence is, and each word it has visited keeps a ring. */
+  var lens = null, lensAt = null, lensTimers = [];
+  function dropLens() {
+    lensTimers.forEach(function (t) { clearTimeout(t); });
+    lensTimers = [];
+    if (lens && lens.parentNode) { lens.parentNode.removeChild(lens); }
+    lens = null; lensAt = null;
+  }
+  function placeLens(btn) {
+    if (btn) { lensAt = btn; }
+    if (!lens || !lensAt || !lens.parentNode) { return; }
+    var r = lensAt.getBoundingClientRect(), wr = lens.parentNode.getBoundingClientRect();
+    if (!r.width) { return; }
+    lens.style.transform = "translate3d(" + (r.right - wr.left - 27).toFixed(1) + "px," + (r.top - wr.top + r.height * 0.5 - 22).toFixed(1) + "px,0)";
+  }
+  function ringWord(b) { b.classList.add("ev"); }
+  function tourEvidence(btns, walk, done) {
+    dropLens();
+    if (!btns.length) { done(); return; }
+    var wrap = btns[0].closest ? btns[0].closest(".scroll-wrap") : null;
+    if (!walk || reduced() || !wrap) {
+      btns.forEach(ringWord);
+      lookAtNode(btns[0], 1500);
+      done();
+      return;
+    }
+    var step = 900;
+    lens = el("span", "lens", '<svg viewBox="0 0 44 44" aria-hidden="true" focusable="false"><use href="#i-lens"></use></svg>');
+    lens.setAttribute("aria-hidden", "true");
+    wrap.appendChild(lens);
+    placeLens(btns[0]);
+    var fr = inspFig.getBoundingClientRect(), lr = lens.getBoundingClientRect();
+    lens.style.setProperty("--fx", (fr.left + fr.width * 0.3 - lr.left).toFixed(0) + "px");
+    lens.style.setProperty("--fy", (fr.top + fr.height * 0.6 - lr.top).toFixed(0) + "px");
+    lens.classList.add("fly");
+    btns.forEach(function (b, i) {
+      lensTimers.push(setTimeout(function () {
+        if (i) { placeLens(b); }
+        lookAtNode(b, step + 300);
+      }, i * step));
+      lensTimers.push(setTimeout(function () { ringWord(b); b.classList.add("seen"); }, i * step + 380));
+    });
+    lensTimers.push(setTimeout(function () {
+      if (lens) { lens.classList.add("away"); }
+      try { done(); } catch (e) { /* ignore */ }
+    }, btns.length * step + 150));
+    lensTimers.push(setTimeout(dropLens, btns.length * step + 650));
+  }
+  /* The three -ae suspects get a face: an owner holding a name tag (whose?), someone holding a gift
+     (who receives?), and a pair (who does it? more than one). Only where the answers are those three. */
+  function portraitFor(o) {
+    var id = null;
+    if (/singular|plural/i.test(String(o.label))) { id = o.k === "gen" ? "p-owner" : (o.k === "dat" ? "p-receiver" : (o.k === "nom" ? "p-pair" : null)); }
+    return id ? pic(id, "o-pic") : "";
+  }
+  function buildAnswers(opts) {
+    var box = el("div", "answers n" + opts.length + (opts[0] && opts[0].latin ? " latin" : ""));
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", "Answers");
+    opts.forEach(function (o, i) {
+      var ck = caseOfOption(o), p = portraitFor(o);
+      var b = el("button", "opt" + (o.latin ? " latin" : "") + (ck ? " colored c-" + ck : "") + (p ? " has-pic" : ""));
+      b.type = "button";
+      b.setAttribute("data-k", o.k);
+      b.innerHTML = '<span class="o-key" aria-hidden="true">' + (i + 1) + "</span>" + p + '<span class="o-txt"><span class="o-lab"' + (o.latin ? ' lang="la"' : "") + ">" + esc(o.label) + "</span>" +
+        (o.sub ? '<span class="o-sub">' + esc(o.sub) + "</span>" : "") + '<span class="o-stamp" aria-hidden="true">' + esc(L.eliminated) + '</span></span><span class="o-mark" aria-hidden="true"></span>';
+      box.appendChild(b);
+    });
+    return box;
+  }
+  function optButton(k) { return desk.querySelector('.opt[data-k="' + selEsc(k) + '"]'); }
+  /* what a clue or a training step rules out: one key in the data, or a list of them */
+  function outKeys(x) { return x && x.eliminates ? [].concat(x.eliminates) : []; }
+  /* stamp an answer "Ruled out". It stays on screen and can no longer be chosen. */
+  function stampOut(k, loud, keepEnabled) {
+    var b = optButton(k);
+    if (!b || b.classList.contains("out")) { return; }
+    b.classList.add("out");
+    if (!keepEnabled) { b.disabled = true; }
+    var st = b.querySelector(".o-stamp");
+    if (st) { st.removeAttribute("aria-hidden"); }
+    if (loud) {
+      b.classList.add("thud");
+      later(function () { Sfx.play("ruleout"); }, 140);
+      act("point", 1700);
+      lookAtNode(b, 1700);
+    }
+  }
+  /* When the play screen changes shape (a clue arrives, the answer is in), its pieces glide to their
+     new place instead of jumping. mark() before the change, glide() after it. */
+  function flipMark(v) {
+    var out = [];
+    if (reduced() || !v) { return out; }
+    for (var n = v.firstElementChild; n; n = n.nextElementSibling) {
+      if (/(^| )(sheet|dock|clue-note)( |$)/.test(n.className)) { continue; }
+      out.push({ n: n, y: n.getBoundingClientRect().top });
+    }
+    return out;
+  }
+  function stageMarks() {
+    var out = [], list = [inspFig.parentNode, bubble.parentNode];
+    if (reduced() || docked) { return out; }
+    list.forEach(function (n) { if (n && n.getClientRects().length) { out.push({ n: n, y: n.getBoundingClientRect().top }); } });
+    return out;
+  }
+  function flipGlide(marks) {
+    marks.forEach(function (m) {
+      if (!m.n.parentNode || !m.n.getClientRects().length) { return; }
+      var dy = m.y - m.n.getBoundingClientRect().top;
+      if (Math.abs(dy) < 2) { return; }
+      m.n.style.setProperty("--dy", dy.toFixed(1) + "px");
+      m.n.classList.remove("glide");
+      void m.n.offsetWidth;
+      m.n.classList.add("glide");
+    });
+  }
+
+  /* ------------------------------------------------------- the Notebook */
+  var nbOpen = false, cfOpen = false, lastFocus = null;
+  function buildNotebook() {
+    var dc = D.declension, h = "", sneakyCells = 0;
+    h += '<section class="nb-sec"><h3>Every case has a job</h3><ul class="nb-cases">';
+    dc.rows.forEach(function (row) {
+      var c = D.cases[row.k];
+      if (!c) { return; }
+      h += '<li class="nb-case c-' + c.key + '">' + pic("c-" + c.key, "c-pic") + '<div class="nb-ct"><span class="chip c-' + c.key + '">' + esc(c.name) + '</span><b class="nb-q">' + esc(c.question) + "</b>" +
+        '<span class="nb-job">Job: ' + esc(c.job) + '</span><span class="nb-hook">' + rich(c.hook) + "</span></div></li>";
+    });
+    h += "</ul></section>";
+    h += '<section class="nb-sec"><h3>The <i lang="la">' + esc(dc.word) + "</i> chart</h3><p>" + '<i lang="la">' + esc(dc.word) + "</i> means “" + esc(dc.meaning) + "”. The ending changes with the job.</p>" +
+      '<table class="decl"><thead><tr><th scope="col">Case</th><th scope="col">One</th><th scope="col">Many</th></tr></thead><tbody>';
+    dc.rows.forEach(function (row) {
+      var c = D.cases[row.k];
+      if (!c) { return; }
+      function cell(end) {
+        var sn = end === dc.sneaky;
+        if (sn) { sneakyCells++; }
+        return "<td" + (sn ? ' class="sn"' : "") + ' lang="la">' + esc(dc.stem) + "<b>" + esc(end) + "</b>" + (sn ? '<span class="sr" lang="en"> (the sneaky ending)</span>' : "") + "</td>";
+      }
+      h += '<tr class="c-' + c.key + '"><td>' + esc(c.name) + "</td>" + cell(row.sg) + cell(row.pl) + "</tr>";
+    });
+    /* the chart marks every cell with the sneaky ending; he speaks of three suspects, because the fourth
+       cell (the vocative plural) is the nominative's twin. The caption says so. */
+    var twin = false;
+    dc.rows.forEach(function (row) { if (row.k === "voc" && row.pl === dc.sneaky) { twin = true; } });
+    h += '</tbody></table><p class="decl-key"><b lang="la">-' + esc(dc.sneaky) + "</b><span>The sneaky ending. It turns up " + sneakyCells + " times" +
+      (twin && sneakyCells === 4 ? ": the three suspects, and the vocative plural, which always looks like the nominative." : ", so the rest of the sentence has to tell you which job it has.") + "</span></p></section>";
+    h += '<section class="nb-sec"><h3>The detective method</h3><ol class="nb-method">';
+    D.method.forEach(function (m) { h += "<li><b>" + txt(m.title) + "</b>" + txt(m.text) + "</li>"; });
+    h += "</ol></section>";
+    h += '<section class="nb-sec"><h3>Field notes</h3><p>' + esc(D.inspector.nameNote) + '</p><ul class="nb-tips"><li>' + esc(L.glossHint) + "</li><li>Clues never cost stars. Ask as often as you like.</li>" +
+      "<li>On a keyboard: <kbd>1</kbd> to <kbd>4</kbd> answer, <kbd>Enter</kbd> continues, <kbd>C</kbd> asks for a clue, <kbd>N</kbd> opens this Notebook and <kbd>M</kbd> turns the sound on or off.</li></ul></section>";
+    nbPages.innerHTML = h;
+    nbPages.setAttribute("tabindex", "0");
+    nbPages.setAttribute("aria-label", "Notebook pages");
+  }
+  function setInert(on) {
+    try {
+      if (on) { app.setAttribute("aria-hidden", "true"); app.inert = true; } else { app.removeAttribute("aria-hidden"); app.inert = false; }
+    } catch (e) { /* ignore */ }
+  }
+  function openNotebook() {
+    if (nbOpen || cfOpen) { return; }
+    nbOpen = true;
+    lastFocus = document.activeElement;
+    hideGloss();
+    nb.classList.add("open");
+    nb.setAttribute("aria-hidden", "false");
+    nbScrim.hidden = false;
+    setInert(true);
+    nbPages.scrollTop = 0;
+    try { nbClose.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  }
+  function closeNotebook() {
+    if (!nbOpen) { return; }
+    nbOpen = false;
+    nb.classList.remove("open");
+    nb.setAttribute("aria-hidden", "true");
+    nbScrim.hidden = true;
+    setInert(false);
+    restoreFocus();
+  }
+  function restoreFocus() {
+    var f = lastFocus;
+    lastFocus = null;
+    try { if (f && f.focus && document.body.contains(f)) { f.focus({ preventScroll: true }); } } catch (e) { /* ignore */ }
+  }
+  function openConfirm() {
+    if (cfOpen || nbOpen) { return; }
+    cfOpen = true;
+    lastFocus = document.activeElement;
+    cf.classList.add("open");
+    cf.setAttribute("aria-hidden", "false");
+    cfScrim.hidden = false;
+    setInert(true);
+    try { cfNo.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  }
+  function closeConfirm() {
+    if (!cfOpen) { return; }
+    cfOpen = false;
+    cf.classList.remove("open");
+    cf.setAttribute("aria-hidden", "true");
+    cfScrim.hidden = true;
+    setInert(false);
+    restoreFocus();
+  }
+  nbClose.addEventListener("click", function () { Sfx.play("tap"); closeNotebook(); });
+  nbScrim.addEventListener("click", closeNotebook);
+  cfScrim.addEventListener("click", closeConfirm);
+  cfNo.addEventListener("click", function () { Sfx.play("tap"); closeConfirm(); });
+  cfYes.addEventListener("click", function () {
+    save.stars = {}; save.solo = {}; save.seen = {};
+    persist();
+    paused = null; R = null; greeted = false;
+    closeConfirm();
+    Sfx.play("ruleout");
+    home();
+  });
+  /* keep Tab inside an open dialog */
+  function trapTab(e, box) {
+    var list = box.querySelectorAll('button:not([disabled]), a[href], [tabindex="0"]');
+    if (!list.length) { e.preventDefault(); return; }
+    var first = list[0], last = list[list.length - 1], a = document.activeElement;
+    if (!box.contains(a)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && a === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && a === last) { e.preventDefault(); first.focus(); }
+  }
+
+  /* --------------------------------------------------------------- home */
+  /* the way back to the other games exists only when this game sits in its folder on the games site */
+  function siteHome() {
+    try { return /(^|\/)case-detective\/(index\.html?)?$/i.test(decodeURIComponent(location.pathname)) ? "../index.html" : ""; } catch (e) { return ""; }
+  }
+  /* every star that can be won, grouped by the rank it leads to */
+  function rankRowHtml(total) {
+    var edges = D.ranks.map(function (r) { return r.min; }), max = maxStars(), h = '<div class="rank-row" aria-hidden="true"><span class="rk-g">';
+    for (var i = 0; i < max; i++) {
+      if (i && edges.indexOf(i) > 0) { h += '</span><span class="rk-g">'; }
+      h += '<svg viewBox="0 0 24 24"' + (i < total ? ' class="on" style="--i:' + i + '"' : "") + ' focusable="false"><use href="#i-star"></use></svg>';
+    }
+    return h + "</span></div>";
+  }
+  function home() {
+    B = null; T = null;
+    var total = totalStars(), max = maxStars(), rank = rankFor(total), nf = nextFile(), done = total >= max;
+    var first = !hasProgress(), left = ribbonsLeft();
+    var v = el("div", "view v-home"), h = "";
+    var toNext = rank.next ? rank.next.min - total : 0;
+    h += '<h1 class="sr">Case Detective</h1><section class="rank" aria-label="Your rank">' + '<svg class="rank-badge" viewBox="0 0 48 52" aria-hidden="true" focusable="false"><use href="#i-badge"></use></svg>' +
+      '<div class="rank-txt"><b class="rank-title">' + esc(rank.title) + '</b><span class="rank-next">' + (rank.next ? toNext + (toNext === 1 ? " more star" : " more stars") + " to " + esc(rank.next.title) : (left ? "Top rank. " + (left === 1 ? "One no-clue ribbon" : left + " no-clue ribbons") + " still to win." : "Top rank. Every file solved without a clue.")) + "</span></div>" +
+      '<div class="rank-count" role="img" aria-label="' + total + " of " + max + ' stars"><b>' + total + "</b><span>/" + max + "</span></div>";
+    h += rankRowHtml(total) + "</section>";
+    h += '<h2 class="sr">Case files</h2><ul class="files">';
+    FILES.forEach(function (f) {
+      var s = save.stars[f.id] || 0, solo = !!save.solo[f.id];
+      var isPaused = !!(paused && paused.file.id === f.id);
+      var isNext = paused ? isPaused : (f === nf && (!done || left > 0));
+      var closed = s >= 2;
+      var go = isPaused ? "Resume" : (s ? "Replay" : "Open");
+      var flag = isNext ? (isPaused ? "In progress" : (first ? "Start here" : (done ? "Win the ribbon" : "Next up"))) : "";
+      var label = "File " + f.n + ": " + f.title + ". " + s + " of 3 stars." + (closed ? " Case closed." : "") + (solo ? " " + L.solo : "") + (isPaused ? " In progress." : (isNext ? " " + flag + "." : ""));
+      h += '<li><button type="button" class="folder' + (isNext ? " next" : "") + (closed ? " closed" : "") + '" data-file="' + esc(f.id) + '" aria-label="' + esc(label) + '">' +
+        '<span class="f-tab">File ' + f.n + '</span><span class="f-title">' + txt(f.title) + '</span><span class="f-blurb">' + txt(f.blurb) + "</span>" +
+        '<span class="f-foot">' + starsHtml(s) + (closed && !isNext ? '<span class="f-stamp">' + esc(L.stamp.closed) + "</span>" : '<span class="f-go">' + go + "</span>") + "</span>" +
+        (solo ? '<svg class="f-ribbon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-ribbon"></use></svg>' : "") +
+        (flag ? '<span class="f-flag">' + flag + "</span>" : "") + "</button></li>";
+    });
+    h += "</ul>";
+    var target = paused ? paused.file : nf;
+    var verb = paused ? "Resume" : (first ? "Open" : (done ? "Replay" : "Continue:"));
+    h += '<div class="dock"><button type="button" class="btn primary" data-primary data-open="' + esc(target.id) + '"><span>' + verb + " File " + target.n + "<small>" + txt(target.title) + "</small></span>" + icon("next") + "</button></div>";
+    var site = siteHome();
+    h += '<p class="home-foot">' + (site ? '<a class="tlink" href="' + site + '">More language games</a>' : "<span></span>") + '<button type="button" class="tlink" data-action="reset">Reset progress</button></p>';
+    v.innerHTML = h;
+    setView("home", v);
+    setMid("");
+
+    var lines, moods;
+    var map = { stars: total, nextN: nf.n, nextTitle: nf.title, rank: rank.title };
+    if (first) { lines = L.homeFirst.slice(); moods = ["!wave", "point"]; }
+    else if (done) { lines = L.homeDone.map(function (s) { return fill(s, map); }); moods = ["!cheer", "proud"]; }
+    else { lines = L.homeBack.map(function (s) { return fill(s, map); }); moods = ["!wave", "point"]; }
+    /* he says hello once; on later visits to his desk he goes straight to what is next */
+    if (greeted && lines.length > 1) { lines = lines.slice(-1); moods = moods.slice(-1); }
+    greeted = true;
+    var nextEl = v.querySelector(".folder.next");
+    runSequence(lines, moods, function (n) { if (n === lines.length - 1 && nextEl) { lookAtNode(nextEl, 2000); } });
+    reserveStage(lines.map(function (s) { return [{ html: s }]; }), lines.length > 1 ? { dots: [0, lines.length] } : null);
+  }
+  function goHome() {
+    if (view === "play" && R && !R.done) { paused = R; }
+    home();
+  }
+  function openFile(id) {
+    var f = fileById(id);
+    if (!f) { return; }
+    if (paused && paused.file.id === id) { resumeRound(); return; }
+    paused = null;
+    briefing(f);
+  }
+
+  /* ----------------------------------------------------------- briefing */
+  function recapHtml(file) {
+    var rc = file.recap, h = "";
+    if (!rc || !rc.items) { return ""; }
+    if (rc.kind === "questions") {
+      h += '<h2 class="rc-h">The detective questions</h2><ul class="rc-list">';
+      rc.items.forEach(function (it) {
+        var c = D.cases[it.k];
+        h += '<li class="c-' + esc(it.k) + '">' + (c ? pic("c-" + c.key, "c-pic") : "") + '<span class="chip c-' + esc(it.k) + '">' + esc(c ? c.name : it.k) + "</span><span>" + txt(it.text) + "</span></li>";
+      });
+      h += "</ul>";
+    } else if (rc.kind === "endings") {
+      h += '<h2 class="rc-h">Two fingerprints</h2><div class="rc-ends">';
+      rc.items.forEach(function (it) {
+        var c = D.cases[it.k];
+        h += '<div class="end-card c-' + esc(it.k) + '"><span class="end-big" lang="la">' + esc(it.ending) + '</span><span class="chip c-' + esc(it.k) + '">' + esc((c ? c.name : it.k) + " " + it.number) + "</span>" +
+          '<span class="end-ex"><i lang="la">' + esc(it.example) + "</i>" + txt(it.meaning) + '</span><span class="end-hook">' + txt(it.hook) + "</span></div>";
+      });
+      h += "</div>";
+    } else {
+      h += '<h2 class="rc-h"><i lang="la">' + esc(D.declension.stem + D.declension.sneaky) + "</i>: three suspects</h2>" + '<div class="sus-row">';
+      rc.items.forEach(function (it) {
+        h += '<div class="sus c-' + esc(it.k) + '">' + portraitFor(it) + "<b>" + esc(it.label) + "</b><span>" + txt(it.meaning) + "</span><small>" + txt(it.text) + "</small></div>";
+      });
+      h += "</div>";
+    }
+    return h;
+  }
+  function briefing(file, opts) {
+    opts = opts || {};
+    var seen = !!save.seen[file.id];
+    T = null;
+    B = { file: file, lines: file.briefing, i: 0, last: file.briefing.length - 1, talk: !seen || !!opts.hear, willTrain: !!(file.training && !save.seen[file.training.id]) };
+    var s = save.stars[file.id] || 0, played = s > 0 || !!save.seen["round:" + file.id];
+    var stamp = s >= 2 ? L.stamp.closed : (played ? L.stamp.open : "");
+    var v = el("div", "view v-brief");
+    v.innerHTML = '<header class="bf-cover"><span class="f-tab">File ' + file.n + " of " + FILES.length + '</span><h1 class="bf-title">' + txt(file.title) + '</h1><p class="bf-blurb">' + txt(file.blurb) + "</p>" +
+      '<p class="bf-meta">' + (stamp ? '<span class="bf-stamp' + (s >= 2 ? "" : " still") + '">' + esc(stamp) + "</span>" : "<span>" + file.questions.length + " questions</span>") + starsHtml(s) + "</p></header>" +
+      '<section class="recap wait">' + recapHtml(file) + "</section>" +
+      '<div class="bf-more" hidden><button type="button" class="btn ghost sm" data-action="hear">' + icon("replay") + "Hear the briefing</button>" +
+      (file.training && !B.willTrain ? '<button type="button" class="btn ghost sm" data-action="retrain">' + icon("glass") + "Replay the training case</button>" : "") + "</div>" +
+      '<div class="dock stick"><button type="button" class="btn ghost" data-action="skip">' + icon("skip") + '<span class="sk-t">Skip</span></button><button type="button" class="btn primary" data-primary><span class="p-lab">Next</span>' + icon("next") + "</button></div>";
+    B.view = v;
+    B.recap = v.querySelector(".recap");
+    B.more = v.querySelector(".bf-more");
+    B.skip = v.querySelector('[data-action="skip"]');
+    B.plab = v.querySelector(".p-lab");
+    setView("briefing", v);
+    midFile(file);
+    if (B.talk) {
+      briefLine(false);
+      reserveStage(B.lines.map(function (ln) { return [{ html: ln.say }]; }), { dots: [0, B.lines.length] });
+    } else { briefReady(); }
+    squeezeInspector(v.lastElementChild);
+  }
+  function startLabel() { return B.willTrain ? "Start the training case" : "Start the case"; }
+  function showRecap(look) {
+    if (!B.recap.classList.contains("wait")) { return; }
+    B.recap.classList.remove("wait");
+    B.view.classList.add("has-recap");
+    if (look) { lookAtNode(B.recap, 1500); }
+  }
+  function briefLine(instant) {
+    var ln = B.lines[B.i], atEnd = B.i >= B.last, was = B.recap.classList.contains("wait");
+    mood(ln.mood);
+    for (var i = 0; i <= B.i; i++) { if (B.lines[i].show === "recap") { showRecap(i === B.i && !instant); } }
+    B.skip.hidden = atEnd;
+    B.plab.textContent = atEnd ? startLabel() : "Next";
+    say([{ html: ln.say }], { dots: [B.i, B.lines.length], instant: !!instant });
+    if (was !== B.recap.classList.contains("wait")) { applyReserve(); squeezeInspector(B.view.lastElementChild); }
+  }
+  function briefReady() {
+    showRecap(false);
+    B.more.hidden = false;
+    B.skip.hidden = true;
+    B.plab.textContent = startLabel();
+    mood("point");
+    sayLine(B.file.blurb);
+    later(function () { mood("idle"); }, 4200);
+  }
+  function briefPrimary() {
+    if (B.talk && B.i < B.last) {
+      if (!speech.done) { finishTyping(); return; }
+      B.i++;
+      Sfx.play("tap");
+      briefLine(false);
+      return;
+    }
+    startCase();
+  }
+  function briefSkip() {
+    if (!B.talk || B.i >= B.last) { return; }
+    B.i = B.last;
+    Sfx.play("tap");
+    briefLine(true);
+  }
+  function startCase() {
+    var f = B.file, train = B.willTrain;
+    save.seen[f.id] = true;
+    persist();
+    Sfx.play("tap");
+    if (train) { training(f); } else { startRound(f); }
+  }
+
+  /* ------------------------------------------------------ training case */
+  /* One sentence worked through together. The sentence and the three suspects stay where they are for
+     the whole case; what the player has to do next always sits in the bar at the bottom. */
+  function methodHtml(cls) {
+    var m = '<ol class="method' + (cls ? " " + cls : "") + '" aria-label="The detective method">';
+    D.method.forEach(function (st, i) { m += "<li><b>" + (i + 1) + '</b><span class="m-t">' + txt(st.title) + '</span><span class="m-x">' + txt(st.text) + "</span></li>"; });
+    return m + "</ol>";
+  }
+  function training(file) {
+    var tr = file.training;
+    B = null;
+    T = { file: file, tr: tr, i: 0, phase: "ask", out: {}, outro: false };
+    var v = el("div", "view v-play v-train is-sentence");
+    var sw = buildScroll(tr.words);
+    /* the meaning is written at the end of the case; its line waits under the sentence */
+    if (tr.translation) { sw.appendChild(el("p", "s-tr wait", "“" + rich(tr.translation) + "”")); }
+    v.appendChild(sw);
+    v.appendChild(buildAnswers(tr.suspects));
+    var dock = el("div", "dock stick train-dock", '<button type="button" class="btn ghost skip" data-action="skip">' + icon("skip") + '<span class="sk-t">Skip<span class="sk-x"> training</span></span></button><div class="act-slot"></div>');
+    v.appendChild(dock);
+    T.view = v;
+    T.slot = dock.querySelector(".act-slot");
+    T.skip = dock.querySelector('[data-action="skip"]');
+    T.primary = el("button", "btn primary", '<span class="p-lab">Next</span>' + icon("next"));
+    T.primary.type = "button";
+    T.primary.setAttribute("data-primary", "");
+    T.plab = T.primary.querySelector(".p-lab");
+    T.lines = [[{ html: tr.outro.say }]];
+    tr.steps.forEach(function (s) {
+      T.lines.push([{ html: s.say }]);
+      if (s.right) { T.lines.push([{ html: s.right }]); }
+      if (s.wrong) { T.lines.push([{ html: s.wrong }]); }
+    });
+    setView("training", v);
+    layoutScroll();
+    trainStep(0);
+  }
+  function trainPips() {
+    var n = T.tr.steps.length, h = '<span class="tb-file tb-train">' + icon("glass") + '<b>Training</b></span><div class="pips" role="img" aria-label="Training case, step ' + Math.min(n, T.i + 1) + " of " + n + '">';
+    for (var i = 0; i < n; i++) { h += '<i class="pip' + (T.outro || i < T.i || (i === T.i && T.phase === "done" && T.tr.steps[i].kind !== "say") ? " ok" : (i === T.i ? " cur" : "")) + '"></i>'; }
+    setMid(h + "</div>");
+  }
+  function syncSuspects() {
+    var s = T.tr.steps[T.i], open = !T.outro && s.kind === "answer" && T.phase === "ask";
+    var list = desk.querySelectorAll(".opt");
+    for (var i = 0; i < list.length; i++) {
+      var b = list[i], k = b.getAttribute("data-k");
+      if (T.out[k]) { stampOut(k, false, true); }
+      /* asleep, not disabled: a tap on a sleeping card still gets an answer (see trainSuspect) */
+      if (open && b.classList.contains("wait")) { b.classList.add("wake"); }
+      b.classList.toggle("wait", !open);
+      if (open) { b.removeAttribute("aria-disabled"); } else { b.setAttribute("aria-disabled", "true"); }
+    }
+  }
+  /* the bar at the bottom: what to do now (a tip, or two choices), and Next once it is done */
+  function trainSlot() {
+    var s = T.tr.steps[T.i], ready = T.outro || T.phase === "done";
+    T.slot.textContent = "";
+    T.skip.hidden = T.outro;
+    if (ready) {
+      T.plab.textContent = T.outro ? "Start the case" : "Next";
+      T.slot.appendChild(T.primary);
+      return;
+    }
+    if (s.kind === "pick") {
+      s.choices.forEach(function (c, n) {
+        var b = el("button", "choice", esc(c.label));
+        b.type = "button";
+        b.setAttribute("data-choice", n);
+        T.slot.appendChild(b);
+      });
+    } else {
+      T.slot.innerHTML = '<span class="act-tip">' + icon("glass") + "<span>" + (s.kind === "tap" ? "Tap a word in the sentence" : "Tap the suspect still standing") + "</span></span>";
+    }
+  }
+  /* On a phone the suspects and the bar keep their place at the bottom of the screen for the whole
+     case, and the room above the desk is the Inspector's (the stylesheet lets the stage take it).
+     If a line of his does not fit there, he gives up some of his own height, which widens the bubble.
+     On tablets and beside the desk on wide screens, the stage keeps the height of his longest line. */
+  /* Beside the Inspector, on a wide screen, the desk is only as tall as what lies on it. So that the bar
+     with Next in it stays where it is for the whole case, the view keeps the height of its tallest
+     state there: the sentence with the suspects, or the sentence with the method written out. */
+  function trainHold(wide) {
+    var v = T.view, box = v.querySelector(".answers");
+    v.style.minHeight = "";
+    if (!wide) { T.hold = 0; return; }
+    if (box) {
+      var a = v.offsetHeight, m = el("div", "", methodHtml("full")).firstChild;
+      box.style.display = "none";
+      v.insertBefore(m, box);
+      T.hold = Math.max(a, v.offsetHeight);
+      v.removeChild(m);
+      box.style.display = "";
+      T.holdW = window.innerWidth;
+    } else if (T.holdW !== window.innerWidth) { T.hold = 0; }
+    if (!T.hold) { return; }
+    v.style.minHeight = T.hold + "px";
+    var over = pageOver();
+    if (over > 0) { v.style.minHeight = Math.max(0, T.hold - over) + "px"; }
+  }
+  function trainFit() {
+    var wide = wideLayout(), v = T.view, anchored = false;
+    /* what the stylesheet decided: on a phone the training desk does not grow, it sits on the bottom */
+    try { anchored = !wide && getComputedStyle(desk).flexGrow === "0"; } catch (e) { anchored = false; }
+    reserve = anchored ? null : { list: T.lines, opts: null };
+    applyReserve();
+    trainHold(wide);
+    if (wide) { v.classList.remove("tight"); return; }
+    /* a short phone keeps the tighter spacing for the whole case, so nothing changes size half way */
+    if (anchored && window.innerHeight < 700) { v.classList.add("tight"); }
+    if (pageOver() > 0) { v.classList.add("tight"); }
+    var from = inspFig.getBoundingClientRect();
+    squeezeInspector(v.lastElementChild);
+    if (T.i > 0 && Math.abs(inspFig.getBoundingClientRect().height - from.height) > 3) { hopFrom(inspFig, from); }
+  }
+  function trainStep(i) {
+    var s = T.tr.steps[i];
+    T.i = i;
+    T.phase = s.kind === "say" ? "done" : "ask";
+    hideGloss();
+    syncSuspects();
+    trainSlot();
+    var marks = desk.querySelectorAll(".w.no, .opt.nope");
+    for (var m = 0; m < marks.length; m++) { marks[m].classList.remove("no"); marks[m].classList.remove("nope"); }
+    trainPips();
+    mood(s.mood);
+    sayLine(s.say);
+    trainFit();
+    /* his eyes go to the thing this step is about */
+    if (s.kind === "say") { lookAtNode(desk.querySelector(".w.t"), 1800); }
+    else if (s.kind === "answer") { lookAtNode(desk.querySelector(".opt:not(.out)"), 1500); }
+    else if (s.kind === "pick" && s.eliminates) { lookAtNode(optButton(outKeys(s)[0]), 1500); }
+    else { lookAtNode(desk.querySelector(".scroll"), 1500); }
+  }
+  function trainRight(s, node) {
+    T.phase = "done";
+    var marks = flipMark(T.view).concat(stageMarks());
+    if (node) {
+      node.classList.remove("no"); node.classList.remove("nope");
+      node.classList.add(s.kind === "answer" ? "winner" : "yes");
+    }
+    if (s.reveal) { revealWords(s.reveal); }
+    Sfx.play("correct");
+    act("cheer", 1300);
+    syncSuspects();
+    trainSlot();
+    trainPips();
+    if (s.kind === "answer") {
+      sparks(node, 9);
+      var trl = desk.querySelector(".scroll-wrap .s-tr");
+      if (trl) { trl.classList.remove("wait"); }
+      mood("proud");
+    }
+    /* the suspect is ruled out when he says so, not before: he turns to the card, then the stamp lands */
+    say([{ html: s.right }], { onDone: function () { outKeys(s).forEach(function (key) { T.out[key] = true; stampOut(key, true, true); }); } });
+    trainFit();
+    flipGlide(marks);
+    if (kb) { try { T.primary.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+  function trainWrong(s, node) {
+    var cls = node && node.classList.contains("opt") ? "nope" : "no";
+    if (node) { node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); }
+    if (s.kind === "pick" && node) { node.disabled = true; }
+    Sfx.play("wrong");
+    act("oops", 1500);
+    sayLine(s.wrong);
+    trainFit();
+  }
+  function trainWord(idx, btn) {
+    var s = T.tr.steps[T.i];
+    if (!T.outro && s.kind === "tap" && T.phase === "ask") {
+      if (idx === s.target) { trainRight(s, btn); } else { trainWrong(s, btn); }
+      return;
+    }
+    Sfx.play("tap");
+    showGloss(btn, T.tr.words[idx]);
+  }
+  function trainChoice(idx, btn) {
+    var s = T.tr.steps[T.i];
+    if (T.outro || s.kind !== "pick" || T.phase !== "ask" || !s.choices[idx]) { return; }
+    if (s.choices[idx].correct) { trainRight(s, btn); } else { trainWrong(s, btn); }
+  }
+  function trainSuspect(k, btn) {
+    var s = T.tr.steps[T.i];
+    if (!T.outro && T.phase === "ask" && s.kind !== "answer") {
+      /* not their turn yet: he points back at what this step wants, and the tip in the bar wiggles */
+      var wanted = s.kind === "tap" ? desk.querySelector(".scroll") : T.slot;
+      T.slot.classList.remove("wig"); void T.slot.offsetWidth; T.slot.classList.add("wig");
+      Sfx.play("blip");
+      act("point", 900);
+      lookAtNode(wanted, 1300);
+      return;
+    }
+    if (T.outro || s.kind !== "answer" || T.phase !== "ask") { return; }
+    if (k === s.answer) { trainRight(s, btn); } else { trainWrong(s, btn); }
+  }
+  function trainPrimary() {
+    if (T.outro) { finishTraining(); return; }
+    if (T.phase !== "done") { return; }
+    if (!speech.done) { finishTyping(); return; }
+    Sfx.play("tap");
+    if (T.i < T.tr.steps.length - 1) { trainStep(T.i + 1); return; }
+    /* the case is closed: the suspects leave, and the method he just used is laid out in their place */
+    T.outro = true;
+    var box = T.view.querySelector(".answers");
+    if (box) { box.insertAdjacentHTML("afterend", methodHtml("full")); T.view.removeChild(box); }
+    T.view.classList.add("outro");
+    T.view.classList.remove("tight");
+    app.style.removeProperty("--insp");
+    fitInspector();
+    trainSlot();
+    trainPips();
+    mood(T.tr.outro.mood);
+    sayLine(T.tr.outro.say);
+    trainFit();
+    lookAtNode(T.view.querySelector(".method"), 1800);
+    if (kb) { try { T.primary.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+  function finishTraining() {
+    var f = T.file;
+    save.seen[T.tr.id] = true;
+    persist();
+    Sfx.play("tap");
+    startRound(f);
+  }
+  function trainHint() {
+    var s = T.tr.steps[T.i];
+    if (T.outro || T.phase !== "ask") { return "[data-primary]"; }
+    if (s.kind === "tap") { return '[data-word="' + s.target + '"]'; }
+    if (s.kind === "pick") {
+      for (var i = 0; i < s.choices.length; i++) { if (s.choices[i].correct) { return '[data-choice="' + i + '"]'; } }
+    }
+    if (s.kind === "answer") { return '[data-k="' + selEsc(s.answer) + '"]'; }
+    return "[data-primary]";
+  }
+
+  /* --------------------------------------------------------------- play */
+  function optByKey(opts, k) { for (var i = 0; i < opts.length; i++) { if (opts[i].k === k) { return opts[i]; } } return null; }
+  /* the longest thing he can say about an answer */
+  var LEAD_MAX = (L.correct || []).concat(L.wrong || []).reduce(function (a, s) { return plain(s).length > plain(a).length ? s : a; }, "");
+  function startRound(file, only) {
+    /* first visit: the author's order (it builds up on purpose). After that the questions are shuffled. */
+    var played = !!save.seen["round:" + file.id];
+    var qs = only ? shuffle(only) : (played ? shuffle(file.questions) : file.questions.slice());
+    B = null; T = null; paused = null;
+    R = {
+      file: file, practice: !!only, order: qs, n: qs.length, pos: 0,
+      queue: qs.map(function (q) { return { q: q, retry: false }; }),
+      results: [], missed: [], fixed: {}, right: 0, streak: 0, best: 0, clues: 0, cur: null, done: false
+    };
+    setStreak(0);
+    showQuestion(false);
+  }
+  function resumeRound() {
+    R = paused; paused = null; B = null; T = null;
+    if (R.cur && R.cur.answered) { R.pos++; R.cur = null; }
+    if (R.pos >= R.queue.length) { finishRound(); return; }
+    showQuestion(true);
+    setStreak(R.streak);
+  }
+  function midPips() {
+    var c = R.cur, done = R.results.length, fix = c.retry ? R.order.indexOf(c.q) : -1, h = "";
+    var label = c.retry ? "Second look" : "Question " + Math.min(R.n, done + (c.answered ? 0 : 1)) + " of " + R.n;
+    for (var i = 0; i < R.n; i++) {
+      var cls = i < done ? (R.results[i] ? " ok" : " no") : (i === done && !c.retry && !c.answered ? " cur" : "");
+      if (i === fix) { cls += " fix"; }
+      h += '<i class="pip' + cls + '"></i>';
+    }
+    var tag = R.practice ? "Practice" : (c.retry ? "Second look" : "");
+    setMid((tag ? '<span class="tb-file tb-tag' + (R.n > 3 ? " long" : "") + '"><b>' + tag + "</b></span>" : "") + '<div class="pips" role="img" aria-label="' + (R.practice ? "Practice round. " : "") + label + '">' + h + "</div>");
+  }
+  function clueDots(total, used) {
+    var d = "";
+    for (var i = 0; i < total; i++) { d += "<i" + (i < used ? ' class="used"' : "") + "></i>"; }
+    return '<span class="cl-dots" aria-hidden="true">' + d + "</span>";
+  }
+  /* "Ask the Inspector" waits in the bar at the bottom, in reach of a thumb. One press, one clue; when
+     both are out the button is spent and says so. */
+  function syncClueBtn() {
+    var c = R.cur, b = desk.querySelector('.play-dock [data-action="clue"]');
+    if (!b) { return; }
+    var total = c.q.clues ? c.q.clues.length : 0, had = document.activeElement === b;
+    if (c.clues >= total) {
+      b.disabled = true;
+      b.className = "clue-btn spent";
+      b.innerHTML = "<span>" + esc(L.noMoreClues) + "</span>";
+      if (had) { var f = desk.querySelector(".answers .opt:not(:disabled)"); try { if (f) { f.focus({ preventScroll: true }); } } catch (e) { /* ignore */ } }
+    } else {
+      b.innerHTML = icon("glass") + "<span>" + esc(c.clues ? L.clueButtonMore : L.clueButton) + "</span>" + clueDots(total, c.clues);
+    }
+  }
+  function showQuestion(keep) {
+    var item = R.queue[R.pos], q = item.q, c;
+    if (keep && R.cur && R.cur.q === q && !R.cur.answered) {
+      c = R.cur;
+    } else {
+      c = R.cur = { q: q, retry: item.retry, opts: q.shuffle ? shuffle(q.options) : q.options.slice(), answered: false, ok: false, picked: null, clues: 0, clueAt: 0, out: {}, line: "", extra: "" };
+    }
+    var sentence = q.type === "sentence" && q.words && q.words.length;
+    var v = el("div", "view v-play " + (sentence ? "is-sentence" : "is-choice"));
+    if (sentence) {
+      v.appendChild(buildScroll(q.words));
+      v.insertAdjacentHTML("beforeend", methodHtml(""));
+    }
+    v.appendChild(buildAnswers(c.opts));
+    var dock = el("div", "dock play-dock");
+    if (sentence) { dock.appendChild(el("p", "gloss-hint" + (save.seen.gloss ? " used" : ""), esc(L.glossHint))); }
+    if (q.clues && q.clues.length) {
+      var cb = el("button", "clue-btn");
+      cb.type = "button";
+      cb.setAttribute("data-action", "clue");
+      dock.appendChild(cb);
+    }
+    v.appendChild(dock);
+    setView("play", v);
+    layoutScroll();
+    for (var k in c.out) { if (c.out[k]) { stampOut(k, false); } }
+    midPips();
+    syncClueBtn();
+    var parts = [];
+    if (c.retry) { parts.push({ html: pickLine(L.secondChance, "sc"), cls: "b-lead" }); }
+    parts.push({ html: q.prompt });
+    if (c.clues) {
+      mood("think");
+      say(parts, { instant: true });
+    } else {
+      mood(c.retry ? "think" : "idle");
+      act(c.retry ? "think" : "point", c.retry ? 900 : 1500);
+      say(parts);
+      if (sentence) { lookAtNode(desk.querySelector(".w.t"), 1600); }
+    }
+    /* one stage height for the whole round: the tallest question still to come, with room for the
+       line he says about the answer */
+    reserveStage(R.queue.slice(R.pos).map(function (it) {
+      return [{ html: it.retry ? L.secondChance[0] : LEAD_MAX, cls: "b-lead" }, { html: it.q.prompt }];
+    }), null);
+    if (c.clues) { showClue(c.clues, false); } else { fitPlay(); }
+    later(nudge, 14000);
+  }
+  /* Before the answer everything has to be on the screen at once: the Inspector, the question, the whole
+     sentence, every answer and the clue button. Where a phone is too short for that, things make room
+     in this order: the word tip (and a written-out method folds to its strip), the method strip, the
+     Inspector's own height, the spacing. */
+  function fitPlay() {
+    var c = R && R.cur, v = desk.querySelector(".v-play");
+    if (view !== "play" || !c || c.answered || !v) { return; }
+    /* Beside the desk (wide screens) he cannot give up height, and the calm of one stage height for the
+       whole round is worth more than the method strip: there the strip goes before the stage gives way. */
+    var wide = wideLayout();
+    applyReserve(wide);
+    if (pageOver() > 0 && !v.classList.contains("snug")) { v.classList.add("snug"); applyReserve(wide); }
+    if (pageOver() > 0 && !v.classList.contains("snug2")) { v.classList.add("snug2"); applyReserve(wide); }
+    if (wide) { applyReserve(); }
+    if (!wide && pageOver() > 0) { squeezeInspector(v.lastElementChild); applyReserve(); }
+    if (pageOver() > 0 && !v.classList.contains("tight")) { v.classList.add("tight"); applyReserve(); }
+    /* last of all, on a second look, the line about it having slipped away goes: the question stays */
+    if (pageOver() > 0) { app.classList.add("terse"); applyReserve(); }
+  }
+  /* after a quiet while he gets thoughtful and the clue button glints */
+  function nudge() {
+    var c = R && R.cur;
+    if (view !== "play" || !c || c.answered || c.clues > 0 || nbOpen || cfOpen) { return; }
+    var b = desk.querySelector('.play-dock [data-action="clue"]:not([disabled])');
+    if (!b) { return; }
+    mood("think");
+    b.classList.add("nudge");
+  }
+
+  /* clues: he lays a note on the desk, and his glass visits the words it talks about */
+  function clearEvidence() {
+    var list = desk.querySelectorAll(".w.ev");
+    for (var i = 0; i < list.length; i++) { list[i].classList.remove("ev"); list[i].classList.remove("seen"); }
+  }
+  /* The words of the sentence a clue is about, in the order it speaks of them. A word counts when the
+     clue names it in Latin, names its ending ("-am"), or names it in English ("the roses", "the verb").
+     A clue that names nothing is about the mystery word itself, so no clue is left without a ring. */
+  function evidenceButtons(clue) {
+    var c = R && R.cur, hits = [];
+    if (!c || !c.q.words) { return hits; }
+    var text = " " + plain(clue.say).toLowerCase() + " ";
+    var btns = desk.querySelectorAll(".scroll .w"), LET = /[a-z\u00c0-\u024f]/;
+    function find(f, english) {
+      var from = 0, p;
+      while ((p = text.indexOf(f, from)) >= 0) {
+        var rest = text.slice(p + f.length, p + f.length + 3);
+        if (!LET.test(text.charAt(p - 1)) && (english ? /^(s|es|d|ed)?([^a-z\u00c0-\u024f]|$)/.test(rest) : !LET.test(rest.charAt(0)))) { return p; }
+        from = p + 1;
+      }
+      return -1;
+    }
+    c.q.words.forEach(function (w, i) {
+      var f = String(w.w).toLowerCase(), at = find(f, false);
+      text.replace(/[^a-z\u00c0-\u024f]-([a-z\u00c0-\u024f]+)/g, function (m0, s, pos) {
+        if (f.length > s.length && f.slice(-s.length) === s && (at < 0 || pos < at)) { at = pos; }
+        return m0;
+      });
+      if (at < 0) {
+        var terms = String(w.g || "").toLowerCase().replace(/\([^)]*\)/g, " ").split(/[^a-z]+/);
+        if (w.r === "verb") { terms.push("verb"); }
+        terms.forEach(function (term) {
+          if (term.length < 4) { return; }
+          var p = find(term, true);
+          if (p < 0 && /s$/.test(term)) { p = find(term.slice(0, -1), true); }
+          if (p >= 0 && (at < 0 || p < at)) { at = p; }
+        });
+      }
+      if (at >= 0 && btns[i]) { hits.push({ b: btns[i], at: at, i: i }); }
+    });
+    hits.sort(function (x, y) { return x.at - y.at || x.i - y.i; });
+    var out = hits.slice(0, 3).map(function (h) { return h.b; });
+    if (!out.length) { var tb = desk.querySelector(".scroll .w.t"); if (tb) { out.push(tb); } }
+    return out;
+  }
+  function showClue(n, fresh) {
+    var c = R.cur, q = c.q, total = q.clues.length, clue = q.clues[n - 1];
+    var v = desk.querySelector(".v-play");
+    if (!clue || !v) { return; }
+    var a = document.activeElement, i, k;
+    var hadFocus = !!(a && a.getAttribute && (a.getAttribute("data-action") === "clue" || a.hasAttribute("data-clue-tab")));
+    var wasTab = !!(a && a.hasAttribute && a.hasAttribute("data-clue-tab"));
+    var marks = flipMark(v);
+    var note = v.querySelector(".clue-note");
+    if (!note) {
+      note = el("section", "clue-note");
+      note.setAttribute("aria-label", "The Inspector's clues");
+      v.insertBefore(note, v.firstChild);
+      v.classList.add("has-clue");
+    }
+    var h = '<div class="cn-head"><span class="cn-tag">' + icon("glass") + "<span>Clue " + n + " of " + total + "</span></span>";
+    if (c.clues > 1) {
+      h += '<span class="cn-tabs">';
+      for (i = 1; i <= c.clues; i++) { h += '<button type="button" class="cn-tab" data-clue-tab="' + i + '" aria-pressed="' + (i === n ? "true" : "false") + '" aria-label="Show clue ' + i + '">' + i + "</button>"; }
+      h += "</span>";
+    }
+    note.innerHTML = h + '</div><div class="cn-text"></div>';
+    dropLens();
+    clearEvidence();
+    if (!fresh) { for (k in c.out) { if (c.out[k]) { stampOut(k, false); } } }
+    syncClueBtn();
+    var btns = evidenceButtons(clue);
+    say([{ html: clue.say, type: fresh }], {
+      into: note.querySelector(".cn-text"), live: false,
+      onDone: function () {
+        if (c.answered || R.cur !== c) { return; }
+        tourEvidence(btns, fresh, function () {
+          if (!fresh || c.answered || R.cur !== c) { return; }
+          mood("think");
+          outKeys(clue).forEach(function (key) { stampOut(key, true); });
+        });
+      }
+    });
+    announce("Clue " + n + " of " + total + ". " + plain(clue.say) + (n === total && fresh ? " " + plain(L.noMoreClues) : ""));
+    fitPlay();
+    flipGlide(marks);
+    if (hadFocus) {
+      var f = wasTab ? note.querySelector('.cn-tab[aria-pressed="true"]') : null;
+      if (!f) { f = desk.querySelector('.play-dock [data-action="clue"]:not([disabled])') || desk.querySelector(".answers .opt:not(:disabled)"); }
+      try { if (f) { f.focus({ preventScroll: true }); } } catch (e) { /* ignore */ }
+    }
+  }
+  function askClue() {
+    var c = R && R.cur;
+    if (view !== "play" || !c || c.answered) { return; }
+    var total = c.q.clues ? c.q.clues.length : 0, t = now(), k;
+    if (c.clues >= total) { return; }
+    /* one press, one clue: a double tap must not spend the second clue before the first can be read */
+    if (c.clueAt && (t - c.clueAt < 450 || (!speech.done && speech.box !== bText))) { return; }
+    for (k in c.out) { if (c.out[k]) { stampOut(k, false); } }
+    var clue = c.q.clues[c.clues];
+    c.clues++;
+    c.clueAt = t;
+    R.clues++;
+    outKeys(clue).forEach(function (key) { c.out[key] = true; });
+    hideGloss();
+    Sfx.play("clue");
+    mood("search");
+    showClue(c.clues, true);
+  }
+
+  /* answering */
+  function buildSheet(c, ok) {
+    var q = c.q, right = optByKey(c.opts, q.answer), mine = optByKey(c.opts, c.picked);
+    var s = el("section", "sheet " + (ok ? "good" : "bad")), h = "", job = right ? jobOf(right) : "";
+    s.setAttribute("aria-label", "What the Inspector found");
+    var jobHtml = job ? '<span class="sh-job">' + esc(job) + "</span>" : "";
+    h += '<div class="sh-head"><div class="sh-insp"></div><span class="sh-ic">' + icon(ok ? "check" : "x") + '</span><div class="sh-ttl"><div class="sh-say"></div>' +
+      (ok ? '<p class="sh-line"><b>' + (c.retry ? "Got it this time" : "Correct") + "</b>" + optionChip(right, "pop") + jobHtml + "</p>"
+        : '<p class="sh-line sh-not"><b>Not</b>' + optionChip(mine, "no") + '</p><p class="sh-line"><b>It is</b>' + optionChip(right, "pop") + jobHtml + "</p>") + "</div></div>";
+    h += '<p class="sh-q"><b>The question:</b> ' + rich(q.prompt) + "</p>";
+    h += '<p class="sh-why">' + rich(q.why) + "</p>";
+    if (!ok && !c.retry) { h += '<p class="sh-note">' + icon("replay") + "<span>" + esc(L.retryNote) + "</span></p>"; }
+    s.innerHTML = h;
+    return s;
+  }
+  /* the answers make way for the case note, but not before the tapped card has been seen to get its mark */
+  function ghostAnswers(box, rect, v) {
+    if (reduced() || !rect.width) { return; }
+    var g = box.cloneNode(true), list = g.querySelectorAll("button"), vr = v.getBoundingClientRect(), sheet = v.querySelector(".sheet");
+    for (var i = 0; i < list.length; i++) { list[i].removeAttribute("data-k"); list[i].setAttribute("tabindex", "-1"); list[i].disabled = true; }
+    g.className += " ghost";
+    g.setAttribute("aria-hidden", "true");
+    g.removeAttribute("role");
+    g.removeAttribute("aria-label");
+    var top = sheet ? sheet.getBoundingClientRect().top - vr.top : rect.top - vr.top;
+    g.style.left = (rect.left - vr.left) + "px";
+    g.style.top = top + "px";
+    g.style.width = rect.width + "px";
+    g.style.height = rect.height + "px";
+    g.style.setProperty("--dy", (rect.top - vr.top - top).toFixed(1) + "px");
+    v.appendChild(g);
+    setTimeout(function () { if (g.parentNode) { g.parentNode.removeChild(g); } }, 620);
+  }
+  /* what he says about the answer: in his bubble, above the question he asked, or (when the scene has
+     folded away on a small phone) beside him in the case note */
+  function sayReaction(instant) {
+    var c = R.cur, compact = app.classList.contains("compact"), into = desk.querySelector(".sh-say");
+    var parts = [{ html: c.line, cls: "b-lead" }];
+    if (c.extra) { parts.push({ html: c.extra, cls: "b-lead" }); }
+    if (compact && into) {
+      say(parts, { into: into, live: false, instant: instant });
+      return;
+    }
+    if (into) { into.textContent = ""; }
+    parts.push({ html: c.q.prompt, cls: "b-q", type: false });
+    say(parts, { live: false, instant: instant });
+    applyReserve();
+  }
+  /* The answered screen has to show the whole lesson at once: the sentence with every job label, the
+     verdict, the meaning, the whole explanation and the way on. On a single-column screen that cannot
+     hold all of that under the big scene, the scene folds away and the Inspector hops into the note. */
+  function fitAnswered(first) {
+    var c = R && R.cur, v = desk.querySelector(".v-play.answered");
+    if (view !== "play" || !c || !c.answered || !v) { return; }
+    var compact = app.classList.contains("compact"), wide = wideLayout();
+    if (compact && wide) {
+      app.classList.remove("compact");
+      undockInspector();
+      sayReaction(true);
+      return;
+    }
+    if (compact || wide) { return; }
+    var need = (v.classList.contains("is-sentence") && window.innerHeight < 700) || pageOver() > 0;
+    if (!need) { return; }
+    var from = first ? inspFig.getBoundingClientRect() : null;
+    app.classList.add("compact");
+    stage.style.minHeight = "";
+    dockInspector(v.querySelector(".sh-insp"), from);
+    if (!first) { sayReaction(true); }
+  }
+  /* if even the folded screen is too long, the reminder that the question will come back gives way: he
+     says so again when it does */
+  function trimAnswered() {
+    var sheet = desk.querySelector(".sheet");
+    if (!sheet || !app.classList.contains("compact")) { return; }
+    sheet.classList.remove("terse");
+    if (pageOver() > 0) { sheet.classList.add("terse"); }
+  }
+  function answer(k) {
+    var c = R && R.cur;
+    if (view !== "play" || !c || c.answered) { return; }
+    if (c.out[k]) { stampOut(k, false); return; }
+    var q = c.q, ok = k === q.answer, i;
+    c.answered = true;
+    c.ok = ok;
+    c.picked = k;
+    if (!c.retry) {
+      R.results.push(ok);
+      if (ok) { R.right++; R.streak++; R.best = Math.max(R.best, R.streak); }
+      else { R.streak = 0; R.missed.push(q); R.queue.push({ q: q, retry: true }); }
+      setStreak(R.streak);
+    } else if (ok) { R.fixed[q.id] = true; }
+    clearViewTimers();
+    hideGloss();
+    dropLens();
+    clearEvidence();
+    var v = desk.querySelector(".v-play"), sentence = v.classList.contains("is-sentence");
+    var dock = v.querySelector(".play-dock"), box = v.querySelector(".answers"), list = box.querySelectorAll(".opt");
+    var marks = flipMark(v), boxRect = box.getBoundingClientRect();
+    var note = v.querySelector(".clue-note");
+    if (note) { v.removeChild(note); }
+    v.classList.remove("has-clue"); v.classList.remove("snug"); v.classList.remove("snug2"); v.classList.remove("tight");
+    app.classList.remove("terse");
+    box.classList.add("locked");
+    for (i = 0; i < list.length; i++) {
+      var b = list[i], bk = b.getAttribute("data-k");
+      b.disabled = true;
+      if (bk === q.answer) { b.classList.add("right"); b.querySelector(".o-mark").innerHTML = icon("check"); }
+      else if (bk === k) { b.classList.add("wrong"); b.querySelector(".o-mark").innerHTML = icon("x"); }
+    }
+    revealWords(null);
+    var wrap = v.querySelector(".scroll-wrap");
+    if (wrap && q.translation) { wrap.appendChild(el("p", "s-tr", "“" + rich(q.translation) + "”")); }
+    midPips();
+    v.classList.add("answered");
+    v.insertBefore(buildSheet(c, ok), dock);
+    dock.className = "dock stick play-dock";
+    dock.innerHTML = '<button type="button" class="btn primary" data-primary>' + (R.pos >= R.queue.length - 1 ? "See the verdict" : "Next") + icon("next") + "</button>";
+    app.style.removeProperty("--insp");
+    fitInspector();
+
+    c.line = pickLine(ok ? L.correct : L.wrong, ok ? "ok" : "no");
+    c.extra = ok && !c.retry && L.streak && L.streak[String(R.streak)] ? L.streak[String(R.streak)] : "";
+    /* try the roomy layout first; fitAnswered folds the scene away if the lesson does not fit under it */
+    say([{ html: c.line, cls: "b-lead" }, { html: c.extra, cls: "b-lead" }, { html: q.prompt, cls: "b-q", type: false }], { instant: true, live: false });
+    applyReserve();
+    fitAnswered(true);
+    if (sentence) { ghostAnswers(box, boxRect, v); }
+    flipGlide(marks);
+    if (kb) {
+      var p = dock.querySelector("[data-primary]");
+      try { if (p) { p.focus({ preventScroll: true }); } } catch (e) { /* ignore */ }
+    }
+    /* He reacts, and then his eyes go to what the answer was about (the word and its new label, or the
+       right card) while the player reads; he does not stand there with his eyes shut. */
+    var about = sentence ? (v.querySelector(".wu .w.t") || wrap) : optButton(q.answer);
+    if (ok) {
+      act("cheer", c.extra ? 2200 : 1500);
+      mood("proud");
+      Sfx.play("correct");
+      later(function () { sparks(desk.querySelector(".sheet .chip.pop"), 8); }, 300);
+      if (c.extra) { later(function () { Sfx.play("star"); }, 380); }
+      later(function () { mood("idle"); lookAtNode(about, 1700); }, c.extra ? 3000 : 2300);
+    } else {
+      mood("oops");
+      Sfx.play("wrong");
+      later(function () { mood("think"); lookAtNode(about, 1900); }, 1300);
+      later(function () { mood("idle"); }, 4200);
+    }
+    sayReaction(false);
+    trimAnswered();
+    var right = optByKey(c.opts, q.answer);
+    announce(plain(c.line) + " " + (ok ? "" : "The answer is " + (right ? right.label : "") + ". ") + (q.translation ? "“" + plain(q.translation) + "” " : "") + plain(q.why) + (!ok && !c.retry ? " " + L.retryNote : ""));
+  }
+  function nextQuestion() {
+    if (!R || !R.cur || !R.cur.answered || view !== "play") { return; }
+    Sfx.play("tap");
+    R.pos++;
+    if (R.pos >= R.queue.length) { finishRound(); } else { showQuestion(false); }
+  }
+
+  /* ------------------------------------------------------------ results */
+  function finishRound() {
+    var file = R.file, id = file.id, stars = starsFor(R.right / R.n);
+    var res = { stars: stars, best: false, keep: 0, solo: false, rankUp: "", practice: R.practice };
+    R.done = true;
+    paused = null;
+    if (!R.practice) {
+      var before = rankFor(totalStars()), prev = save.stars[id] || 0;
+      if (stars > prev) { save.stars[id] = stars; res.best = prev > 0; } else if (stars < prev) { res.keep = prev; }
+      if (stars === 3 && R.clues === 0) { res.solo = true; save.solo[id] = true; }
+      save.seen["round:" + id] = true;
+      persist();
+      var after = rankFor(totalStars());
+      if (after.index > before.index) { res.rankUp = after.title; }
+    }
+    showResults(res);
+  }
+  function showResults(res) {
+    var file = R.file, n = R.n, missed = R.missed.slice(), stars = res.stars, i;
+    var nextF = FILES[FILES.indexOf(file) + 1] || null;
+    var v = el("div", "view v-results"), h = "";
+    h += '<section class="verdict"><span class="chip-file">' + (res.practice ? "Practice round" : "File " + file.n) + '</span><h1 class="vd-title">' + txt(file.title) + "</h1>";
+    if (res.practice) {
+      h += '<div class="vd-big">' + icon(missed.length ? "glass" : "check", "") + "</div>";
+    } else {
+      h += '<div class="vd-stars" role="img" aria-label="' + stars + ' of 3 stars">';
+      for (i = 0; i < 3; i++) { h += '<span class="vsw"><svg class="vs" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-star"></use></svg></span>'; }
+      h += '</div><div class="stamp-row"><span class="stamp' + (stars >= 2 ? "" : " still") + '">' + esc(stars >= 2 ? L.stamp.closed : L.stamp.open) + "</span></div>";
+    }
+    h += '<ul class="vd-stats"><li><b>' + R.right + "/" + n + "</b><span>" + (res.practice ? "fixed" : "first try") + "</span></li><li><b>" + R.best + "</b><span>best streak</span></li><li><b>" + R.clues + "</b><span>" + (R.clues === 1 ? "clue used" : "clues used") + "</span></li></ul>";
+    if (res.solo) { h += '<p class="vd-extra vd-solo"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-ribbon"></use></svg><span>' + esc(L.solo) + "</span></p>"; }
+    var rankLine = res.rankUp ? fill(L.rankUp, { rank: res.rankUp }) : "";
+    if (res.rankUp) {
+      h += '<div class="vd-extra vd-rank"><svg viewBox="0 0 48 52" aria-hidden="true" focusable="false"><use href="#i-badge"></use></svg><p>' + rich(rankLine) + "</p>" + rankRowHtml(totalStars()) + "</div>";
+    }
+    if (res.best) { h += '<p class="vd-best">New best</p>'; }
+    else if (res.keep) { h += '<p class="vd-best keep">Your best here is still ' + res.keep + (res.keep === 1 ? " star" : " stars") + "</p>"; }
+    h += "</section>";
+
+    /* one main way on, and the others in a single row under it */
+    var main = missed.length ? "practice" : (nextF ? "next" : "home");
+    function btn(a, label, ic, small) {
+      var p = a === main;
+      return '<button type="button" class="btn ' + (p ? "primary" : "ghost") + '" data-action="' + a + '"' + (p ? " data-primary" : "") + ">" + (ic && !(p && a === "next") ? icon(ic) : "") +
+        "<span>" + label + (p && small ? "<small>" + txt(small) + "</small>" : "") + "</span>" + (p && a === "next" ? icon("next") : "") + "</button>";
+    }
+    var acts = [];
+    if (missed.length) { acts.push(["practice", res.practice ? "Practice them again" : "Practice my " + (missed.length === 1 ? "miss" : missed.length + " misses"), "glass", ""]); }
+    if (nextF) { acts.push(["next", "Next file", "next", nextF.title]); }
+    acts.push(["again", "Play again", "replay", ""]);
+    acts.push(["home", "Case files", "files", ""]);
+    var first = "", rest = "";
+    acts.forEach(function (a) { if (a[0] === main) { first = btn(a[0], a[1], a[2], a[3]); } else { rest += btn(a[0], a[1], a[2], a[3]); } });
+    h += '<div class="res-actions">' + first + '<div class="res-more">' + rest + "</div></div>";
+
+    if (missed.length) {
+      h += '<section class="misses"><h2>' + (res.practice ? "Still on the loose" : "Notes on the ones that got away") + "</h2>";
+      missed.forEach(function (q) {
+        var right = optByKey(q.options, q.answer), fixed = !!R.fixed[q.id];
+        h += '<article class="miss">' + (q.words ? '<p class="miss-q" lang="la">' + sentenceText(q.words, true) + "</p>" + (q.translation ? '<p class="miss-tr">“' + rich(q.translation) + "”</p>" : "") : '<p class="miss-p">' + rich(q.prompt) + "</p>") +
+          '<p class="miss-a"><span>Answer</span>' + (right ? optionChip(right) : "") + (fixed ? '<span class="miss-fixed">' + icon("check") + "Fixed on the second look</span>" : "") + '</p><p class="miss-why">' + rich(q.why) + "</p></article>";
+      });
+      h += "</section>";
+    }
+    v.innerHTML = h;
+    setView("results", v);
+    midFile(file);
+
+    var card = v.querySelector(".verdict"), starEls = v.querySelectorAll(".vs"), stamp = v.querySelector(".stamp");
+    var stats = v.querySelector(".vd-stats"), extras = v.querySelectorAll(".vd-extra"), actions = v.querySelector(".res-actions");
+    function starOn(idx) { starEls[idx].classList.add("on"); Sfx.play("star"); sparks(starEls[idx], 7); lookAtNode(starEls[idx], 600); }
+    function stampOn() {
+      if (!stamp) { return; }
+      stamp.classList.add("in");
+      card.classList.add("hit");
+      Sfx.play("stamp");
+      lookAtNode(stamp, 1200);
+      if (stars >= 2) {
+        /* the paper flies from the stamp as it lands; a perfect file also gets a shower that is gone
+           before it reaches the buttons */
+        later(function () { burst(stamp, stars === 3 ? 22 : 14); }, 150);
+        later(function () { Sfx.play("fanfare"); }, 260);
+        if (stars === 3) { confetti(30 + (res.rankUp ? 12 : 0), card.getBoundingClientRect().bottom); }
+      }
+    }
+    function extraOn(idx) {
+      extras[idx].classList.add("in");
+      lookAtNode(extras[idx], 1200);
+      if (extras[idx].classList.contains("vd-rank")) {
+        /* a promotion is its own beat: the badge lands, paper flies from it, and he says it himself */
+        Sfx.play("rankup");
+        burst(extras[idx].querySelector("svg"), 18);
+        act("cheer", 2400);
+        say([{ html: line, type: false }, { html: rankLine, cls: "b-lead" }]);
+      } else { Sfx.play("star"); }
+    }
+    var line, t = 250;
+    if (res.practice) {
+      line = missed.length ? L.practiceDone.some : L.practiceDone.all;
+      if (missed.length) { mood("point"); } else { act("cheer", 1800); mood("proud"); later(function () { burst(v.querySelector(".vd-big"), 16); }, 200); Sfx.play("fanfare"); }
+      stats.classList.add("in");
+    } else {
+      line = L.results[String(stars)] || "";
+      if (stars === 3) { act("cheer", 2400); mood("proud"); }
+      else if (stars === 2) { act("cheer", 1500); mood("proud"); }
+      else if (stars === 1) { mood("point"); }
+      else { mood("think"); }
+      if (reduced()) {
+        for (i = 0; i < stars; i++) { starEls[i].classList.add("on"); }
+        stamp.classList.add("in");
+        stats.classList.add("in");
+        for (i = 0; i < extras.length; i++) { extras[i].classList.add("in"); }
+        Sfx.play("stamp");
+      } else {
+        for (i = 0; i < stars; i++) { later(starOn.bind(null, i), t + i * 250); }
+        t += stars * 250 + (stars ? 100 : 150);
+        later(stampOn, t);
+        later(function () { stats.classList.add("in"); }, t + 250);
+        for (i = 0; i < extras.length; i++) { later(extraOn.bind(null, i), t + 500 + i * 260); }
+      }
+    }
+    if (rankLine && (res.practice || reduced())) { say([{ html: line }, { html: rankLine, cls: "b-lead" }]); } else { sayLine(line); }
+    if (rankLine) { reserveStage([[{ html: line }, { html: rankLine, cls: "b-lead" }]], null); }
+    squeezeInspector(actions);
+  }
+
+  /* ------------------------------------------------------------ actions */
+  function toggleSound() {
+    save.sound = !save.sound;
+    Sfx.setMuted(!save.sound);
+    persist();
+    syncSound();
+    if (save.sound) { Sfx.play("tap"); }
+  }
+  var ACT = {
+    home: goHome,
+    notebook: openNotebook,
+    sound: toggleSound,
+    clue: askClue,
+    reset: openConfirm,
+    skip: function () { if (view === "briefing" && B) { briefSkip(); } else if (view === "training" && T) { finishTraining(); } },
+    practice: function () { if (view === "results" && R && R.missed.length) { startRound(R.file, R.missed.slice()); } },
+    next: function () { var f = R ? FILES[FILES.indexOf(R.file) + 1] : null; if (view === "results" && f) { paused = null; briefing(f); } },
+    again: function () { if (view === "results" && R) { startRound(R.file); } },
+    hear: function () { if (view === "briefing" && B) { briefing(B.file, { hear: true }); } },
+    retrain: function () { if (view === "briefing" && B && B.file.training) { training(B.file); } }
+  };
+  var QUIET = { clue: 1, sound: 1, skip: 1, reset: 1 };
+  function primary(btn) {
+    if (view === "home") { Sfx.play("tap"); openFile(btn.getAttribute("data-open")); }
+    else if (view === "briefing" && B) { briefPrimary(); }
+    else if (view === "training" && T) { trainPrimary(); }
+    else if (view === "play") { nextQuestion(); }
+  }
+  /* The second tap of a double tap must not press a control that was not there for the first one: a
+     double tap on an answer cannot press Next, and a double tap on Next cannot answer the next question
+     or spend a clue. Only a true second tap is held back, and never a first one, however soon it comes
+     after the screen changed and wherever it lands:
+     - with a mouse the browser itself counts the clicks, and only its count (2 or more) is believed;
+     - with a finger or a pen it is a touch on the same spot that began less than a quarter of a second
+       after the last press, sooner than anyone could have seen what the press brought up.
+     Either way it has to be the same spot and another control. The same button again, another spot and
+     every key always go through, and so does anything after 0.8 s, so nothing slows a fast player. */
+  var lastTap = { t: 0, x: 0, y: 0, el: null }, ptrAt = 0, ptrDown = 0, ptrKind = "";
+  document.addEventListener("pointerdown", function (e) { ptrKind = e.pointerType || ""; ptrDown = now(); }, true);
+  document.addEventListener("pointerup", function () { ptrAt = now(); }, true);
+  function strayTap(e, t) {
+    var tm = now(), byPointer = tm - ptrAt < 700;
+    if (!(e.detail > 0 || byPointer)) { return false; }
+    if (lastTap.el && lastTap.el !== t && Math.abs(e.clientX - lastTap.x) < 24 && Math.abs(e.clientY - lastTap.y) < 24) {
+      var finger = byPointer && ptrKind !== "" && ptrKind !== "mouse";
+      if (finger ? ptrDown - lastTap.t < 250 : (e.detail >= 2 && tm - lastTap.t < 800)) { return true; }
+    }
+    lastTap = { t: tm, x: e.clientX, y: e.clientY, el: t };
+    return false;
+  }
+  document.addEventListener("click", function (e) {
+    var t = e.target && e.target.closest ? e.target.closest("button, a") : null;
+    if (!t || t.disabled) { return; }
+    if (strayTap(e, t)) { e.preventDefault(); return; }
+    var a = t.getAttribute("data-action");
+    if (a && ACT[a]) {
+      if (!QUIET[a]) { Sfx.play("tap"); }
+      ACT[a](t);
+      return;
+    }
+    if (t.hasAttribute("data-clue-tab")) { Sfx.play("tap"); if (R && R.cur && !R.cur.answered) { showClue(+t.getAttribute("data-clue-tab"), false); } return; }
+    if (t.hasAttribute("data-primary")) { primary(t); return; }
+    if (t.hasAttribute("data-file")) { Sfx.play("tap"); openFile(t.getAttribute("data-file")); return; }
+    if (t.hasAttribute("data-k")) {
+      if (view === "training" && T) { trainSuspect(t.getAttribute("data-k"), t); } else { answer(t.getAttribute("data-k")); }
+      return;
+    }
+    if (t.hasAttribute("data-word")) {
+      var wi = +t.getAttribute("data-word");
+      if (view === "training" && T) { trainWord(wi, t); }
+      else if (view === "play" && R && R.cur && R.cur.q.words && R.cur.q.words[wi]) { Sfx.play("tap"); showGloss(t, R.cur.q.words[wi]); }
+      return;
+    }
+    if (t.hasAttribute("data-choice") && view === "training" && T) { trainChoice(+t.getAttribute("data-choice"), t); }
+  });
+
+  /* ----------------------------------------------------------- keyboard */
+  document.addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) { return; }
+    var k = e.key;
+    if (k === "Tab" || k === "Enter" || k === " " || /^Arrow/.test(k) || /^[1-4]$/.test(k)) { kb = true; }
+    /* a held key is one press: it must not run through a whole briefing */
+    if (e.repeat && (k === "Enter" || k === " " || /^[1-9a-z]$/i.test(k))) { e.preventDefault(); return; }
+    if (cfOpen) {
+      if (k === "Escape") { e.preventDefault(); closeConfirm(); } else if (k === "Tab") { trapTab(e, cf); }
+      return;
+    }
+    if (nbOpen) {
+      if (k === "Escape" || k === "n" || k === "N") { e.preventDefault(); closeNotebook(); } else if (k === "Tab") { trapTab(e, nb); }
+      return;
+    }
+    if (k === "Escape") { hideGloss(); return; }
+    if (!speech.done && k.length === 1 && k !== " ") { finishTyping(); }
+    var ae = document.activeElement;
+    var onControl = !!(ae && ae !== document.body && ae.matches && ae.matches("button:not([disabled]), a[href], input, select, textarea"));
+    var list, b;
+    if (/^[1-4]$/.test(k)) {
+      if (view === "play" && R && R.cur && !R.cur.answered) { list = desk.querySelectorAll(".answers .opt"); }
+      else if (view === "training" && T && !T.outro && T.phase === "ask") {
+        var s = T.tr.steps[T.i];
+        list = s.kind === "pick" ? T.slot.querySelectorAll(".choice") : (s.kind === "answer" ? desk.querySelectorAll(".answers .opt") : null);
+      }
+      b = list ? list[+k - 1] : null;
+      if (b && !b.disabled) { e.preventDefault(); b.click(); }
+      return;
+    }
+    if (k === "Enter" || k === " ") {
+      if (onControl) { return; }
+      if (view === "play" && R && R.cur && R.cur.answered) { e.preventDefault(); nextQuestion(); return; }
+      b = primaryBtn();
+      if (b) { e.preventDefault(); b.click(); }
+      return;
+    }
+    if (k === "c" || k === "C") {
+      b = view === "play" ? desk.querySelector('[data-action="clue"]:not([disabled])') : null;
+      if (b) { e.preventDefault(); b.click(); }
+      return;
+    }
+    if (k === "m" || k === "M") { e.preventDefault(); toggleSound(); return; }
+    if (k === "n" || k === "N") { e.preventDefault(); openNotebook(); }
+  });
+
+  /* when the window changes size (or the fonts arrive) every screen fits itself again */
+  function refit() {
+    hideGloss();
+    layoutScroll();
+    var c = view === "play" && R ? R.cur : null;
+    if (c && c.answered) {
+      fitAnswered(false);
+      if (!docked) { fitInspector(); applyReserve(); }
+      trimAnswered();
+      return;
+    }
+    app.style.removeProperty("--insp");
+    fitInspector();
+    if (c) {
+      var v = desk.querySelector(".v-play");
+      if (v) { v.classList.remove("snug"); v.classList.remove("snug2"); v.classList.remove("tight"); }
+      app.classList.remove("terse");
+      fitPlay();
+      placeLens();
+      return;
+    }
+    applyReserve();
+    if (view === "training" && T) { trainFit(); }
+    else if (view === "briefing" && B) { squeezeInspector(B.view.lastElementChild); applyReserve(); }
+    else if (view === "results") { squeezeInspector(desk.querySelector(".res-actions")); }
+  }
+  var resizeRaf = 0;
+  function onResize() { resizeRaf = 0; refit(); }
+  window.addEventListener("resize", function () {
+    if (resizeRaf) { return; }
+    resizeRaf = window.requestAnimationFrame ? requestAnimationFrame(onResize) : setTimeout(onResize, 60);
+  });
+
+  /* ------------------------------------------------- test contract (SPEC 7.3) */
+  window.CD_TEST = {
+    state: function () {
+      var c = view === "play" && R ? R.cur : null;
+      var fileId = null;
+      if (view === "briefing" && B) { fileId = B.file.id; }
+      else if (view === "training" && T) { fileId = T.file.id; }
+      else if ((view === "play" || view === "results") && R) { fileId = R.file.id; }
+      return {
+        view: view, fileId: fileId, questionId: c ? c.q.id : null, answered: !!(c && c.answered), retry: !!(c && c.retry),
+        cluesShown: c ? c.clues : 0, stars: starsCopy()
+      };
+    },
+    hint: function () {
+      if (view === "play" && R && R.cur && !R.cur.answered) { return '[data-k="' + selEsc(R.cur.q.answer) + '"]'; }
+      if (view === "training" && T) { return trainHint(); }
+      return "[data-primary]";
+    },
+    wrong: function () {
+      var c = view === "play" && R ? R.cur : null;
+      if (!c || c.answered) { return null; }
+      for (var i = 0; i < c.opts.length; i++) {
+        if (c.opts[i].k !== c.q.answer && !c.out[c.opts[i].k]) { return '[data-k="' + selEsc(c.opts[i].k) + '"]'; }
+      }
+      return null;
+    }
+  };
+
+  /* --------------------------------------------------------------- start */
+  loadSave();
+  try { Sfx.setMuted(!save.sound); } catch (e) { /* ignore */ }
+  syncSound();
+  buildNotebook();
+  home();
+  /* Both fonts come in two files (plain letters, and the letters with a long mark). All four are asked
+     for now, so that no line changes its height in the middle of a case, and every screen fits itself
+     again whenever one arrives. */
+  if (document.fonts) {
+    try {
+      if (document.fonts.load) { ["500 16px 'Nunito Variable'", "600 16px 'Alegreya Variable'"].forEach(function (f) { document.fonts.load(f, "a\u0101"); }); }
+      if (document.fonts.addEventListener) { document.fonts.addEventListener("loadingdone", function () { refit(); }); }
+      if (document.fonts.ready && document.fonts.ready.then) { document.fonts.ready.then(function () { refit(); }); }
+    } catch (e) { /* ignore */ }
+  }
+})();

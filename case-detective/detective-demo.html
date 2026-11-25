@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#070d1f">
+<title>Inspector Cāsus · every mood</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23b3202a'/%3E%3Ccircle cx='28' cy='28' r='14' fill='%23c6ecfa' stroke='%23e2a93c' stroke-width='6'/%3E%3Cpath d='M40 40l14 14' stroke='%232b1d14' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  @font-face { font-family: "Nunito Variable"; font-style: normal; font-display: swap; font-weight: 200 1000; src: url(fonts/nunito-latin-ext-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+  @font-face { font-family: "Nunito Variable"; font-style: normal; font-display: swap; font-weight: 200 1000; src: url(fonts/nunito-latin-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+  @font-face { font-family: "Alegreya Variable"; font-style: normal; font-display: swap; font-weight: 400 900; src: url(fonts/alegreya-latin-ext-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+  @font-face { font-family: "Alegreya Variable"; font-style: normal; font-display: swap; font-weight: 400 900; src: url(fonts/alegreya-latin-wght-normal.woff2) format("woff2-variations"); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+  :root {
+    --night-0: #070d1f; --night-1: #0c1630; --night-2: #13244a; --night-3: #1e3a6e;
+    --wood-0: #3a2015; --wood-1: #54301d; --wood-2: #6f4126;
+    --parch: #fbf3dc; --parch-2: #f1e2bb; --parch-3: #dcc590; --cream: #f8ecd0;
+    --ink: #2b1d14; --ink-2: #5c4636;
+    --brass: #e2a93c; --brass-lt: #ffe39a; --brass-dk: #a8721e; --brass-ink: #2c1a05;
+    --red: #b3202a; --red-lt: #e2584f; --red-dk: #7c121b;
+    --f-ui: "Nunito Variable", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --f-serif: "Alegreya Variable", Georgia, "Times New Roman", serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; padding: 0 0 56px; color: var(--cream); font: 500 16px/1.5 var(--f-ui); -webkit-font-smoothing: antialiased;
+    background: var(--night-1) linear-gradient(180deg, #172a55 0, #101e40 320px, #0a1228 900px) no-repeat; min-height: 100vh;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  header.top { padding: 28px 0 8px; }
+  h1 { margin: 0 0 6px; font: 800 clamp(1.8rem, 5vw, 2.6rem)/1.1 var(--f-serif); color: var(--brass-lt); letter-spacing: .01em; }
+  h2 { margin: 0 0 12px; font: 800 1.35rem/1.2 var(--f-serif); color: var(--cream); }
+  p { margin: 0 0 12px; max-width: 64ch; }
+  a { color: var(--brass-lt); }
+  a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--brass-lt); outline-offset: 3px; }
+  section { margin-top: 26px; }
+
+  /* buttons: brass for actions, red when a switch is on */
+  button {
+    font: 800 15px/1.2 var(--f-ui); min-height: 44px; padding: 9px 16px; border-radius: 12px; cursor: pointer; color: var(--brass-ink);
+    border: 2px solid #7a4e10; background: linear-gradient(180deg, #ffe596, #d99a2b); box-shadow: 0 3px 0 #7a4e10; -webkit-tap-highlight-color: transparent;
+  }
+  button:active { transform: translateY(2px); box-shadow: 0 1px 0 #7a4e10; }
+  button.plain { color: var(--ink); background: var(--parch); border-color: #b89a5e; box-shadow: 0 3px 0 #b89a5e; text-transform: capitalize; }
+  button[aria-pressed="true"] { color: #fff; background: linear-gradient(180deg, #c8323a, #9c1a24); border-color: var(--red-dk); box-shadow: 0 3px 0 var(--red-dk); }
+  .group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+  .group > span { flex: 0 0 100%; font: 800 12px/1.2 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--brass-lt); }
+  label.size { display: flex; align-items: center; gap: 10px; font-weight: 700; min-height: 44px; }
+  input[type="range"] { width: min(240px, 52vw); accent-color: var(--red-lt); }
+
+  /* the stage: one big Inspector to play with */
+  .stage-in { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .spot {
+    position: relative; display: flex; align-items: flex-end; justify-content: center; min-height: 372px; padding: 22px 12px 0; overflow: hidden; border-radius: 18px;
+    border: 3px solid var(--wood-0); box-shadow: 0 0 0 2px var(--brass-dk), 0 14px 30px rgba(3, 7, 18, .5);
+    background: radial-gradient(120% 90% at 50% 18%, #2b4f8e 0, #16305f 46%, #0c1a3a 100%);
+  }
+  .spot::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34px; background: linear-gradient(180deg, var(--wood-2), var(--wood-0)); border-top: 3px solid #2a160c; }
+  .spot .dt-root { position: relative; z-index: 1; margin-bottom: 14px; }
+  .spot.is-bust .dt-root { margin-bottom: 34px; }
+  .panel { padding: 16px 16px 6px; border-radius: 18px; background: rgba(19, 36, 74, .82); border: 2px solid var(--night-3); }
+
+  /* the wall of every mood */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 470px), 1fr)); gap: 14px; }
+  .cell { padding: 12px 12px 10px; border-radius: 16px; border: 2px solid var(--night-3); background: var(--night-2); color: var(--cream); }
+  .cell h3 { margin: 0 0 8px; font: 800 1.15rem/1.2 var(--f-serif); text-transform: capitalize; }
+  .row { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+  figure { margin: 0; text-align: center; line-height: 0; }
+  figcaption { margin-top: 5px; font: 700 11.5px/1.2 var(--f-ui); opacity: .86; }
+  body[data-bg="parchment"] .cell { background: var(--parch); border-color: var(--parch-3); color: var(--ink); }
+  body[data-bg="walnut"] .cell { background: linear-gradient(180deg, var(--wood-2), var(--wood-1)); border-color: var(--wood-0); color: var(--cream); }
+  body[data-bg="lamplight"] .cell { background: radial-gradient(120% 100% at 50% 20%, #ffe2a0, #e8b96a 70%, #c9914a); border-color: var(--brass-dk); color: var(--ink); }
+  footer { margin-top: 30px; font-size: 14px; color: #cfd8ee; }
+
+  @media (min-width: 820px) {
+    .stage-in { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); align-items: stretch; }
+  }
+  @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
+</style>
+</head>
+<body data-bg="night">
+<div class="wrap">
+  <header class="top">
+    <h1>Inspector Cāsus</h1>
+    <p>Meet the detective from <a href="index.html">Case Detective</a>. Pick a mood, make him talk, and move your pointer or your finger around the page: his eyes follow you.</p>
+  </header>
+
+  <main>
+    <section aria-labelledby="h-stage">
+      <h2 id="h-stage">Try him out</h2>
+      <div class="stage-in">
+        <div class="spot" id="spot"></div>
+        <div class="panel">
+          <div class="group" role="group" aria-label="Mood" id="moods"><span>Mood (he stays in it)</span></div>
+          <div class="group" role="group" aria-label="Short reactions and talking">
+            <span>Short reactions (he goes back to his mood)</span>
+            <button type="button" id="cheer">Play cheer</button>
+            <button type="button" id="oops">Play oops</button>
+            <button type="button" id="wave">Play wave</button>
+            <button type="button" id="talk" aria-pressed="false">Talking</button>
+          </div>
+          <div class="group" role="group" aria-label="Crop and size">
+            <span>Crop and size</span>
+            <button type="button" id="variant" aria-pressed="false">Head and shoulders</button>
+            <label class="size">Size <input type="range" id="size" min="48" max="320" step="4" value="280"> <output id="sizeOut" for="size">280 px</output></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-all">
+      <h2 id="h-all">Every mood, both crops, four sizes</h2>
+      <p>The reactions, the talking and the colors here act on every copy on the page at once.</p>
+      <div class="group" role="group" aria-label="Background behind him" id="bgs">
+        <span>Background behind him</span>
+        <button type="button" data-bg="night" aria-pressed="true">Midnight blue</button>
+        <button type="button" data-bg="parchment" aria-pressed="false">Parchment</button>
+        <button type="button" data-bg="walnut" aria-pressed="false">Walnut</button>
+        <button type="button" data-bg="lamplight" aria-pressed="false">Lamplight</button>
+      </div>
+      <div class="group" role="group" aria-label="Colors">
+        <span>Colors (set with CSS variables)</span>
+        <button type="button" id="recolor" aria-pressed="false">Navy coat, green scarf</button>
+      </div>
+      <div class="grid" id="grid"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>He is drawn and animated by one small script, <code>js/detective.js</code>, with no pictures to load. If your device asks for reduced motion, he holds each pose still.</p>
+  </footer>
+</div>
+
+<script src="js/detective.js"></script>
+<script>
+(function () {
+  "use strict";
+  if (!window.Detective) { return; }
+  var all = [], MOODS = Detective.MOODS;
+  var q = location.search;
+  var only = (q.match(/[?&]mood=([a-z]+)/) || [])[1];
+  function byId(id) { return document.getElementById(id); }
+  function press(b, on) { b.setAttribute("aria-pressed", String(!!on)); }
+
+  /* ---- the stage */
+  var hero = Detective.create({ size: 280, variant: "full", mood: "wave" });
+  byId("spot").appendChild(hero);
+  all.push(hero);
+  var moodBox = byId("moods"), moodBtns = {};
+  MOODS.forEach(function (m) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "plain"; b.textContent = m; press(b, m === "wave");
+    b.onclick = function () { hero.setMood(m); MOODS.forEach(function (k) { press(moodBtns[k], k === m); }); };
+    moodBtns[m] = b; moodBox.appendChild(b);
+  });
+  /* after his hello he settles down, the way he does in the game */
+  setTimeout(function () { if (hero.getMood() === "wave") { hero.setMood("idle"); MOODS.forEach(function (k) { press(moodBtns[k], k === "idle"); }); } }, 2600);
+
+  var sizeIn = byId("size"), sizeOut = byId("sizeOut"), varBtn = byId("variant"), bust = false;
+  function fit() { hero.setSize(+sizeIn.value); sizeOut.textContent = sizeIn.value + " px"; }
+  sizeIn.oninput = fit;
+  varBtn.onclick = function () {
+    bust = !bust; press(varBtn, bust);
+    byId("spot").classList.toggle("is-bust", bust);
+    hero.setVariant(bust ? "bust" : "full");
+    fit();
+  };
+
+  /* ---- every mood */
+  var grid = byId("grid");
+  MOODS.forEach(function (m) {
+    if (only && only !== m) { return; }
+    var cell = document.createElement("section"), row = document.createElement("div"), h = document.createElement("h3");
+    cell.className = "cell"; row.className = "row"; h.textContent = m;
+    cell.appendChild(h); cell.appendChild(row);
+    [["bust", 48], ["bust", 120], ["full", 120], ["full", 200]].forEach(function (v) {
+      var fig = document.createElement("figure"), cap = document.createElement("figcaption");
+      var d = Detective.create({ size: v[1], variant: v[0], mood: m });
+      cap.textContent = (v[0] === "bust" ? "bust " : "full ") + v[1] + " px";
+      fig.appendChild(d); fig.appendChild(cap); row.appendChild(fig);
+      all.push(d);
+    });
+    grid.appendChild(cell);
+  });
+
+  /* ---- things that act on every copy */
+  var talking = false;
+  byId("talk").onclick = function () { talking = !talking; press(this, talking); all.forEach(function (d) { d.talk(talking); }); };
+  ["cheer", "oops", "wave"].forEach(function (m) { byId(m).onclick = function () { all.forEach(function (d) { d.play(m, m === "wave" ? 2200 : 1600); }); }; });
+  var bgBtns = byId("bgs").querySelectorAll("button");
+  Array.prototype.forEach.call(bgBtns, function (b) {
+    b.onclick = function () {
+      document.body.setAttribute("data-bg", b.getAttribute("data-bg"));
+      Array.prototype.forEach.call(bgBtns, function (o) { press(o, o === b); });
+    };
+  });
+  byId("recolor").onclick = function () {
+    var on = this.getAttribute("aria-pressed") !== "true", props = ["--dt-coat", "--dt-coat-shade", "--dt-hat", "--dt-accent"], vals = ["#5b6f96", "#34456b", "#6a7fa6", "#2e8b57"];
+    press(this, on);
+    all.forEach(function (d) { props.forEach(function (p, i) { if (on) { d.style.setProperty(p, vals[i]); } else { d.style.removeProperty(p); } }); });
+  };
+
+  /* ---- his eyes follow the pointer, a finger, or the control that has the keyboard focus */
+  var raf = 0, px = 0, py = 0;
+  function look() { raf = 0; all.forEach(function (d) { d.lookAt(px, py); }); }
+  function away() { all.forEach(function (d) { d.lookAt(null); }); }
+  document.addEventListener("pointermove", function (e) { px = e.clientX; py = e.clientY; if (!raf) { raf = requestAnimationFrame(look); } });
+  document.addEventListener("pointerdown", function (e) { px = e.clientX; py = e.clientY; if (!raf) { raf = requestAnimationFrame(look); } });
+  document.documentElement.addEventListener("pointerleave", away);
+  document.addEventListener("focusin", function (e) {
+    var kb = false;
+    try { kb = e.target.matches(":focus-visible"); } catch (err) { kb = false; }
+    if (!kb) { return; }
+    var r = e.target.getBoundingClientRect(); px = r.left + r.width / 2; py = r.top + r.height / 2;
+    if (!raf) { raf = requestAnimationFrame(look); }
+  });
+  window.DEMO = all;
+})();
+</script>
+</body>
+</html>
