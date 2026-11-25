@@ -8,7 +8,7 @@
  *
  * Colours are CSS custom properties (set them on the element or any ancestor):
  *   --dt-coat --dt-coat-shade --dt-hat --dt-accent --dt-skin --dt-hair --dt-line --dt-lens
- *   optional: --dt-accent-shade (folds and outline of the scarf and bow) and --dt-accent-light (their highlights)
+ *   optional: --dt-accent-shade (folds and outline of the cravat and the hat tie) and --dt-accent-light (their highlights)
  *
  * The rig: every joint is four nested groups
  *   <g translate(pivot)> <g .dt-j: the pose, a CSS transition> <g .dt-r: carry-over> <g .dt-a: loops and accents, CSS animations>
@@ -130,6 +130,9 @@
     c += ".dt-c-coat{fill:var(--_coat)}.dt-c-shade{fill:var(--_shade)}.dt-c-hat{fill:var(--_hat)}.dt-c-accent{fill:var(--_accent)}" +
       ".dt-c-accd{fill:var(--_accd)}.dt-c-skin{fill:var(--_skin)}.dt-c-hair{fill:var(--_hair)}.dt-c-line{fill:var(--_line)}.dt-c-lens{fill:var(--_lens)}";
     c += ".dt-hl{fill:none;stroke:var(--_accl);stroke-width:1.6px;stroke-linecap:round;opacity:.9}";
+    /* the hat tie is a cord: a dark line with a red core. Folds of the cravat are fine dark lines. */
+    c += ".dt-cdo,.dt-cd,.dt-fo{fill:none;stroke-linecap:round;stroke-linejoin:round}.dt-cdo{stroke:var(--_accd);stroke-width:calc(var(--_sw) + 2.6px)}" +
+      ".dt-cd{stroke:var(--_accent);stroke-width:2.5px}.dt-fo{stroke:var(--_accd);stroke-width:1.6px;opacity:.8}";
     c += ".dt-brow{fill:none;stroke:var(--_hair);stroke-width:4.1px;stroke-linecap:round}";
     c += ".dt-lid{fill:none;stroke:var(--_line);stroke-width:2.8px;stroke-linecap:round}";
     c += ".dt-ln{fill:none;stroke:var(--_line);stroke-width:2.8px;stroke-linecap:round;stroke-linejoin:round}";
@@ -207,21 +210,20 @@
     K("glint", "0,62=translateX(-34px)|80,100=translateX(34px)");
     c += ".dt-chest-a{animation:dt-breathe 3.6s ease-in-out infinite}.dt-head-a{animation:dt-bob 4.3s ease-in-out .5s infinite}" +
       ".dt-glint{animation:dt-glint 5.2s ease-in-out infinite}";
-    /* follow-through: every change of mood sets the scarf tails, cape, bow and ear flaps swinging, each a beat late */
+    /* follow-through: every change of mood sets the cape, the knot of the hat tie and the ear flaps swinging, each a beat late */
     K("kick", "0,100=none|16=rotate(var(--k))|40=rotate(calc(var(--k)*-.55))|62=rotate(calc(var(--k)*.3))|82=rotate(calc(var(--k)*-.12))");
     K("sway", "0,100=none|30=rotate(4deg)|75=rotate(-3deg)");
     K("lift", "0,100=none|55=rotate(var(--k))");
-    c += ".dt-tails-a{--k:calc(12deg*var(--_e))}.dt-capeL-a{--k:calc(5deg*var(--_e))}.dt-capeR-a{--k:calc(-5deg*var(--_e))}" +
-      ".dt-bow-a{--k:calc(-10deg*var(--_e))}.dt-flapL-a{--k:calc(3.5deg*var(--_e))}.dt-flapR-a{--k:calc(-3.5deg*var(--_e))}";
+    c += ".dt-capeL-a{--k:calc(5deg*var(--_e))}.dt-capeR-a{--k:calc(-5deg*var(--_e))}" +
+      ".dt-tie-a{--k:calc(-10deg*var(--_e))}.dt-flapL-a{--k:calc(3.5deg*var(--_e))}.dt-flapR-a{--k:calc(-3.5deg*var(--_e))}";
     /* the tuck: on the way from one pose to the next the forearm folds in by --_tk (the script sets it for each change);
        and before the free arm is raised it first swings back a little from the shoulder (--_tw), which is its wind-up */
     K("tuck", "0,100=none|50=rotate(var(--_tk,0deg))");
     K("windup", "0,100=none|38=rotate(var(--_tw,0deg))");
     var TK = "dt-tuck .56s ease-in-out", WU = "dt-windup .26s ease-in-out";
     c += R + "[data-mood] .dt-elB-a{animation:" + TK + "}" + R + "[data-mood] .dt-shB-a{animation:" + WU + "}.dt-elA-a{--_tk:var(--_ta,0deg)}" + R + "[data-mood] .dt-elA-a{animation:" + TK + ",dt-float 5.3s ease-in-out 1s infinite}";
-    c += R + "[data-mood] .dt-tails-a{animation:dt-kick .95s ease-in-out .04s,dt-sway 3.1s ease-in-out 1s infinite}" +
-      R + "[data-mood] .dt-capeL-a{animation:dt-kick .85s ease-in-out .07s}" + R + "[data-mood] .dt-capeR-a{animation:dt-kick .85s ease-in-out .1s}" +
-      R + "[data-mood] .dt-bow-a{animation:dt-kick .7s ease-in-out .12s}" +
+    c += R + "[data-mood] .dt-capeL-a{animation:dt-kick .85s ease-in-out .07s}" + R + "[data-mood] .dt-capeR-a{animation:dt-kick .85s ease-in-out .1s}" +
+      R + "[data-mood] .dt-tie-a{animation:dt-kick .7s ease-in-out .12s}" +
       R + "[data-mood] .dt-flapL-a," + R + "[data-mood] .dt-flapR-a{animation:dt-kick .7s ease-in-out .1s}";
 
     /* ---- idle: a slow shift of weight */
@@ -258,7 +260,7 @@
     anim("point", { "tilt-a": "dt-lungeb .55s ease-in-out", "shB-a": "none", "wrB-a": "dt-jabb 2.3s ease-in-out .55s infinite" }, "bust");
     K("lungeb", "0,100=none|30=rotate(.8deg)|65=rotate(-.3deg)");
     K("jabb", "0,30,100=none|7=rotate(-13deg)|14=rotate(5deg)|21=rotate(-9deg)");
-    /* ---- cheer: crouch, jump, land with a squash; arms, hat, cape and scarf each lag a little more */
+    /* ---- cheer: crouch, jump, land with a squash; arms, hat and cape each lag a little more */
     K("jump", "0,100=none|14=scale(1.045,.95)|52=translateY(-9px) scale(.985,1.02)|84=scale(1.035,.965)");
     K("jumpb", "0,100=none|14=translateY(1.5px)|52=translateY(-3px)|84=translateY(.8px)");
     K("pumpA", "0,100=none|50=rotate(-7deg)");
@@ -268,7 +270,7 @@
     anim("cheer", {
       "body-a": "dt-jump .64s cubic-bezier(.35,0,.45,1) infinite", "shA-a": "dt-pumpA .64s ease-in-out .05s infinite", "shB-a": WU + ",dt-pumpB .64s ease-in-out .69s infinite",
       "hat-a": "dt-hatpop .64s ease-in-out .08s infinite", "capeL-a": "dt-lift .64s ease-in-out .1s infinite", "capeR-a": "dt-lift .64s ease-in-out .13s infinite",
-      "tails-a": "dt-lift .64s ease-in-out .09s infinite", "bow-a": "dt-lift .64s ease-in-out .15s infinite", "flapL-a": "dt-lift .64s ease-in-out .12s infinite", "flapR-a": "dt-lift .64s ease-in-out .12s infinite"
+      "tie-a": "dt-lift .64s ease-in-out .15s infinite", "flapL-a": "dt-lift .64s ease-in-out .12s infinite", "flapR-a": "dt-lift .64s ease-in-out .12s infinite"
     });
     anim("cheer", { "body-a": "dt-jumpb .64s cubic-bezier(.35,0,.45,1) infinite", "hat-a": "dt-hatpopb .64s ease-in-out .08s infinite", "shA-a": "dt-pumpAb .64s ease-in-out .05s infinite" }, "bust");
     K("pumpAb", "0,100=none|50=rotate(-3deg)");
@@ -322,8 +324,16 @@
     flapR: "M148,66C152,47 143,29 124,19C128,32 129,46 127,58C134,59 142,62 148,66Z",
     visor: "M66,62C83,54 124,52 150,62C161,65 168,70 166,75C157,82 137,84 115,81C95,78 78,72 66,62Z",
     backpeak: "M64,58C51,54 35,58 27,71C36,79 51,79 64,72Z",
-    capeL: "M100,131C82,128 62,136 53,158C48,170 45,180 46,188C58,196 80,194 97,180C98,164 99,148 100,131Z",
-    capeR: "M100,131C118,128 138,136 147,158C152,170 155,180 154,188C142,196 120,194 103,180C102,164 101,148 100,131Z",
+    /* the cape is open at the top: each wing runs from the side of the neck down its shoulder, round the hem, up the
+       front edge to where the two wings close (100,161), and back up the edge of the opening */
+    capeL: "M82,131.700C70,134.800 59,143.300 53,158C48,170 45,180 46,188C58,196 80,194 97,180C97.900,174 98.900,167.500 99.800,161C90.500,154 83.500,143 82,131.700Z",
+    capeR: "M118,131.700C130,134.800 141,143.300 147,158C152,170 155,180 154,188C142,196 120,194 103,180C102.100,174 101.100,167.500 100.200,161C109.500,154 116.500,143 118,131.700Z",
+    /* the coat's collar, turned back along the opening */
+    collarL: "M82,131.700C78,135.500 75,140.500 73.500,146.500C81.500,150.500 91,156 99.800,161C90.500,154 83.500,143 82,131.700Z",
+    collarR: "M118,131.700C122,135.500 125,140.500 126.500,146.500C118.500,150.500 109,156 100.200,161C109.500,154 116.500,143 118,131.700Z",
+    /* the cravat: the band round the neck (most of it lies behind the chin and under the cape), and the blade that falls from the knot */
+    cravat: "M80,128Q100,146 120,128L124,141C121.500,150 112,159 100,164.500C88,159 78.500,150 76,141Z",
+    blade: "M91,133C88.500,138 86,143 86.500,148.500C89,154.500 94,159.500 100,164C106,159.500 111,154.500 113.500,148.500C114,143 111.500,138 109,133Z",
     coat: "M70,152C68,184 64,216 60,240Q100,251 140,240C136,216 132,184 130,152Z",
     star: "M0,-8Q1.4,-1.4 8,0Q1.4,1.4 0,8Q-1.4,1.4 -8,0Q-1.4,-1.4 0,-8Z"
   };
@@ -344,6 +354,8 @@
     s += "<defs>" +
       '<pattern id="' + id("tw") + '" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(40)">' +
       '<path class="dt-s" d="M0,1H8M0,5H8" stroke-opacity=".17" stroke-width="1.1"/><path d="M1,0V8M5,0V8" stroke="#fff0c2" stroke-opacity=".2" stroke-width="1.1"/></pattern>' +
+      '<pattern id="' + id("cr") + '" width="6.400" height="6.400" patternUnits="userSpaceOnUse" patternTransform="rotate(45 100 148)">' +
+      '<circle cx="1.600" cy="1.600" r="1.250" fill="#ffe7b0"/><circle cx="4.800" cy="4.800" r=".700" fill="#f2b84b"/></pattern>' +
       '<clipPath id="' + id("ch") + '"><path d="' + P.head + '"/></clipPath>' +
       '<clipPath id="' + id("cc") + '"><path d="' + P.crown + '"/></clipPath>' +
       '<clipPath id="' + id("pL") + '"><path d="' + P.capeL + '"/></clipPath>' +
@@ -384,8 +396,17 @@
       '<path class="dt-ol" d="' + P.coat + '"/><path class="dt-il" d="M100,176V246"/>' +
       '<circle class="dt-fine dt-s" cx="105" cy="204" r="2.6" fill="' + url("br") + '" stroke-width="1"/>' +
       '<circle class="dt-fine dt-s" cx="105" cy="223" r="2.6" fill="' + url("br") + '" stroke-width="1"/>';
-    /* scarf band behind the chin */
-    up += '<path class="dt-c-accent dt-sa" d="M76,127Q100,146 124,127L126,139Q100,157 74,139Z"/>';
+    /* day cravat: red patterned silk, wrapped round the neck and tucked into the open top of the coat. It lies still;
+       the cape wings and the collar that frame it move over it. Behind it the coat's chest, so nothing shows through. */
+    up += '<path class="dt-c-shade" d="M79,130H121L125,172H75Z"/>' +
+      '<path class="dt-c-accent dt-sa" d="' + P.cravat + '"/>' +
+      '<path class="dt-fine" d="' + P.cravat + '" fill="' + url("cr") + '"/>' +
+      sh(P.cravat, ".26") +
+      '<path class="dt-c-accent" d="' + P.blade + '"/><path class="dt-fine" d="' + P.blade + '" fill="' + url("cr") + '"/>' +
+      sh("M90,134Q100,144 110,134L109.500,139Q100,147 90.500,139Z", ".2") +
+      '<path d="M93,155L107.500,144.500" fill="none" stroke="#fff6dc" stroke-width="5.500" stroke-linecap="round" opacity=".15"/>' +
+      '<path class="dt-fo" d="' + P.blade + '"/>' +
+      '<path class="dt-fo dt-fine" d="M96.500,141.500C95.300,145 95.300,148.500 96.500,152M103.500,141.500C104.700,145 104.700,148.500 103.500,152" style="opacity:.55"/>';
     /* cape: two wings that hang from the neck and can lift and flap on their own */
     var hem = sh("M40,180Q70,193 99,174L101,174Q130,193 160,180V202H40Z", ".16");
     function wing(k, extra, after) {
@@ -393,19 +414,12 @@
         '<rect class="dt-tw" x="40" y="124" width="120" height="76" fill="' + url("tw") + '"/>' + extra + hem + "</g>" +
         '<path class="dt-ol" d="' + P["cape" + k] + '"/>' + after);
     }
-    up += wing("L", '<ellipse cx="54" cy="170" rx="34" ry="44" fill="' + url("sd") + '"/>', "") +
+    function collar(k, tone) { return '<path class="dt-c-shade" d="' + P["collar" + k] + '"/>' + tone + '<path class="dt-ol" d="' + P["collar" + k] + '"/>'; }
+    up += wing("L", '<ellipse cx="54" cy="170" rx="34" ry="44" fill="' + url("sd") + '"/>', collar("L", sh(P.collarL, ".16"))) +
       wing("R", '<ellipse cx="138" cy="150" rx="34" ry="36" fill="' + url("hl") + '"/>' +
         '<path class="dt-fine" d="M141,145C147,156 150.500,170 150.500,184" fill="none" stroke="#fff6d8" stroke-width="2.400" stroke-linecap="round" opacity=".6"/>',
-        '<circle class="dt-fine dt-s" cx="107.500" cy="152" r="2.5" fill="' + url("br") + '" stroke-width="1"/>' +
-        '<circle class="dt-fine dt-s" cx="106.500" cy="166" r="2.5" fill="' + url("br") + '" stroke-width="1"/>');
-    /* scarf knot and tails */
-    var tails = '<path class="dt-c-accent dt-sa" d="M-3,2C-8,12 -12,22 -13,33L-4,35C-2,25 1,15 4,5Z"/>' +
-      '<path class="dt-c-accent dt-sa" d="M3,3C5,13 6,23 5,35L14,34C14,23 12,12 9,2Z"/>' +
-      '<path class="dt-c-accd" d="M-3,2C-8,12 -12,22 -13,33L-9,34C-7,23 -4,12 0,3Z" opacity=".5"/>' +
-      '<path class="dt-fine dt-hl" d="M-11,29L-5,30.500M6,30.500L13,30"/>';
-    up += J("tails", 87, 143, tails, true) +
-      '<path class="dt-c-accent dt-sa" d="M79,137C82,133 92,134 95,139C96,145 91,150 85,149C80,148 77,142 79,137Z"/>' +
-      '<path class="dt-hl" d="M82,138C85,136 90,137 92,140"/>';
+        collar("R", hi(P.collarR, ".14")) +
+        '<circle class="dt-fine dt-s" cx="105" cy="169" r="2.5" fill="' + url("br") + '" stroke-width="1"/>');
 
     /* ---------- head: skull, then the face (which slides a little inside it when he looks around), hat, brows */
     var skull = "";
@@ -473,10 +487,12 @@
       return J("flap" + k, x, y, '<path class="dt-c-hat dt-so" d="' + P["flap" + k] + '"/><path class="dt-tw" d="' + P["flap" + k] + '" fill="' + url("tw") + '"/>' + tone + '<path class="dt-ol" d="' + P["flap" + k] + '"/>');
     }
     hat += flap("L", 80, 18, sh(P.flapL, ".16")) + flap("R", 124, 19, hi(P.flapR, ".2"));
-    /* bow that ties the ear flaps on top */
-    hat += J("bow", 101, 14, '<path class="dt-c-accent dt-sa" d="M0,0C-6,-11 -19,-10 -18,-2C-17,5 -7,5 0,0Z"/><path class="dt-c-accent dt-sa" d="M0,0C6,-11 19,-10 18,-2C17,5 7,5 0,0Z"/>' +
-      '<path class="dt-hl" d="M-14,-4Q-11,-7 -6,-5M6,-5Q11,-7 14,-4"/>' +
-      '<path class="dt-c-accent dt-sa" d="M-2,2L-6,10L-1,9L0,4L1,9L6,10L2,2Z"/><circle class="dt-c-accent dt-sa" r="3.600"/>', true);
+    /* the tie: a plain cord from the tip of each ear flap to a small knot on top of the crown. The cord lies still on
+       the hat (the flaps hang from those tips); only the knot and its two short ends wag. */
+    var cord = "M79.500,19.800Q89.500,13.900 101,12.900Q112.500,13.900 124.500,20.800", ends = "M-1.200,1.500L-4.200,8.200M1.400,1.500L5,7.600";
+    hat += '<path class="dt-cdo" d="' + cord + '"/><path class="dt-cd" d="' + cord + '"/>';
+    hat += J("tie", 101, 12.900, '<path class="dt-cdo" d="' + ends + '"/><path class="dt-cd" d="' + ends + '"/>' +
+      '<ellipse class="dt-c-accent dt-sa" rx="4.200" ry="3.500"/><path class="dt-hl dt-fine" d="M-2,-1.200Q0,-2.200 2,-1.200" style="stroke-width:1.200px"/>', true);
     hat += '<path class="dt-c-hat" d="' + P.visor + '"/><g clip-path="' + url("cv") + '"><rect class="dt-tw" x="60" y="50" width="112" height="38" fill="' + url("tw") + '"/>' +
       sh("M60,70C84,80 124,88 170,78V90H60Z", ".22") + '<ellipse cx="140" cy="60" rx="34" ry="14" fill="' + url("hl") + '"/>' +
       '<path class="dt-fine" d="M120,57.500C136,58 150,62.500 160,68.500" fill="none" stroke="#fff6d8" stroke-width="2.200" stroke-linecap="round" opacity=".6"/>' + "</g>" +
