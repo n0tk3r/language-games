@@ -121,6 +121,8 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   background: rgba(255, 255, 255, .09); color: var(--cream); font-weight: 800; font-size: 15px; cursor: pointer;
 }
 .tb-btn:active { transform: translateY(1px); }
+/* the way back to all the games: a link (it leaves the game), in the look of the buttons beside it */
+.tb-games { text-decoration: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .tb-lab { display: none; }
 .tb-sound .ic-off { display: none; }
 .tb-sound[aria-pressed="false"] .ic-on { display: none; }
@@ -1013,6 +1015,23 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .rc-list .chip { min-width: 96px; }
   .logo { position: relative; padding-bottom: 13px; }
   .logo small { position: absolute; left: 6px; bottom: 0; margin: 0; }
+}
+/* Beside the way back to all the games (on the casebook) the logo makes room: below 640 px it gives up
+   its glass (the house stands where it stood); on a narrow phone its title is a size smaller and its
+   small line takes two lines; on the narrowest phones the bar closes up a little. */
+@media (max-width: 639.98px) {
+  .tb-games:not([hidden]) ~ .logo { padding-left: 0; }
+  .tb-games:not([hidden]) ~ .logo .ic { display: none; }
+}
+@media (max-width: 389.98px) {
+  .tb-games:not([hidden]) ~ .logo { padding-bottom: 0; font-size: 19px; }
+  .tb-games:not([hidden]) ~ .logo small { position: static; margin-top: 2px; }
+  .tb-games:not([hidden]) ~ .logo .lg-dot { display: none; }
+  .tb-games:not([hidden]) ~ .logo .lg-ch { display: block; margin-top: 1px; }
+}
+@media (max-width: 345px) {
+  .app[data-view="home"] .topbar { gap: 4px; }
+  .tb-games:not([hidden]) ~ .logo { font-size: 16px; }
 }
 @media (max-width: 345px) {
   .logo small { left: 2px; }
