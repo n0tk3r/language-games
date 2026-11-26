@@ -5,6 +5,8 @@ Small browser games for practicing languages. Each game is a folder of static fi
 | Game | Folder | What it practices |
 | --- | --- | --- |
 | Case Detective | [`case-detective/`](case-detective/) | Latin: the first declension and the jobs of the cases (Wheelock's Latin, chapter 2), with Inspector Cāsus as the guide |
+| Climb to Consul | [`climb-to-consul/`](climb-to-consul/) | Latin vocabulary by chapter: each word climbs the Roman offices (Quaestor, Aedile, Praetor, Consul), with Erase Away before a quiz and a printable word list (6th grade chapters 1 to 3, 8th grade 18 to 22 so far) |
+| Row the Endings | [`row-the-endings/`](row-the-endings/) | Latin charts in Wheelock's layout: noun declensions and verb conjugations, one oar stroke per box (same chapters) |
 
 ## Curriculum
 
@@ -34,6 +36,11 @@ The site is static files (HTML, CSS, JavaScript and fonts) with no build step an
 - `case-detective/js/scenes.js`: the small pictures that show who does what in a sentence. `case-detective/scenes-demo.html` shows them all.
 - `case-detective/js/music.js` and `case-detective/music/`: background music, played by a small violin synthesizer from note lists. `case-detective/music/README.md` says which pieces are in the game.
 - `case-detective/fonts/`: Alegreya and Nunito, self-hosted under the SIL Open Font License 1.1 (licence files are in the folder).
+
+## The shared Latin parts
+
+- `latin-common/`: what Climb to Consul and Row the Endings share: the look (`css/common.css`), the top bar, the Inspector's bubble and the settings (`js/shell.js`), the player profiles (`js/players-fallback.js`, the same browser key `latinGames.v1` and the same API as Case Detective's players), the word list (`js/words.js`) and the charts (`js/charts.js`), and `sources.html`, the page for parents on where the words and charts come from.
+- `js/words.js` and `js/charts.js` are built by `latin-common/tools/build_words.py` and `build_charts.py` from the curriculum files; change the scripts and build again rather than editing them. Each game has `tools/check.js` (run with node), which checks every question and chart against them.
 
 ## Adding a game
 

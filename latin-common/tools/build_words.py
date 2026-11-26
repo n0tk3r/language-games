@@ -38,26 +38,26 @@ def us(s):
 # English derivatives (helpers after a miss). Chapters 1-3 and 18-22.
 DER = {
     "mē": "", "quid": "quid pro quo", "nihil": "nihilism, annihilate", "saepe": "", "sī": "",
-    "nōn": "nonsense, nonstop", "amō": "amorous, amiable, amateur", "dō": "data, date",
+    "nōn": "nonsense, nonstop", "amō": "amateur, amiable", "dō": "data, date",
     "cōgitō": "cogitate", "laudō": "laud, laudable", "servō": "preserve, reservoir",
     "vocō": "vocation, invoke, provoke", "dēbeō": "debt, debit, due, duty",
     "moneō": "admonish, monitor, premonition", "salveō": "salvation, salvage",
     "videō": "video, vision, visible, evident", "terreō": "terrify, terror, deter",
-    "valeō": "valid, valor, value, prevail", "errō": "err, error, erratic",
+    "valeō": "valid, value, valor, prevail, valedictorian", "errō": "err, error, erratic",
     "cōnservō": "conserve, conservation",
     "fāma": "fame, famous, infamous", "fōrma": "form, formal, uniform, reform",
     "fortūna": "fortune, fortunate", "īra": "ire, irate", "nauta": "nautical",
     "patria": "patriot, patriotic", "pecūnia": "pecuniary, impecunious",
-    "philosophia": "philosophy, philosopher", "poena": "penal, penalty, subpoena",
+    "philosophia": "philosophy, philosopher", "poena": "pain, penalty, penal, subpoena",
     "poēta": "poet, poetry", "porta": "portal, porch", "puella": "", "rosa": "rose, rosy",
     "sententia": "sentence, sentiment", "vīta": "vital, vitamin, revitalize",
     "antīquus": "antique, antiquity", "magnus": "magnify, magnitude, magnificent",
     "meus": "", "multus": "multitude, multiply", "tuus": "", "et": "et cetera (etc.)",
     "et... et": "", "est": "", "sine": "sinecure", "sed": "", "Ō": "",
     "ager": "agriculture, agrarian", "agricola": "agriculture", "amīcus": "amicable, amity",
-    "fēmina": "feminine", "fīlia": "filial", "fīlius": "filial", "numerus": "number, numeral, numerous",
+    "fēmina": "feminine, female", "fīlia": "filial, affiliate", "fīlius": "filial, affiliate", "numerus": "number, numeral, numerous",
     "populus": "popular, population, people", "puer": "puerile", "sapientia": "sapient, Homo sapiens",
-    "vir": "virile, triumvirate", "avārus": "avarice", "paucī": "paucity", "Rōmānus": "Roman, romance",
+    "vir": "virtue, triumvirate", "avārus": "avarice", "paucī": "paucity", "Rōmānus": "Roman, romance",
     "dē": "", "in": "", "hodiē": "", "semper": "Semper Fidelis", "habeō": "habit, inhabit, exhibit",
     "satiō": "satiate, insatiable",
     "flūmen": "flume", "genus": "genus, gender, generation, general", "hostis": "hostile, hostility",
@@ -76,14 +76,14 @@ DER = {
     "parō": "prepare, preparation, apparatus, repair",
     "coniūrātī": "conjure", "cornū": "cornucopia, unicorn, cornet", "frūctus": "fruit, fructose",
     "genū": "genuflect", "manus": "manual, manuscript, manufacture, manicure",
-    "metus": "meticulous", "mōns": "mount, mountain, promontory", "senātus": "senate, senator",
+    "metus": "meticulous", "mōns": "mount, mountain, amount, surmount", "senātus": "senate, senator",
     "sēnsus": "sense, sensation, sensitive", "servitūs": "servitude",
     "spīritus": "spirit, inspire, respiration", "versus": "verse, version",
     "commūnis": "common, community, communicate", "dexter": "dexterity, ambidextrous",
     "sinister": "sinister", "careō": "caret", "dēfendō": "defend, defense, defendant",
     "discēdō": "", "ōdī": "odious, odium", "prohibeō": "prohibit, prohibition",
     "prōnūntiō": "pronounce, pronunciation, announce",
-    "casa": "casino", "causa": "cause, because, accuse, excuse", "causā": "cause, because",
+    "casa": "casino (Italian for 'little house')", "causa": "cause, because, accuse, excuse", "causā": "cause, because",
     "fenestra": "defenestrate", "fīnis": "final, finish, finite, infinite, define",
     "fīnēs": "confines", "gēns": "gentle, gentile, gentry", "mundus": "mundane",
     "nāvis": "naval, navy, navigate", "salūs": "salute, salutation", "Trōia": "Trojan",
@@ -104,7 +104,7 @@ DER = {
 
 # The case each preposition takes (Wheelock lists it in the vocabulary), and causā with its genitive.
 TAKES = {
-    "sine": "abl", "dē": "abl", "in": "abl", "propter": "acc", "post": "acc", "ad": "acc", "ex (or) ē": "abl",
+    "sine": "abl", "dē": "abl", "in": "abl", "propter": "acc", "post": "acc", "ad": "acc", "ex": "abl",
     "contrā": "acc", "ultrā": "acc", "prae": "abl", "causā": "gen",
 }
 # sub takes both, with a different meaning for each; the two source cards split it.
@@ -122,12 +122,35 @@ ASK = {
     ("6", "vester"): "your (of more than one person)",
     ("3", "sapientia"): "wisdom",
     ("2", "et"): "and",
+    ("19", "at"): "but, mind you",
+    ("3", "vir"): "man, hero",
+    ("3", "puer"): "boy",
+    ("3", "paucī"): "few, a few",
+    ("19", "quī? quae? quod?"): "what? which? what kind of?",
+    ("19", "auctor"): "author, originator",
+    ("22", "modus"): "measure, manner, method",
+}
+# Corrections to the source cards, from the independent Latin review of 2026-11-25 against Wheelock's
+# 7th edition (the curriculum's own vocabulary notes flag vulgus and ōdī as well).
+FIX = {
+    ("21", "vulgus"): {"lat": "vulgus, vulgī, n. (sometimes m.)", "g": "n"},
+    ("20", "ōdī"): {"lat": "ōdī, ōdisse, ōsūrum (defective verb)", "pp": ["ōdī", "ōdisse", "ōsūrum"], "trick": True},
+    ("20", "frūctus"): {"mean": "fruit; profit, benefit, enjoyment"},
+    ("2", "poena"): {"mean": "penalty, punishment; pay the penalty (poenās dare)"},
+    ("1", "salveō"): {"mean": "be well, be in good health; hello, greetings (salvē / salvēte)"},
+    ("1", "valeō"): {"mean": "be strong, have power; be well; good-bye, farewell (valē / valēte)"},
+    ("1", "amō"): {"mean": "love, like; please (amābō tē)"},
+    ("18", "hostis"): {"mean": "an enemy (of the state)"},
+    ("2", "porta"): {"mean": "gate, entrance"},
+    ("3", "in"): {"as": "preposition"},
+    ("19", "contrā"): {"lat": "contrā (prep. + acc.)"},
 }
 # Other spellings a typed answer may use.
 ALT = {"ex (or) ē": ["ex", "ē"], "atque (or ac)": ["atque", "ac"], "quis? quid?": ["quis"],
        "quī? quae? quod?": ["quī"]}
 # Words that are one word in two entries: never each other's wrong choice.
 SAME_EXTRA = [("hostis", "hostēs"), ("fīnis", "fīnēs"), ("causa", "causā"), ("vīcīnus", "vīcīna"),
+              ("rapiō", "ēripiō"), ("gēns", "vulgus"), ("līberō", "careō"), ("inquit", "ait"), ("littera", "litterae"),
               ("et", "et... et")]
 
 def strip_marks(s):
@@ -172,8 +195,9 @@ def adj_forms(e):
     if "(gen.)" in lat:
         g = lat.split("(gen.)")[1].strip()
         return {"gen": g}
-    parts = [p.strip() for p in re.split(r",", lat.replace("?", "")) if p.strip()]
-    parts = [p.split()[0] for p in parts] if "quī" in lat else parts
+    if "?" in lat:   # quī? quae? quod?
+        return {"forms": [p.strip() for p in lat.split("?") if p.strip()][1:]}
+    parts = [p.strip() for p in re.split(r",", lat) if p.strip()]
     return {"forms": parts[1:]}
 
 def main():
@@ -234,6 +258,7 @@ def main():
                         print("no derivative entry for", c["chapter"], hw, file=sys.stderr)
                     elif der:
                         w["der"] = der
+                w.update(FIX.get((str(c["chapter"]), hw), {}))
                 gw.append(w)
         # meanings shared inside the grade
         sens = {w["id"]: {norm_sense(s) for s in senses(w["mean"])} - {""} for w in gw}

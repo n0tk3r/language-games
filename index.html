@@ -115,6 +115,22 @@
     box-shadow: 0 2px 0 rgba(20, 10, 4, .4); -webkit-transform: translateX(-50%); transform: translateX(-50%);
   }
 
+  /* the two newer games: a smaller folder with the game's own emblem in the night window */
+  .art { position: absolute; left: 50%; top: 50%; width: 120px; height: 120px; margin: -64px 0 0 -60px; }
+  .art svg { display: block; width: 100%; height: 100%; }
+
+  /* Tonight: what the player who played last can do tonight, one line per game */
+  .tonight { margin: -14px 0 44px; padding: 16px 18px 18px; border: 2px solid rgba(226, 169, 60, .55); border-radius: 16px; background: rgba(12, 22, 48, .72); box-shadow: 0 10px 22px rgba(3, 7, 18, .35); }
+  .tonight h2 { margin: 0 0 4px; color: var(--brass-lt); font-size: 1.35rem; }
+  .tonight .who { margin: 0 0 12px; color: var(--mist); font-weight: 700; }
+  .tonight ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: t; }
+  .tonight li { counter-increment: t; }
+  .tonight a { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 14px; border-radius: 12px; background: rgba(255, 255, 255, .08); color: var(--cream); text-decoration: none; font-weight: 700; line-height: 1.3; }
+  .tonight a::before { content: counter(t); flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #b3202a; color: #fff; font-weight: 800; }
+  .tonight a b { color: var(--brass-lt); }
+  .tonight a:hover { background: rgba(255, 255, 255, .15); }
+  .tonight a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
   /* the folder that is still empty */
   .soon { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: 16px; border: 2px dashed rgba(248, 236, 208, .55); background: rgba(19, 36, 74, .6); color: var(--cream); box-shadow: none; }
   .soon::before { display: none; }
@@ -143,7 +159,12 @@
     main { padding-top: 48px; }
     h1 { font-size: 3rem; }
     .lead { font-size: 19px; margin-bottom: 54px; }
-    .games { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+    .games { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+    .wide { grid-column: 1 / -1; }
+    .cd.half { grid-template-columns: 190px minmax(0, 1fr); gap: 20px; padding: 20px 22px 26px 20px; }
+    .half .canvas { height: 190px; }
+    .half h2 { font-size: 1.95rem; }
+    .cd.half .desc { font-size: 17px; margin-bottom: 16px; }
     .cd { grid-template-columns: 300px minmax(0, 1fr); gap: 26px; padding: 24px 28px 32px 24px; }
     .canvas { height: 258px; }
     .emblem { width: 164px; height: 164px; margin: -86px 0 0 -82px; }
@@ -159,6 +180,7 @@
     .emblem { width: 124px; height: 124px; margin: -64px 0 0 -62px; }
     h2 { font-size: 1.95rem; }
     .cd .desc { font-size: 17px; margin-bottom: 16px; }
+    .cd.half { grid-template-columns: minmax(0, 1fr); }
   }
   /* A phone: the one thing to press is on the first screen. The button stands right under the game's
      name, and what the game is about comes after it. */
@@ -204,8 +226,14 @@
   <h1>Pick a game and start practicing</h1>
   <p class="lead">Short games with instant feedback, for a phone, a tablet, or a laptop.</p>
 
+  <section class="tonight" id="tonight" aria-labelledby="tonight-h" hidden>
+    <h2 id="tonight-h">Tonight</h2>
+    <p class="who" id="tonight-who"></p>
+    <ol id="tonight-list"></ol>
+  </section>
+
   <ul class="games" id="games" role="list">
-    <li class="game cd" id="case-detective">
+    <li class="game cd wide" id="case-detective">
       <div class="portrait" aria-hidden="true">
         <div class="canvas">
           <svg class="moon" viewBox="0 0 30 30" focusable="false"><circle cx="15" cy="15" r="12" fill="#f2f6ff"/><circle cx="20.5" cy="12" r="10.5" fill="#0a1634"/></svg>
@@ -232,7 +260,33 @@
         <p class="course">Latin IA (6th grade) · Wheelock’s Latin, chapter 2: the first declension and the jobs of the cases</p>
       </div>
     </li>
-    <li class="game soon">
+    <li class="game cd half" id="climb-to-consul">
+      <div class="portrait" aria-hidden="true">
+        <div class="canvas"><div class="art" id="art-climb"></div></div>
+        <p class="plate">The Forum</p>
+      </div>
+      <div class="info">
+        <p class="tab">Latin · words</p>
+        <h2>Climb to Consul</h2>
+        <p class="desc">Every word of your chapter is a citizen climbing to the top office of Rome: Quaestor, Aedile, Praetor, Consul. A few minutes a night, and Erase Away before a quiz.</p>
+        <p class="play"><a class="btn cover" href="climb-to-consul/index.html">Play<span class="vh"> Climb to Consul</span> <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></a></p>
+        <p class="course">6th grade (Latin IA): Wheelock’s Latin, chapters 1 to 3 · 8th grade (Latin II): chapters 18 to 22</p>
+      </div>
+    </li>
+    <li class="game cd half" id="row-the-endings">
+      <div class="portrait" aria-hidden="true">
+        <div class="canvas"><div class="art" id="art-row"></div></div>
+        <p class="plate">The harbor</p>
+      </div>
+      <div class="info">
+        <p class="tab">Latin · charts</p>
+        <h2>Row the Endings</h2>
+        <p class="desc">Row a Roman ship across the sea, one oar stroke for every box of the chart: the book’s nouns and verbs, in the book’s order.</p>
+        <p class="play"><a class="btn cover" href="row-the-endings/index.html">Play<span class="vh"> Row the Endings</span> <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></a></p>
+        <p class="course">6th grade: porta, amīcus, puer, ager and laudō, moneō · 8th grade: the passive, quis, the 4th and 5th declensions</p>
+      </div>
+    </li>
+    <li class="game soon wide">
       <div class="empty" aria-hidden="true">?</div>
       <div class="info">
         <p class="tab">Coming soon</p>
@@ -249,6 +303,39 @@
 
 <!-- The Inspector is a bonus: if this script does not load, the folder keeps its magnifying glass and still opens the game. -->
 <script src="case-detective/js/detective.js"></script>
+<script src="climb-to-consul/js/art.js"></script>
+<script src="row-the-endings/js/art.js"></script>
+<script src="latin-common/js/charts.js"></script>
+<script>
+(function () {
+  "use strict";
+  /* the newer games' emblems in their night windows */
+  try { if (window.ClimbArt) { document.getElementById("art-climb").innerHTML = window.ClimbArt.logo(); } } catch (e) { /* keep the empty night */ }
+  try { if (window.RowArt) { document.getElementById("art-row").innerHTML = window.RowArt.LOGO; } } catch (e) { /* keep the empty night */ }
+
+  /* Tonight: the player who played last (kept only in this browser, shared by the games) */
+  var store, p;
+  try { store = JSON.parse(window.localStorage.getItem("latinGames.v1") || "null"); } catch (e) { store = null; }
+  if (!store || !store.players || !store.players.length) { return; }
+  p = store.players.filter(function (x) { return x.id === store.last; })[0] || store.players[0];
+  if (!p || (p.grade !== 6 && p.grade !== 8)) { return; }
+  var ready = p.grade === 6 ? 3 : 22, first = p.grade === 6 ? 1 : 18;
+  var ch = Math.max(first, Math.min(p.chapter || first, ready));
+  var charts = ((window.LATIN_CHARTS || {}).charts || []).filter(function (c) { return c.ch === ch; });
+  var who = document.getElementById("tonight-who"), list = document.getElementById("tonight-list");
+  who.textContent = "For " + p.name + " · " + (p.grade === 6 ? "6th" : "8th") + " grade · Chapter " + (p.chapter || ch);
+  function item(href, game, what) {
+    var li = document.createElement("li"), a = document.createElement("a"), b = document.createElement("b"), span = document.createElement("span");
+    a.href = href; b.textContent = game;
+    span.appendChild(b); span.appendChild(document.createTextNode(": " + what));
+    a.appendChild(span); li.appendChild(a); list.appendChild(li);
+  }
+  item("climb-to-consul/index.html", "Climb to Consul", "tonight’s assembly, chapter " + ch + "’s new words and the words due");
+  item("row-the-endings/index.html", "Row the Endings", charts.length ? "tonight’s voyage, " + charts[0].title + (charts.length > 1 ? " and more" : "") : "tonight’s voyage");
+  if (p.grade === 6) { item("case-detective/index.html", "Case Detective", "a case file on the jobs of the cases"); }
+  document.getElementById("tonight").hidden = false;
+})();
+</script>
 <script>
 (function () {
   "use strict";
