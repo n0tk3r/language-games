@@ -7,7 +7,8 @@
  * nothing at all.
  *
  * Storage, exactly as Case Detective's draft:
- *   latinGames.v1 = { v: 1, players: [{ id: "p1", name, color, grade, chapter }], last, sound, music }
+ *   latinGames.v1 = { v: 1, players: [{ id: "p1", name, color, grade, chapter }], last, sound, music, next }
+ *   (fields it does not know, at the top and on each player, are kept as they are)
  *
  * API (see ../README.md for the details):
  *   KEY, NAME_MAX, list(), get(id), current(), choose(id), add({name, grade, chapter}), update(id, fields),
@@ -232,7 +233,11 @@
     var g = canPlay(o.grade) ? +o.grade : grades().filter(function (x) { return !x.soon; }).map(function (x) { return x.grade; })[0] || 6;
     var ch = inGrade(g, o.chapter) ? +o.chapter : monthChapter(g);
     var pal = colors(), color = pal.filter(function (c) { return !used[c.toLowerCase()]; })[0] || pal[s.players.length % pal.length];
-    var p = { id: "p" + (n + 1), name: name, color: color, grade: g, chapter: ch };
+    /* "next" (shared with Case Detective 2.2's players.js) is the number of the next id: an id is never given
+       twice, so a removed child's progress can never pass to a new player */
+    var num = Math.max(n + 1, +s.next || 1);
+    var p = { id: "p" + num, name: name, color: color, grade: g, chapter: ch };
+    s.next = num + 1;
     s.players.push(p);
     write(s);
     return copy(p);
