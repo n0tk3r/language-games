@@ -32,13 +32,24 @@
  *
  * The recorded strings: js/sampler.js (window.StringSamplers: a violin, a viola and a cello) plays the notes from
  * recordings of real instruments. A page may load it before this file; if it has not, this file fetches it from its
- * own folder once the instruments are built, that is after the first tap with the music on (so a page that loads
- * only this file gets the recordings too). The recordings follow, one file after the other with script tags, the low
- * register of each instrument first: the violin's (music/violin/, 1.5 MB), then the cello's (music/cello/, 1.2 MB),
- * then the viola's (music/viola/, 1.0 MB). A file that could not be fetched is asked for again at a later tap (at
- * most every 15 seconds). Until a note's recording has come in, and for plucked notes, the synthesizer of its
- * instrument plays it. A page with the older js/sampler.js (a violin only) gets the recorded violin, and the viola and
- * cello from their synthesizers.
+ * own folder at the first tap with the music on (so a page that loads only this file gets the recordings too). The
+ * recordings (music/violin/, 1.5 MB; music/cello/, 1.2 MB; music/viola/, 1.0 MB) are asked for at that tap too, as
+ * soon as the piece to be played is in hand: one file after the other with script tags, in the order that piece
+ * needs them (the file that holds the notes of its opening first, a file it never uses last). While the music is
+ * switched off no further file is asked for (the one on its way is finished); switched on again, the rest follow.
+ * A piece that is begun from its top waits with its first note for the recordings that its first three seconds need
+ * (HEAD), but never longer than four seconds (LIMIT): then it begins with what is in. That goes for the first piece
+ * of a visit and for every piece begun later while its recordings are still on their way (next(), prev(), start(n),
+ * the next piece of the list); a switch of mode never waits, nor does music that is switched back on in the middle
+ * of a piece. Meanwhile now().playing is false, and nothing sounds. The four seconds are time waited with the music
+ * on and the page shown: switched off or hidden during the wait, the piece does not begin, and it waits out the rest
+ * when the music is back. A recording that cannot come (its file could not be fetched, or there is no
+ * js/sampler.js) is not waited for; and once a wait has run out, no piece waits again until a file of recordings
+ * has come in since (so recordings that never arrive cost one wait, not one for every piece). The synthesizer of its
+ * instrument plays every note whose recording is not in when the note begins, and every plucked note. A file that
+ * could not be fetched is asked for again at a later tap (at most every 15 seconds).
+ * A page with the older js/sampler.js (a violin only) gets the recorded violin, and the viola and cello from their
+ * synthesizers.
  *
  * A piece is one part or several. A piece file of more than one part names them (parts: [{ name, inst, role }], inst
  * "violin", "viola" or "cello", role "tune", "accompaniment" or "bass") and gives each note its part (part: one
@@ -502,6 +513,12 @@
   var SWITCH = 0.35;       /* a switch: the music in hand fades out within this time, the other list begins just after */
   var told = 0, toldAt = -1;   /* onnote: the first note not yet told of, and when the last call was (context time) */
   var TELL = 0.21;         /* onnote: at least this long between two calls (so never more than five a second) */
+  var HEAD = 3;            /* a piece's first note waits for the recordings that its first HEAD seconds need */
+  var LIMIT = 4000;        /* but never longer than this (ms): then the piece begins with what is in */
+  var begun = false;       /* the piece in hand has begun to sound: from then on it is never held back */
+  var hold = { from: 0, timer: 0, spent: 0 };   /* its first note is held back: since when (ms; 0: not at this moment), the
+                              timer that looks again, and how long it had waited before the wait was last broken off (ms) */
+  var late = false;        /* a wait ran out: no piece waits again until a file of recordings has come in */
 
   /* the band, then a compressor that evens out loud chords and soft runs (so the sound is the same at every
      volume), then the level of the passage (its fades, and the calm list a little lower), then the volume control.
@@ -721,53 +738,174 @@
       return true;
     } catch (e) { noAudio = true; ctx = null; return false; }
   }
-  /* the instruments are built just before the first note, not in that tap: building them takes a moment. The
-     recordings are asked for then (see strings): the first note does not wait for them, the synthesizers play until
-     they are in. */
+  /* the instruments are built just before the first note, not in that tap: building them takes a moment. (The
+     recordings were asked for in the tap, see strings.) */
   function rigUp() {
     if (violin) { return true; }
     try { rig = makeRig(ctx); out = rig.out; violin = rig.violin; } catch (e) { noAudio = true; return false; }
     strings();
     return true;
   }
-  /* the recorded strings. js/sampler.js: the page's, or fetched from this file's folder (once; a failed fetch is
-     tried again at a later tap, at most every 15 seconds). Then the banks, one after the other: the violin, then the
-     cello (in the violin's onready), then the viola (in the cello's), each bank's files low register first (the
-     voice fetches them). At a later tap, what failed is asked for again (each voice waits 15 s itself). */
-  var CHAIN = ["violin", "cello", "viola"];
-  var samp = { state: "", asked: 0, failedAt: -1e9 };   /* state: "" not asked, "page", "loading", "in", "failed" */
-  var chain = 0;           /* how many banks of CHAIN have been asked for */
+  /* the recorded strings, asked for as soon as the music is wanted (the first tap with the music on) and a piece is
+     in hand. js/sampler.js: the page's, or fetched from this file's folder (once; a failed fetch is tried again at a
+     later tap, at most every 15 seconds, see retry). Then the recordings, one file at a time (see feed). */
+  var CHAIN = ["violin", "cello", "viola"];   /* which instrument first, where two are needed at the same moment */
+  var samp = { state: "", failedAt: -1e9 };   /* state: "" not asked, "page", "loading", "in", "failed" */
+  var got = {};            /* the files of recordings asked for ("cello 2": cello-02.js; "violin": a whole bank): 1 on its way, 2 in, 3 failed */
+  var askedFor = [];       /* the same files, in the order they were first asked for */
+  var inFlight = "";       /* the file that is on its way: never more than one */
   function strings() {
-    if (!violin) { return; }
-    if (haveSampler()) {
-      if (!samp.state) { samp.state = "page"; }
-      banks();
-      return;
-    }
-    if (samp.state === "loading" || (samp.state === "failed" && Date.now() - samp.failedAt < 15000)) { return; }
-    samp.state = "loading";
-    getFile("sampler", "@" + JS + "sampler.js", haveSampler, function (ok) {
-      if (!ok) { samp.state = "failed"; samp.failedAt = Date.now(); return; }
-      samp.state = "in";
-      if (!violin) { return; }
-      try { violin.attach(); rig.recorded = violin.recorded("violin"); } catch (e) { /* the synthesizers play */ }
-      banks();
-    });
+    try {
+      if (!ctx || !wanted()) { return; }
+      if (haveSampler()) {
+        if (!samp.state) { samp.state = "page"; }
+        feed();
+        return;
+      }
+      if (samp.state) { return; }                                   /* on its way, or failed (see retry) */
+      samp.state = "loading";
+      getFile("sampler", "@" + JS + "sampler.js", haveSampler, function (ok) {
+        if (!ok) { samp.state = "failed"; samp.failedAt = Date.now(); look(); return; }
+        samp.state = "in";
+        if (violin) { try { violin.attach(); rig.recorded = violin.recorded("violin"); } catch (e) { /* the synthesizers play */ } }
+        feed();
+        look();
+      });
+    } catch (e) { /* the synthesizers play */ }
   }
-  function banks() {
-    if (!chain) { bank(0); return; }
-    for (var k = 0; k < chain && k < CHAIN.length; k++) {
-      var S = samplerFor(CHAIN[k]);
-      if (S && typeof S.load === "function") { try { S.load(); } catch (e) { /* the synthesizer plays */ } }
-    }
+  /* a voice that hands out its files one by one and knows which notes each holds (js/sampler.js as it is now). An
+     older voice, or a page's own, is asked for its whole bank, as it always was. */
+  function fine(S) {
+    return typeof S.loadPart === "function" && typeof S.partOf === "function" && typeof S.state === "function" && S.parts >= 1 && S.parts <= 64;
   }
-  function bank(k) {
-    if (k >= CHAIN.length || chain > k) { return; }
-    chain = k + 1;
-    var S = samplerFor(CHAIN[k]), done = false;
-    var on = function () { if (!done) { done = true; bank(k + 1); } };
-    if (!S || typeof S.load !== "function") { on(); return; }
-    try { S.load(BASE + CHAIN[k] + "/", on); } catch (e) { on(); }
+  /* the next file of recordings to ask for: the one that the piece in hand needs first, from the place it is at. Of
+     the files needed first (within a tenth of a second of each other) the one whose note is the longest (a note
+     that has begun on the synthesizer stays there to its end), then by CHAIN, an instrument's low register first.
+     The files this piece does not use follow, by CHAIN. Plucked notes need none: they are the synthesizer's. */
+  function want() {
+    var by = {}, list = [], all = 0, seen = 0, s = song, a, j, k, u, f, S, name, N, tmin = Infinity, best = null;
+    for (a = 0; a < CHAIN.length; a++) {
+      name = CHAIN[a]; S = samplerFor(name);
+      if (!S || typeof S.load !== "function") { continue; }
+      u = by[name] = { S: S, fine: fine(S), files: [] };
+      if (u.fine) { for (k = 0; k < S.parts; k++) { u.files.push({ key: name + " " + (k + 1), name: name, k: k, S: S, t: Infinity, d: 0 }); } }
+      else { u.files.push({ key: name, name: name, k: -1, S: S, t: Infinity, d: 0 }); }
+      for (k = 0; k < u.files.length; k++) { all++; if (!got[u.files[k].key]) { list.push(u.files[k]); } }
+    }
+    if (!list.length) { return null; }
+    function mark(f, j) { if (f.t === Infinity) { f.t = s.t[j]; f.d = s.d[j]; seen++; } }
+    if (s) {
+      N = s.t.length; j = 0;
+      if (running) { j = next; } else { while (j < N && s.t[j] < pos) { j++; } }
+      for (; j < N && seen < all; j++) {
+        if (s.k[j] & 1) { continue; }
+        u = by[INSTS[s.i[j]] || "violin"];
+        if (!u) { continue; }
+        k = u.fine ? u.S.partOf(s.p[j]) : 0;
+        if (k >= 0 && k < u.files.length) { mark(u.files[k], j); }
+        else { for (k = 0; k < u.files.length; k++) { mark(u.files[k], j); } }   /* a pitch that takes the whole bank */
+      }
+    }
+    for (a = 0; a < list.length; a++) { if (list[a].t < tmin) { tmin = list[a].t; } }
+    for (a = 0; a < list.length; a++) {
+      f = list[a];
+      if (f.t <= tmin + 0.1 && (!best || f.d > best.d)) { best = f; }   /* (no file is needed any more: the first of the list) */
+    }
+    return best;
+  }
+  /* ask for the next file, when the one before it has come in or failed: one at a time, so that the first one is
+     there as soon as the connection allows. It goes on while the page is hidden. It stands still while the music is
+     switched off (the file on its way is finished, no other is asked for: a visit that switches the music off with
+     its first tap fetches that one file at most), and while no piece is in hand. */
+  function feed() {
+    try {
+      if (inFlight || !song || !enabled || !haveSampler()) { return; }
+      var f = want(), over = false;
+      if (!f) { return; }
+      inFlight = f.key; got[f.key] = 1;
+      if (askedFor.indexOf(f.key) < 0) { askedFor.push(f.key); }
+      var done = function (ok) {
+        if (over) { return; }
+        over = true;
+        got[f.key] = ok || f.k < 0 ? 2 : 3;                         /* (a whole bank: its voice knows what failed) */
+        if (ok) { late = false; }                                   /* the recordings do come: worth waiting for again */
+        if (inFlight === f.key) { inFlight = ""; }
+        feed();
+        look();
+      };
+      try {
+        if (f.k >= 0) { f.S.loadPart(f.k, BASE + f.name + "/", done); } else { f.S.load(BASE + f.name + "/", done); }
+      } catch (e) { done(false); }
+    } catch (e) { /* the synthesizers play */ }
+  }
+  /* at a tap, what could not be fetched is asked for again: js/sampler.js at most every 15 seconds; a file of
+     recordings goes back in the queue (its voice keeps the 15 seconds itself, and says no at once before that); a
+     whole bank is asked for again as it always was (its voice fetches what failed) */
+  function retry() {
+    try {
+      if (!ctx || !wanted()) { return; }
+      if (!haveSampler()) {
+        if (samp.state === "failed" && Date.now() - samp.failedAt >= 15000) { samp.state = ""; }
+        strings();
+        return;
+      }
+      for (var j = 0; j < askedFor.length; j++) {
+        var key = askedFor[j], S = key.indexOf(" ") < 0 ? samplerFor(key) : null;
+        if (got[key] === 3) { got[key] = 0; }
+        if (S && typeof S.load === "function") { try { S.load(); } catch (e) { /* the synthesizer plays */ } }
+      }
+      feed();
+    } catch (e) { /* the synthesizers play */ }
+  }
+  /* is a recording that the first HEAD seconds of the piece in hand need still to come? Not waited for: a plucked
+     note, an instrument without a recorded voice, a recording that cannot be had as things stand. */
+  function waiting() {
+    try {
+      if (!haveSampler()) { return samp.state === "loading"; }
+      var s = song, N = s.t.length, seen = {}, j, name, key, S;
+      for (j = 0; j < N && s.t[j] < pos + HEAD; j++) {
+        if (s.t[j] < pos || (s.k[j] & 1)) { continue; }
+        name = INSTS[s.i[j]] || "violin";
+        key = name + " " + s.p[j] + " " + s.v[j];
+        if (seen[key]) { continue; }
+        seen[key] = 1;
+        S = violin.recorded(name) ? samplerFor(name) : null;
+        if (!S) { continue; }
+        if (fine(S)) { if (S.state(s.p[j], s.v[j]) === 0) { return true; } }
+        else if (typeof S.load === "function" && got[name] !== 2 && !(typeof S.ready === "function" && S.ready())) { return true; }
+      }
+    } catch (e) { /* then nothing is waited for */ }
+    return false;
+  }
+  /* begin the piece in hand. From its top it first waits for its recordings (see the top of this file), for LIMIT
+     in all: the time it has waited with the music on and the page shown is added up (hold.spent, see drop), so
+     that switching the music off and on again, or hiding the page, neither starts the wait anew nor uses it up
+     while nothing is listening. A wait that runs out is remembered (late): the pieces after it begin at once, until
+     a file of recordings has come in. (A clock that was set back ends the wait.) */
+  function go() {
+    if (!song || !ctx || running || !rigUp()) { return; }
+    if (!begun && !late && waiting()) {
+      var now = Date.now();
+      if (!hold.from) { hold.from = now; }
+      if (now >= hold.from && hold.spent + (now - hold.from) < LIMIT) {
+        if (!hold.timer) { hold.timer = root.setInterval(look, 100); }
+        return;
+      }
+      late = true;
+    }
+    begin(pos);
+  }
+  /* while a first note is held back: look again (ten times a second, and whenever a file has come in or failed) */
+  function look() {
+    try {
+      if (!hold.timer) { return; }
+      if (wanted() && song && !running) { go(); } else { drop(); }
+    } catch (e) { /* never throw */ }
+  }
+  /* the wait is over, or broken off (the music switched off, the page hidden): what was waited so far is kept */
+  function drop() {
+    if (hold.timer) { root.clearInterval(hold.timer); hold.timer = 0; }
+    if (hold.from) { hold.spent += Math.max(0, Date.now() - hold.from); hold.from = 0; }
   }
   /* move the output level to `to` within `secs`. Where the level stands at this moment is worked out here,
      not read back from the audio thread: browsers disagree about what a gain reports while it is moving. */
@@ -820,6 +958,8 @@
      unless told) */
   function begin(from, lead) {
     if (!song || !ctx || !rigUp()) { return; }
+    drop();
+    begun = true;
     pos = from || 0;
     t0 = ctx.currentTime + (lead > 0 ? lead : 0.25) - pos;
     next = 0;
@@ -848,6 +988,7 @@
     running = false;
     if (timer) { root.clearInterval(timer); timer = 0; }
     if (startTimer) { root.clearTimeout(startTimer); startTimer = 0; }
+    drop();
     secs = secs == null ? 0.35 : secs;
     if (ctx && out) { fade(0, secs); }
     if (ctx && violin) { try { violin.cut(secs); } catch (e) { /* ignore */ } }
@@ -858,18 +999,20 @@
     running = false;
     if (timer) { root.clearInterval(timer); timer = 0; }
     if (startTimer) { root.clearTimeout(startTimer); startTimer = 0; }
+    drop();
     haltedAt = -1;
     if (ctx && violin) { try { violin.cut(SWITCH); } catch (e) { /* ignore */ } }
   }
-  /* take up entry number i of the list: fetch its notes if need be, then play it (from the top unless told).
-     After a switch of mode (sw) the music in hand is let go and the new piece begins as soon as it can, just
-     after the old one has faded. */
+  /* take up entry number i of the list: fetch its notes if need be, then play it (from the top unless told), once
+     the recordings of its opening are in (see go). After a switch of mode (sw) the music in hand is let go and the
+     new piece begins as soon as it can, just after the old one has faded: a switch never waits. */
   function take(i, from, sw) {
     if (!LIST.length || i < 0) { return; }
     i = ((i % LIST.length) + LIST.length) % LIST.length;
     var m = LIST[i], md = laneOf(m);
     if (sw && ctx && violin) { letGo(); } else { halt(0.2); }
     cur = i; place[md] = i; song = null; pos = from || 0; handed = 0;
+    begun = false; hold.from = 0; hold.spent = 0;
     if (md === "calm") { calmNext = false; }
     changed();
     getPiece(m, function (ok) {
@@ -880,11 +1023,15 @@
       }
       if (!song) { advance(1); return; }
       if (!wanted()) { return; }
+      strings();                                                    /* its recordings: asked for at once, its opening's first */
       if (sw && ctx && violin && switchAt >= 0) {
         begin(pos, Math.max(0.05, switchAt + SWITCH + 0.05 - ctx.currentTime));
       } else {
         /* not in this tap: the game answers the tap first, then the instruments are built and the music begins */
-        startTimer = root.setTimeout(function () { startTimer = 0; if (cur === i && wanted() && !running) { begin(pos); } }, 260);
+        startTimer = root.setTimeout(function () {
+          startTimer = 0;
+          if (cur === i && wanted() && !running) { if (sw) { begin(pos); } else { go(); } }
+        }, 260);
       }
     });
   }
@@ -914,11 +1061,13 @@
       if (enabled && !noAudio && !gaveUp) {
         if (haveList()) { ahead(); } else { getList(function (ok) { if (ok) { sync(); } }); }
       }
-      if (!wanted()) { if (running) { halt(); changed(); } return; }
-      if (!ensure() || !haveList() || running) { return; }
+      if (!wanted()) { drop(); if (running) { halt(); changed(); } return; }   /* (nothing that was held back starts late) */
+      if (!ensure()) { return; }
+      strings();                                                    /* js/sampler.js, if the page has none: at once */
+      if (!haveList() || running) { return; }
       /* nothing in hand, or a piece of the other list (the mode was switched while all was quiet) */
       if (cur < 0 || laneOf(LIST[cur]) !== laneKey(mode)) { take(entryFor(mode)); return; }
-      if (song) { if (!startTimer) { begin(pos); } }                /* (a start that is on its way is left alone) */
+      if (song) { if (!startTimer && !hold.timer) { go(); } }       /* (a start that is on its way is left alone) */
       else if (!loading["p" + LIST[cur].n]) { take(cur, pos); }
     } catch (e) { /* never throw */ }
   }
@@ -926,9 +1075,9 @@
   function unlock() {
     unlocked = true;
     if (!enabled) { return; }
-    /* recordings that could not be fetched are asked for again (js/sampler.js here, the banks by their voices, each
-       at most every 15 s) */
-    if (violin && rig) { try { strings(); } catch (e) { /* the synthesizers play */ } }
+    /* recordings that could not be fetched are asked for again: at a later tap, not in the tap that starts the music
+       (one tap is several events) */
+    if (violin && rig) { retry(); }
     if (gaveUp && Date.now() - gaveUpAt > 20000) { again(); }       /* a new try now and then, while the game is played */
     sync();
   }
@@ -937,6 +1086,7 @@
     doc.addEventListener("visibilitychange", function () {
       hidden = doc.visibilityState === "hidden";
       if (hidden) {
+        drop();
         if (running) { halt(0.25); changed(); }
         root.setTimeout(function () {
           try {
@@ -957,7 +1107,7 @@
     mode = md;
     var want = laneKey(md);
     /* the piece in hand belongs to the other list, and it sounds or is about to */
-    var busy = cur >= 0 && laneOf(LIST[cur]) !== want && (running || !!startTimer || (!song && !!loading["p" + LIST[cur].n]));
+    var busy = cur >= 0 && laneOf(LIST[cur]) !== want && (running || !!startTimer || !!hold.timer || (!song && !!loading["p" + LIST[cur].n]));
     if (!wanted() || !busy) { sync(); changed(); return; }
     if (laneOf(LIST[cur]) === "calm") { calmNext = true; }
     switchAt = ctx ? ctx.currentTime : -1;
@@ -989,16 +1139,18 @@
     onnote: null,
     /* for the sound checks and the tests */
     _rig: makeRig, _decode: decode, _clip: clip, _envelope: envelope, _level: LEVEL, _calm: CALM, _fade: FADE, _switch: SWITCH, _tell: TELL, _base: BASE, _js: JS,
-    _roles: ROLE, _voices: VOICE, _insts: INSTS,
+    _roles: ROLE, _voices: VOICE, _insts: INSTS, _head: HEAD, _limit: LIMIT,
     _peek: function () {
       var s = song;
       return { cur: cur, n: cur >= 0 && LIST[cur] ? LIST[cur].n : 0, pos: running && ctx ? ctx.currentTime - t0 : pos, next: next, running: running,
         ctx: ctx ? ctx.state : "none", list: LIST.length, pieces: Object.keys(PIECES).length, enabled: enabled, unlocked: unlocked, hidden: hidden,
-        broken: noAudio || gaveUp, noAudio: noAudio, gaveUp: gaveUp, starting: !!startTimer, gain: out ? out.gain.value : -1, level: ramp.v1,
+        broken: noAudio || gaveUp, noAudio: noAudio, gaveUp: gaveUp, starting: !!startTimer || !!hold.timer, held: !!hold.timer, begun: begun, late: late,
+        gain: out ? out.gain.value : -1, level: ramp.v1,
         mode: mode, lane: cur >= 0 && LIST[cur] ? laneOf(LIST[cur]) : "", place: { calm: place.calm, show: place.show }, calmNext: calmNext,
         shape: rig ? rig.shape.gain.value : -1, soft: violin ? violin.soft() : -1, t0: t0, now: ctx ? ctx.currentTime : -1, told: told,
         voice: rig ? (rig.recorded ? "recorded" : "synth") : "",
-        strings: { sampler: samp.state, banks: CHAIN.slice(0, chain), voices: violin ? violin.voices() : null },
+        strings: { sampler: samp.state, asked: askedFor.slice(), voices: violin ? violin.voices() : null,
+          banks: askedFor.map(function (k) { return k.split(" ")[0]; }).filter(function (k, i, a) { return a.indexOf(k) === i; }) },
         song: s ? { notes: s.t.length, end: s.end, rate: s.rate, from: s.from, to: s.to, fadeIn: s.fadeIn, fadeOut: s.fadeOut, level: s.level, soft: s.soft,
           parts: s.parts.map(function (x) { return { name: x.name, inst: INSTS[x.inst], role: ROLES[x.role] }; }) } : null };
     }

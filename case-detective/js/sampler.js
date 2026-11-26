@@ -7,6 +7,18 @@
  *                                          Call it after the first tap. Calling it again is harmless (baseUrl may then
  *                                          be left out), and tries again, at most every 15 seconds, what failed.
  *   ViolinSampler.ready()                  true once every note of the bank is decoded
+ *   ViolinSampler.loadPart(k, baseUrl, done)   fetch one file of the bank alone (k: 0 for the lowest register), for a
+ *                                          player that wants the registers in an order of its own (js/music.js asks
+ *                                          for the files in the order its piece needs them): done(ok) once that
+ *                                          file's notes are decoded, or cannot be had now. A file that failed is
+ *                                          tried again as in load: at the next call once 15 seconds have passed.
+ *   ViolinSampler.parts                    how many files the bank has
+ *   ViolinSampler.partOf(midi)             which file (from 0) holds the recording that plays this pitch; -1 when it
+ *                                          takes the whole bank (a pitch more than a semitone past the bank's ends)
+ *   ViolinSampler.state(midi, vel)         would this note sound from a recording? 1: yes, now. 0: not yet, but its
+ *                                          recording is still to come (its file is not asked for yet or on its way,
+ *                                          or its notes are being decoded). -1: no, its file or its recording could
+ *                                          not be had (a later load or loadPart tries again).
  *   ViolinSampler.make(ctx, dest, opts)    a voice on the audio context ctx (live or offline), into the node dest:
  *                                          { note(t, dur, midi, vel, kind, cents, gain), cut(secs), input }, as the
  *                                          synthesizer of js/music.js. gain (optional, 1 if left out) scales the
@@ -37,11 +49,12 @@
 
   var doc = root.document;
   var FILES = ["violin-01.js", "violin-02.js", "violin-03.js"];
-  /* the three banks: their files (low register first), the name their files hand their notes to, and the voice's */
+  /* the three banks: their files (low register first), the lowest and the highest recording of each file (spans:
+     MIDI numbers, two a file; for partOf), the name their files hand their notes to, and the voice's */
   var BANKS = [
-    { inst: "violin", files: FILES, bank: "ViolinBank", api: "ViolinSampler" },
-    { inst: "viola", files: ["viola-01.js", "viola-02.js"], bank: "ViolaBank", api: "ViolaSampler" },
-    { inst: "cello", files: ["cello-01.js", "cello-02.js", "cello-03.js"], bank: "CelloBank", api: "CelloSampler" }
+    { inst: "violin", files: FILES, spans: [55, 67, 70, 82, 85, 100], bank: "ViolinBank", api: "ViolinSampler" },
+    { inst: "viola", files: ["viola-01.js", "viola-02.js"], spans: [48, 60, 63, 78], bank: "ViolaBank", api: "ViolaSampler" },
+    { inst: "cello", files: ["cello-01.js", "cello-02.js", "cello-03.js"], spans: [36, 48, 51, 63, 66, 75], bank: "CelloBank", api: "CelloSampler" }
   ];
 
   /* the notes are decoded on an offline context of their own, at their own rate (no user gesture needed), shared by
@@ -73,6 +86,9 @@
 
   function Bank(cfg) {
     var FILES = cfg.files;
+    /* where each file's recordings lie (see BANKS). A file whose notes lie elsewhere switches the table off: then
+       every note counts as needing the whole bank */
+    var SPANS = cfg.spans && cfg.spans.length === 2 * FILES.length ? cfg.spans : null;
 
     /* ---------------------------------------------------------------- the bank
        Each bank file calls <cfg.bank>.add({ part, of, attDb, samples: [...] }). A bank file that runs before this one
@@ -86,6 +102,8 @@
     var failedAt = -1e9;         /* when a file or a note last failed: tried again on a later call of load, not at once */
     var pending = 0;             /* notes still being decoded */
     var waiting = [];            /* onready callbacks */
+    var partWait = [];           /* per file: the callbacks of loadPart */
+    var chain = false;           /* load's round through the files is under way */
     var base = "";
     var liveCtx = null;          /* the context of the last voice made: where the notes are decoded if need be */
 
@@ -95,12 +113,15 @@
         if (p.attDb) { ATT_DB = p.attDb; }
         if (p.strokeTuneAt) { STROKE_AT = p.strokeTuneAt; }
         if (p.legTuneAt) { LEG_AT = p.legTuneAt; }
+        var k = p.part ? p.part - 1 : -1;
         if (p.part) { parts[p.part - 1] = 2; }
         for (var i = 0; i < p.samples.length; i++) {
           var s = p.samples[i];
           if (!s || !s.mp3 || !(s.loopEnd > s.loopStart)) { continue; }
           s.lay = s.layer === "pp" ? 0 : 1;
           s.buf = null; s.bad = false;
+          s.part = k;
+          if (SPANS && !(k >= 0 && s.midi >= SPANS[2 * k] && s.midi <= SPANS[2 * k + 1])) { SPANS = null; }
           SAMPLES.push(s);
           decode(s);
         }
@@ -160,22 +181,37 @@
       for (i = 0; i < SAMPLES.length; i++) { if (!SAMPLES[i].buf) { return false; } }
       return true;
     }
+    /* the notes of one file: 0 some are being decoded, 1 they are all decoded, -1 not all of them are (a note could
+       not be decoded, or there was no context yet to decode them on: make() sees to those), or the file holds none */
+    function partState(k) {
+      var n = 0, got = 0, busy = false, i, s;
+      for (i = 0; i < SAMPLES.length; i++) {
+        s = SAMPLES[i];
+        if (s.part !== k) { continue; }
+        n++;
+        if (s.buf) { got++; } else if (s.busy) { busy = true; }
+      }
+      return busy ? 0 : n > 0 && got === n ? 1 : -1;
+    }
     function check() {
+      var i, j, q, ok;
+      /* loadPart's callers: each hears of its own file as soon as that one is settled */
+      for (i = 0; i < FILES.length; i++) {
+        q = partWait[i];
+        if (!q || !q.length || !parts[i] || parts[i] === 1) { continue; }
+        ok = parts[i] === 2 ? partState(i) : -1;
+        if (!ok) { continue; }
+        partWait[i] = [];
+        for (j = 0; j < q.length; j++) { try { q[j](ok > 0); } catch (e) { /* the caller's business */ } }
+      }
       if (!allIn() || !waiting.length) { return; }
-      var q = waiting, ok = ready();
+      q = waiting; ok = ready();
       waiting = [];
-      for (var i = 0; i < q.length; i++) { try { q[i](ok); } catch (e) { /* the caller's business */ } }
+      for (i = 0; i < q.length; i++) { try { q[i](ok); } catch (e) { /* the caller's business */ } }
     }
 
-    /* fetch the bank files one after the other, low register first, with plain script tags */
-    function fetchPart(k) {
-      if (k >= FILES.length) {
-        /* a file that load() put back in the queue while this round was further on */
-        for (var j = 0; j < FILES.length; j++) { if (!parts[j]) { fetchPart(j); return; } }
-        check();
-        return;
-      }
-      if (parts[k]) { fetchPart(k + 1); return; }      /* in, on its way, or failed (load decides when to try again) */
+    /* fetch one bank file with a plain script tag; then() once it has come or failed */
+    function fetchFile(k, then) {
       parts[k] = 1;
       var over = false, s = null, watch = 0;
       function fin() {
@@ -184,7 +220,8 @@
         if (watch) { root.clearTimeout(watch); }
         try { if (s && s.parentNode) { s.parentNode.removeChild(s); } } catch (e) { /* ignore */ }
         if (parts[k] !== 2) { parts[k] = 3; failedAt = clock(); }
-        fetchPart(k + 1);
+        if (then) { then(); }
+        check();
       }
       try {
         s = doc.createElement("script");
@@ -196,28 +233,110 @@
         watch = root.setTimeout(fin, 30000);
       } catch (e) { fin(); }
     }
+    /* load's round: the bank files one after the other, low register first (a file that loadPart has asked for, or
+       that is in or failed, is passed over: load decides when a failed one is tried again) */
+    function fetchPart(k) {
+      if (k >= FILES.length) {
+        /* a file that load() put back in the queue while this round was further on */
+        for (var j = 0; j < FILES.length; j++) { if (!parts[j]) { fetchPart(j); return; } }
+        chain = false;
+        check();
+        return;
+      }
+      if (parts[k]) { fetchPart(k + 1); return; }
+      fetchFile(k, function () { fetchPart(k + 1); });
+    }
+    /* take the address of the bank (if one is given); true when what failed may be tried again: from a new address at
+       once, otherwise not more often than every 15 seconds (load and loadPart may be called on every tap) */
+    function setBase(baseUrl) {
+      var again = clock() - failedAt > 15000, b;
+      if (baseUrl != null) {
+        b = String(baseUrl);
+        if (b && b.charAt(b.length - 1) !== "/") { b += "/"; }
+        if (b !== base) { base = b; again = true; }
+      }
+      return again;
+    }
     function load(baseUrl, onready) {
       try {
         if (typeof onready === "function") { waiting.push(onready); }
-        var again = clock() - failedAt > 15000, busy = false, i, s, b;
-        if (baseUrl != null) {
-          b = String(baseUrl);
-          if (b && b.charAt(b.length - 1) !== "/") { b += "/"; }
-          if (b !== base) { base = b; again = true; }
-        }
-        /* what failed is tried again (at once from another address), but not more often than every 15 seconds:
-           load may be called on every tap */
-        for (i = 0; i < FILES.length; i++) {
-          if (parts[i] === 3 && again) { parts[i] = 0; }
-          if (parts[i] === 1) { busy = true; }
-        }
+        var again = setBase(baseUrl), i, s;
+        for (i = 0; i < FILES.length; i++) { if (parts[i] === 3 && again) { parts[i] = 0; } }
         for (i = 0; i < SAMPLES.length; i++) {
           s = SAMPLES[i];
           if (!s.buf && s.mp3 && !s.busy && (!s.bad || again)) { s.bad = false; decode(s); }
         }
-        if (!busy) { fetchPart(0); }
+        if (!chain) { chain = true; fetchPart(0); }
         if (allIn()) { root.setTimeout(check, 0); }
       } catch (e) { /* never throw */ }
+    }
+    /* one file alone, out of turn (see the top of this file) */
+    function loadPart(k, baseUrl, done) {
+      try {
+        k = +k;
+        if (!(k >= 0 && k < FILES.length && k === Math.floor(k))) {
+          if (typeof done === "function") { root.setTimeout(function () { try { done(false); } catch (e) { /* the caller's business */ } }, 0); }
+          return;
+        }
+        var again = setBase(baseUrl), i, s;
+        if (typeof done === "function") { (partWait[k] = partWait[k] || []).push(done); }
+        if (parts[k] === 3 && again) { parts[k] = 0; }
+        for (i = 0; i < SAMPLES.length; i++) {
+          s = SAMPLES[i];
+          if (s.part === k && !s.buf && s.mp3 && !s.busy && (!s.bad || again)) { s.bad = false; decode(s); }
+        }
+        if (!parts[k]) { fetchFile(k, null); }
+        else { root.setTimeout(check, 0); }
+      } catch (e) { /* never throw */ }
+    }
+
+    /* the recording for a pitch and layer: the nearest one, if it is decoded. While bank files are still on their
+       way (or one could not be fetched) the nearest recording in hand may not be the nearest of the bank: then it
+       is taken only within a semitone (the recordings are three semitones apart), and the other notes are left to
+       the fallback rather than played far from their pitch */
+    function pick(midi, lay) {
+      var best = null, bd = 1e9, j, s, dd;
+      for (j = 0; j < SAMPLES.length; j++) {
+        s = SAMPLES[j];
+        if (s.lay !== lay) { continue; }
+        dd = Math.abs(s.midi - midi);
+        if (dd < bd) { bd = dd; best = s; }
+      }
+      if (!best || !best.buf) { return null; }
+      if (bd > 1) { for (j = 0; j < FILES.length; j++) { if (parts[j] !== 2) { return null; } } }
+      return best;
+    }
+    /* the file whose recordings lie nearest to a pitch (see the top of this file) */
+    function partOf(midi) {
+      var n = FILES.length, best = -1, bd = 1e9, k, d;
+      midi = +midi;
+      if (!SPANS || !(midi >= SPANS[0] - 1 && midi <= SPANS[2 * n - 1] + 1)) { return -1; }
+      for (k = 0; k < n; k++) {
+        d = midi < SPANS[2 * k] ? SPANS[2 * k] - midi : midi > SPANS[2 * k + 1] ? midi - SPANS[2 * k + 1] : 0;
+        if (d < bd) { bd = d; best = k; }
+      }
+      return best;
+    }
+    /* would a note sound from a recording (see the top of this file) */
+    function state(midi, vel) {
+      try {
+        var lay = (vel || 0) < SPLIT ? 0 : 1, k = partOf(midi), miss = false, best = null, bd = 1e9, j, s, dd;
+        if (pick(midi, lay)) { return 1; }
+        for (j = 0; j < FILES.length; j++) {
+          if (k >= 0 && j !== k) { continue; }
+          if (parts[j] === 3) { return -1; }
+          if (parts[j] !== 2) { miss = true; }
+        }
+        if (miss) { return 0; }
+        /* its file is in: its recording is being decoded (or waits for a context to be decoded on), or cannot be */
+        for (j = 0; j < SAMPLES.length; j++) {
+          s = SAMPLES[j];
+          if (s.lay !== lay) { continue; }
+          dd = Math.abs(s.midi - midi);
+          if (dd < bd) { bd = dd; best = s; }
+        }
+        return best && !best.buf && !best.bad && best.mp3 ? 0 : -1;
+      } catch (e) { return -1; }
     }
 
     function make(ctx, dest, opts) {
@@ -274,22 +393,6 @@
         return lfo;
       }
 
-      /* the recording for a pitch and layer: the nearest one, if it is decoded. While bank files are still on their
-         way (or one could not be fetched) the nearest recording in hand may not be the nearest of the bank: then it
-         is taken only within a semitone (the recordings are three semitones apart), and the other notes are left to
-         the fallback rather than played far from their pitch */
-      function pick(midi, lay) {
-        var best = null, bd = 1e9, j, s, dd;
-        for (j = 0; j < SAMPLES.length; j++) {
-          s = SAMPLES[j];
-          if (s.lay !== lay) { continue; }
-          dd = Math.abs(s.midi - midi);
-          if (dd < bd) { bd = dd; best = s; }
-        }
-        if (!best || !best.buf) { return null; }
-        if (bd > 1) { for (j = 0; j < FILES.length; j++) { if (parts[j] !== 2) { return null; } } }
-        return best;
-      }
       function free(n) {
         if (n.freed) { return; }
         n.freed = true; freed++;
@@ -449,7 +552,7 @@
     }
 
     return {
-      load: load, ready: ready, make: make, instrument: cfg.inst,
+      load: load, loadPart: loadPart, ready: ready, state: state, partOf: partOf, parts: FILES.length, make: make, instrument: cfg.inst,
       /* for the tools and the tests */
       _samples: function () { return SAMPLES; }, _files: FILES, _split: SPLIT
     };
