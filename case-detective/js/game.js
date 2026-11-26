@@ -120,6 +120,7 @@
   /* ---------------------------------------------------------------- DOM */
   var app = $("app"), desk = $("desk"), stage = $("stage"), tbMid = $("tbMid");
   var homeBtn = $("homeBtn"), soundBtn = $("soundBtn"), musicBtn = $("musicBtn"), nbBtn = $("nbBtn"), streakEl = $("streak"), streakN = $("streakN");
+  var gamesLink = $("gamesLink");
   var inspFig = $("inspFig"), bubble = $("bubble"), bText = $("bText"), bName = $("bName"), bNext = $("bNext");
   var live = $("live"), fx = $("fx");
   var nb = $("notebook"), nbScrim = $("nbScrim"), nbClose = $("nbClose"), nbPages = $("nbPages");
@@ -491,6 +492,18 @@
   });
 
   /* ---------------------------------------------------------- top bar */
+  /* The way back to all the games, "../index.html", finds the games' home page on the games site and in a
+     copy on disk. A host that serves this game's folder alone (a preview) has nothing above it: there the
+     link goes to the games site instead, in a new tab. */
+  var GAMES_SITE = "https://n0tk3r.github.io/language-games/";
+  function gamesHome() {
+    var h;
+    try { h = location.protocol === "file:" ? "file" : String(location.hostname || "").toLowerCase(); } catch (e) { return; }
+    if (!gamesLink || h === "file" || h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1" || /(^|\.)github\.io$/.test(h)) { return; }
+    gamesLink.setAttribute("href", GAMES_SITE);
+    gamesLink.setAttribute("target", "_blank");
+    gamesLink.setAttribute("rel", "noopener");
+  }
   function setMid(html) { tbMid.innerHTML = html || ""; fitPips(); }
   /* Every pip of the round has its place between the buttons of the top bar. A small phone has no room
      for nine of them at full size once the streak counter is out as well: there they all get smaller
@@ -578,6 +591,8 @@
     view = name;
     app.setAttribute("data-view", name);
     homeBtn.hidden = name === "home";
+    /* the way back to all the games stands where "Case files" is hidden: never two ways back at once */
+    if (gamesLink) { gamesLink.hidden = !homeBtn.hidden; }
     desk.textContent = "";
     desk.appendChild(node);
     if (!(opts && opts.keepScroll)) { try { window.scrollTo(0, 0); } catch (e) { /* ignore */ } }
@@ -3028,7 +3043,9 @@
     if (!(e.detail > 0 || byPointer)) { return false; }
     if (lastTap.el && lastTap.el !== t && Math.abs(e.clientX - lastTap.x) < 24 && Math.abs(e.clientY - lastTap.y) < 24) {
       var finger = byPointer && ptrKind !== "" && ptrKind !== "mouse";
-      if (finger ? ptrDown - lastTap.t < 250 : (e.detail >= 2 && tm - lastTap.t < 800)) { return true; }
+      /* the All games link leaves the game, so a slow second tap of a double tap on "Case files" (the link
+         appears under the finger) is held back a little longer there */
+      if (finger ? ptrDown - lastTap.t < (t === gamesLink ? 600 : 250) : (e.detail >= 2 && tm - lastTap.t < 800)) { return true; }
     }
     lastTap = { t: tm, x: e.clientX, y: e.clientY, el: t };
     return false;
@@ -3217,6 +3234,7 @@
   /* --------------------------------------------------------------- start */
   loadSave();
   try { Sfx.setMuted(!save.sound); } catch (e) { /* ignore */ }
+  gamesHome();
   syncSound();
   buildNotebook();
   try {
