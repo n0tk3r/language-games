@@ -39,6 +39,7 @@ The site is static files (HTML, CSS, JavaScript and fonts) with no build step an
 
 ## The shared Latin parts
 
+- **Players are picked once, on this front page** (`index.html`, the section "Who's playing?"), and every game opens as that player; a game with nobody chosen sends the child here (`index.html?play=<game folder>#players`) and opens again after the pick. The players live only in this browser (`localStorage` key `latinGames.v1`).
 - `latin-common/`: what Climb to Consul and Row the Endings share: the look (`css/common.css`), the top bar, the Inspector's bubble and the settings (`js/shell.js`), the player profiles (`js/players-fallback.js`, the same browser key `latinGames.v1` and the same API as Case Detective's players), the word list (`js/words.js`) and the charts (`js/charts.js`), and `sources.html`, the page for parents on where the words and charts come from.
 - `js/words.js` and `js/charts.js` are built by `latin-common/tools/build_words.py` and `build_charts.py` from the curriculum files; change the scripts and build again rather than editing them. Each game has `tools/check.js` (run with node), which checks every question and chart against them.
 

@@ -13,7 +13,7 @@ The game runs in the shared frame in `latin-common/`: the top bar, the player ch
 
 ## Screens
 
-- **Who's climbing?** This is `LatinPlayers.screens`. It comes from Case Detective 2.2's `players.js` when that file exists, and from latin-common's `players-fallback.js` otherwise. The player picks or adds a player and sets the grade and chapter. The chip menu offers Change chapter, Switch player, Add a player, Manage players and (on phones) Settings. With no player list at all, the game plays as a guest (grade 6, the month's chapter) and saves nothing.
+- **Who's climbing?** Since 2026-11-25 the players are picked on the site's front page (`../index.html`, "Who's playing?"), once for every game, as ilya asked. The game opens as the player chosen there; with nobody chosen it sends the child there and opens again after the pick. The chip's Switch player and Change chapter go there too and come back (see latin-common/README.md). The screens themselves are still `LatinPlayers.screens` (latin-common's `players-fallback.js`, or Case Detective 2.2's `players.js` later); they show in the game only when the browser cannot keep the choice (no localStorage).
 - **The Forum (home).**
   - **The hill of offices.** A night scene: sky, moon, stars, the city, cypresses and five marble terraces. Each terrace has its emblem and name and a red banner with its count. The words stand on the terraces as wax tablets (gold ones on the Consul terrace), with torches, and a wreath and flags at the summit.
   - **The cards beside or below the hill:**

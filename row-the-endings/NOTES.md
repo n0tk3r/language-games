@@ -4,7 +4,7 @@ A chart game for Wheelock's Latin. The child rows a Roman bireme from harbor to 
 
 ## Screens
 
-- **Who's playing?** This is `LatinPlayers.screens`, from Case Detective 2.2's players.js when it is there and from latin-common's fallback otherwise. Here the player picks or adds a player and sets the grade and chapter.
+- **Who's playing?** Since 2026-11-25 the players are picked on the site's front page (`../index.html`, "Who's playing?"), once for every game, as ilya asked. The game opens as the player chosen there; with nobody chosen it sends the child there and opens again after the pick. The chip's Switch player and Change chapter go there too and come back (see latin-common/README.md). The screens themselves are still `LatinPlayers.screens` (latin-common's `players-fallback.js`, or Case Detective 2.2's `players.js` later); they show in the game only when the browser cannot keep the choice (no localStorage).
 - **The harbor (home).** A dusk harbor scene sits under the title "Portus", with a lighthouse, the moored ship and glints on the water. Below it are:
   - **Tonight's voyage card.** Before sailing it lists the legs with a minutes estimate and a "Set sail" button. Partway through it says "Row on". When the voyage is done it shows the scores and offers "One more voyage" (a new voyage, planned from the progress as it is now; it does not repeat tonight's legs).
   - **The quay.** It has one ship card for every chart in play, current chapter first. Each card carries three step pennants: done (red with a tick), next, open, or locked.

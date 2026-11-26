@@ -125,11 +125,48 @@
   .tonight .who { margin: 0 0 12px; color: var(--mist); font-weight: 700; }
   .tonight ol { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: t; }
   .tonight li { counter-increment: t; }
-  .tonight a { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 14px; border-radius: 12px; background: rgba(255, 255, 255, .08); color: var(--cream); text-decoration: none; font-weight: 700; line-height: 1.3; }
-  .tonight a::before { content: counter(t); flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #b3202a; color: #fff; font-weight: 800; }
-  .tonight a b { color: var(--brass-lt); }
-  .tonight a:hover { background: rgba(255, 255, 255, .15); }
-  .tonight a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .tonight ol a { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 8px 14px; border-radius: 12px; background: rgba(255, 255, 255, .08); color: var(--cream); text-decoration: none; font-weight: 700; line-height: 1.3; }
+  .tonight ol a::before { content: counter(t); flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: #b3202a; color: #fff; font-weight: 800; }
+  .tonight ol a b { color: var(--brass-lt); }
+  .tonight ol a:hover { background: rgba(255, 255, 255, .15); }
+  .tonight ol a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* Who's playing: the players are picked here, once, for every game (latin-common/js/players-fallback.js
+     or Case Detective's players.js draws the screens into .lp; their look is latin-common/css/players.css) */
+  [hidden] { display: none !important; }
+  .pl-head { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+  .pl-av { display: flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--pc, #b3202a); color: #fff; font: 800 21px/1 var(--f-ui); text-transform: uppercase; box-shadow: 0 0 0 3px var(--brass), 0 0 0 5px #4a2f14; }
+  .pl-who { min-width: 0; }
+  .pl-head h2 { margin: 0; }
+  .tonight .pl-head .who { margin: 2px 0 0; }
+  .pl-acts { display: flex; flex-wrap: wrap; gap: 8px 10px; margin-top: 14px; }
+  .pl-btn {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 14px; border: 2px solid rgba(248, 236, 208, .6); border-radius: 12px;
+    background: rgba(255, 246, 220, .09); color: var(--cream); font: 800 16px/1.2 var(--f-ui); text-decoration: none; cursor: pointer;
+  }
+  .pl-btn svg { width: 20px; height: 20px; }
+  .pl-btn:hover { background: rgba(255, 246, 220, .18); }
+  .pl-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .pl-pick { max-width: 780px; margin: 0 auto; }
+  #tonight-h:focus { outline: none; }
+  .pl-note { margin: 0; color: var(--mist); }
+  .pl-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin: 0 0 10px; }
+  .pl-for { margin: 0; color: var(--brass-lt); font-weight: 800; }
+  .pl-back { min-height: 44px; padding: 0; border: 0; background: none; color: var(--mist); font: 700 16px/1.2 var(--f-ui); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .pl-back:hover { color: #fff; }
+  .pl-back:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .pl-say { margin: 0 0 12px; padding: 8px 12px; border-left: 4px solid #b3202a; border-radius: 0 10px 10px 0; background: rgba(255, 246, 220, .08); color: var(--cream); font-weight: 600; line-height: 1.4; }
+  .pl-say:empty { display: none; }
+  .pl-say b { color: var(--brass-lt); }
+  .pl-say .pl-n { display: block; color: var(--brass); font: 800 12.5px/1.4 var(--f-ui); letter-spacing: .06em; text-transform: uppercase; }
+  bdi { unicode-bidi: isolate; }
+  /* a phone: the panel gives the player cards its room, and the card's Play / Continue keeps only its arrow */
+  @media (max-width: 419.98px) {
+    .tonight { padding: 14px 10px 16px; }
+    #whos-playing .lpf-card { gap: 10px; padding: 10px; }
+    #whos-playing .lpf-go { gap: 0; padding: 6px; font-size: 0; }
+    #whos-playing .lpf-go .ic { width: 20px; height: 20px; }
+  }
 
   /* the folder that is still empty */
   .soon { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: 16px; border: 2px dashed rgba(248, 236, 208, .55); background: rgba(19, 36, 74, .6); color: var(--cream); box-shadow: none; }
@@ -213,6 +250,7 @@
     .cd:hover { -webkit-transform: none; transform: none; }
   }
 </style>
+<link rel="stylesheet" href="latin-common/css/players.css">
 </head>
 <body>
 <header class="top">
@@ -226,10 +264,25 @@
   <h1>Pick a game and start practicing</h1>
   <p class="lead">Short games with instant feedback, for a phone, a tablet, or a laptop.</p>
 
-  <section class="tonight" id="tonight" aria-labelledby="tonight-h" hidden>
-    <h2 id="tonight-h">Tonight</h2>
-    <p class="who" id="tonight-who"></p>
-    <ol id="tonight-list"></ol>
+  <!-- Who's playing: picked here once for every game; then what that player can do tonight -->
+  <section class="tonight" id="whos-playing" aria-label="Who’s playing" hidden>
+    <div id="pl-now" hidden>
+      <div class="pl-head">
+        <span class="pl-av" id="pl-av" aria-hidden="true"></span>
+        <div class="pl-who"><h2 id="tonight-h" tabindex="-1">Tonight</h2><p class="who" id="tonight-who"></p></div>
+      </div>
+      <ol id="tonight-list"></ol>
+      <p class="pl-note" id="pl-note" hidden></p>
+      <div class="pl-acts" id="pl-acts" hidden>
+        <button type="button" class="pl-btn" data-pl="players"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="9" cy="8.5" r="3.6" fill="currentColor"/><path fill="currentColor" d="M2.5 20c0-3.8 2.9-6.3 6.5-6.3s6.5 2.5 6.5 6.3z"/><circle cx="16.5" cy="7.5" r="3" fill="currentColor" opacity=".7"/><path fill="currentColor" opacity=".7" d="M15.6 12.9c3.4.1 5.9 2.5 5.9 6.1h-4.3c0-2.4-.6-4.4-1.6-6.1z"/></svg>Switch player</button>
+        <button type="button" class="pl-btn" data-pl="chapter"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M6.5 2.5h11c1.1 0 2 .9 2 2v15c0 1.1-.9 2-2 2h-11c-1.1 0-2-.9-2-2V4.5c0-1.1.9-2 2-2zm2 4.3v1.6h7V6.8zm0 3.4v1.6h7v-1.6z"/></svg><span id="pl-ch-lab">Change chapter</span></button>
+      </div>
+    </div>
+    <div class="pl-pick" id="pl-pick" hidden>
+      <div class="pl-top" id="pl-top" hidden><p class="pl-for" id="pl-for"></p><button type="button" class="pl-back" id="pl-back"></button></div>
+      <p class="pl-say" id="pl-say"></p>
+      <div class="lp" id="pl-screens"></div>
+    </div>
   </section>
 
   <ul class="games" id="games" role="list">
@@ -306,6 +359,9 @@
 <script src="climb-to-consul/js/art.js"></script>
 <script src="row-the-endings/js/art.js"></script>
 <script src="latin-common/js/charts.js"></script>
+<script src="latin-common/js/words.js"></script>
+<!-- the players, shared by every game; when Case Detective 2.2 is on the site, its css/players.css, js/courses.js and js/players.js take this place -->
+<script src="latin-common/js/players-fallback.js"></script>
 <script>
 (function () {
   "use strict";
@@ -313,27 +369,173 @@
   try { if (window.ClimbArt) { document.getElementById("art-climb").innerHTML = window.ClimbArt.logo(); } } catch (e) { /* keep the empty night */ }
   try { if (window.RowArt) { document.getElementById("art-row").innerHTML = window.RowArt.LOGO; } } catch (e) { /* keep the empty night */ }
 
-  /* Tonight: the player who played last (kept only in this browser, shared by the games) */
-  var store, p;
-  try { store = JSON.parse(window.localStorage.getItem("latinGames.v1") || "null"); } catch (e) { store = null; }
-  if (!store || !store.players || !store.players.length) { return; }
-  p = store.players.filter(function (x) { return x.id === store.last; })[0] || store.players[0];
-  if (!p || (p.grade !== 6 && p.grade !== 8)) { return; }
-  var ready = p.grade === 6 ? 3 : 22, first = p.grade === 6 ? 1 : 18;
-  var ch = Math.max(first, Math.min(p.chapter || first, ready));
-  var charts = ((window.LATIN_CHARTS || {}).charts || []).filter(function (c) { return c.ch === ch; });
-  var who = document.getElementById("tonight-who"), list = document.getElementById("tonight-list");
-  who.textContent = "For " + p.name + " · " + (p.grade === 6 ? "6th" : "8th") + " grade · Chapter " + (p.chapter || ch);
-  function item(href, game, what) {
-    var li = document.createElement("li"), a = document.createElement("a"), b = document.createElement("b"), span = document.createElement("span");
-    a.href = href; b.textContent = game;
-    span.appendChild(b); span.appendChild(document.createTextNode(": " + what));
-    a.appendChild(span); li.appendChild(a); list.appendChild(li);
+  /* ------------------------------------------------------------------ Who's playing
+     The players are picked here, once, for every game: the games read the chosen player (latinGames.v1, kept only
+     in this browser) and send the child here when nobody is chosen yet, as index.html?play=<game folder>#players
+     (or #chapter, #manage, #add); after the pick the game opens again. The screens are drawn by window.LatinPlayers
+     (latin-common/js/players-fallback.js, or Case Detective's players.js once it is on the site). */
+  var GAMES = { "case-detective": "Case Detective", "climb-to-consul": "Climb to Consul", "row-the-endings": "Row the Endings" };
+  var SCREENS = { players: 1, chapter: 1, manage: 1, add: 1 };
+  /* the chapters that have something to play (Climb to Consul and Row the Endings; Case Detective is chapter 2) */
+  var READY = { 6: { 1: 1, 2: 1, 3: 1 }, 8: { 18: 1, 19: 1, 20: 1, 21: 1, 22: 1 } };
+  function $(id) { return document.getElementById(id); }
+  var L = window.LatinPlayers || null, ui = null, view = "";
+  var sec = $("whos-playing"), nowEl = $("pl-now"), pickEl = $("pl-pick"), box = $("pl-screens"), sayEl = $("pl-say");
+  var topEl = $("pl-top"), forEl = $("pl-for"), backEl = $("pl-back"), actsEl = $("pl-acts");
+
+  /* ?play=<folder>: only the site's own games, so this link cannot send anyone anywhere else */
+  var play = null;
+  try { var m = /[?&]play=([a-z0-9-]+)(?:&|$)/.exec(window.location.search); if (m && GAMES.hasOwnProperty(m[1])) { play = m[1]; } } catch (e) { play = null; }
+  function wanted() { var h = (window.location.hash || "").replace(/^#/, ""); return SCREENS.hasOwnProperty(h) ? h : null; }
+  function dropHash() { try { if (window.location.hash) { window.history.replaceState(null, "", window.location.pathname + window.location.search); } } catch (e) { /* keep it */ } }
+
+  function current() {
+    if (L) { try { return L.current(); } catch (e) { return null; } }
+    /* without the players script: the player who played last, read straight from the store */
+    var st = null;
+    try { st = JSON.parse(window.localStorage.getItem("latinGames.v1") || "null"); } catch (e) { st = null; }
+    if (!st || !st.players || !st.players.length) { return null; }
+    return st.players.filter(function (x) { return x.id === st.last; })[0] || st.players[0];
   }
-  item("climb-to-consul/index.html", "Climb to Consul", "tonight’s assembly, chapter " + ch + "’s new words and the words due");
-  item("row-the-endings/index.html", "Row the Endings", charts.length ? "tonight’s voyage, " + charts[0].title + (charts.length > 1 ? " and more" : "") : "tonight’s voyage");
-  if (p.grade === 6) { item("case-detective/index.html", "Case Detective", "a case file on the jobs of the cases"); }
-  document.getElementById("tonight").hidden = false;
+
+  /* the Inspector's line above the screens: text, with <b> and <i> kept */
+  function rich(html, into) {
+    var t = document.createElement("template");
+    t.innerHTML = String(html == null ? "" : html);
+    (function copy(from, to) {
+      Array.prototype.forEach.call(from.childNodes, function (n) {
+        if (n.nodeType === 3) { to.appendChild(document.createTextNode(n.nodeValue)); return; }
+        if (n.nodeType !== 1) { return; }
+        var tag = n.nodeName.toLowerCase();
+        if (tag === "b" || tag === "i") { var e = document.createElement(tag); to.appendChild(e); copy(n, e); } else { copy(n, to); }
+      });
+    })(t.content, into);
+  }
+
+  var host = {
+    show: function (el, kind) {
+      view = "pick";
+      sec.hidden = false; nowEl.hidden = true; pickEl.hidden = false;
+      box.textContent = ""; box.setAttribute("data-kind", kind || "players"); box.appendChild(el);
+      topBar();
+    },
+    say: function (lines) {
+      sayEl.textContent = "";
+      var n = document.createElement("span"); n.className = "pl-n"; n.textContent = "Inspector Cāsus"; sayEl.appendChild(n);
+      rich([].concat(lines || []).join(" "), sayEl);
+    },
+    picked: function (p, how) {
+      /* #added, #chapter or #picked: the game greets accordingly, and knows the choice was made here */
+      if (play) { window.location.replace(play + "/index.html#" + (how === "added" || how === "chapter" ? how : "picked")); return; }
+      dropHash();
+      showNow(true);
+    },
+    filesIn: function (g) { return READY[g] || {}; },
+    sourcesHref: "latin-common/sources.html"
+  };
+  function screens() {
+    if (ui || !L || typeof L.screens !== "function") { return ui; }
+    try { ui = L.screens(host); } catch (e) { ui = null; }
+    return ui;
+  }
+  function topBar() {
+    var cur = current();
+    forEl.textContent = play ? "Then on to " + GAMES[play] : "";
+    backEl.hidden = !cur;
+    backEl.textContent = play ? "Back to " + GAMES[play] : "Back to tonight";
+    topEl.hidden = !play && !cur;
+  }
+  function open(screen) {
+    var u = screens(), p = current();
+    if (!u) { showNow(false); return; }
+    if (screen === "chapter" && p) { u.changeChapter(p.id); }
+    else if (screen === "manage") { u.manage(); }
+    else if (screen === "add") { u.add(); }
+    else { u.players(); }
+  }
+  backEl.addEventListener("click", function () {
+    if (play) { window.location.replace(play + "/index.html"); return; }
+    dropHash();
+    showNow(true);
+  });
+  Array.prototype.forEach.call(actsEl.querySelectorAll("[data-pl]"), function (b) {
+    b.addEventListener("click", function () { open(b.getAttribute("data-pl")); });
+  });
+  function playable(p) { return p && (p.grade === 6 || p.grade === 8); }
+  function plain(name) { return String(name == null ? "" : name).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ""); }
+
+  /* Tonight: what the chosen player can do tonight, one line per game */
+  var drawn = "";
+  function showNow(focus) {
+    var p = current();
+    if (!p) { if (screens()) { open("players"); } else { sec.hidden = true; } return; }
+    /* drawn already, and nothing changed: keep it (and the focus in it) */
+    var sig = JSON.stringify([p.id, p.name, p.color, p.grade, p.chapter]);
+    if (view === "now" && sig === drawn && !focus) { return; }
+    drawn = sig;
+    view = "now";
+    sec.hidden = false; pickEl.hidden = true; nowEl.hidden = false;
+    box.textContent = ""; sayEl.textContent = "";
+    actsEl.hidden = !screens();
+    var av = $("pl-av");
+    av.style.setProperty("--pc", p.color || "#b3202a");
+    av.textContent = Array.from ? (Array.from(plain(p.name).trim())[0] || "?") : (plain(p.name).trim().charAt(0) || "?");
+    var line = "";
+    if (L) { try { line = L.gradeLine(p); } catch (e) { line = ""; } }
+    var who = $("tonight-who"), bdi = document.createElement("bdi");
+    bdi.textContent = p.name;
+    who.textContent = "For ";
+    who.appendChild(bdi);
+    who.appendChild(document.createTextNode(" · " + (line || (p.grade === 6 ? "6th" : p.grade === 8 ? "8th" : p.grade + "th") + " grade · Chapter " + p.chapter)));
+    var list = $("tonight-list");
+    list.textContent = "";
+    function item(href, game, what) {
+      var li = document.createElement("li"), a = document.createElement("a"), b = document.createElement("b"), span = document.createElement("span");
+      a.href = href; b.textContent = game;
+      span.appendChild(b); span.appendChild(document.createTextNode(what ? ": " + what : ""));
+      a.appendChild(span); li.appendChild(a); list.appendChild(li);
+    }
+    if (p.grade === 6 || p.grade === 8) {
+      var ready = p.grade === 6 ? 3 : 22, first = p.grade === 6 ? 1 : 18;
+      var ch = Math.max(first, Math.min(p.chapter || first, ready));
+      var charts = ((window.LATIN_CHARTS || {}).charts || []).filter(function (c) { return c.ch === ch; });
+      item("climb-to-consul/index.html", "Climb to Consul", "tonight’s assembly, chapter " + ch + "’s new words and the words due");
+      item("row-the-endings/index.html", "Row the Endings", charts.length ? "tonight’s voyage, " + charts[0].title + (charts.length > 1 ? " and more" : "") : "tonight’s voyage");
+      if (p.grade === 6) { item("case-detective/index.html", "Case Detective", "a case file on the jobs of the cases"); }
+    }
+    list.hidden = !list.children.length;
+    /* a grade whose games are not made yet: say so, and offer to change the grade */
+    var note = $("pl-note"), ready = playable(p);
+    note.hidden = ready;
+    note.textContent = ready ? "" : "The games for " + (line.split(" · ")[0] || "this grade") + " are on their way. For now they cover 6th and 8th grade.";
+    var chLab = $("pl-ch-lab");
+    chLab.textContent = ready ? "Change chapter" : "Change grade";
+    chLab.parentNode.setAttribute("data-pl", ready ? "chapter" : "manage");
+    if (focus) { try { $("tonight-h").focus({ preventScroll: false }); } catch (e) { /* ignore */ } }
+  }
+
+  /* first view: the picker when a game sent the child here, when a screen is asked for, or when nobody is chosen */
+  function start() {
+    var p = current(), w = wanted();
+    if (screens() && (play || w || !p)) { open(w || "players"); } else { showNow(false); }
+  }
+  start();
+  /* another tab (or a game in it) changed the players: refresh Tonight, or the list of players when it is showing
+     (the other screens keep their own flow; a pick on this page also lands here, and then moves on by itself) */
+  if (L && typeof L.onchange === "function") {
+    try {
+      L.onchange(function () {
+        if (view === "now") { showNow(false); return; }
+        setTimeout(function () { if (view === "pick" && box.getAttribute("data-kind") === "players" && !pickEl.hidden) { open("players"); } }, 0);
+      });
+    } catch (e) { /* ignore */ }
+  }
+  window.addEventListener("hashchange", function () {
+    var w = wanted();
+    if (w && screens()) { open(w); } else if (!w && !play && current()) { showNow(true); }
+  });
+  /* back here with the Back button: the page comes from the cache, so read the players again */
+  window.addEventListener("pageshow", function (e) { if (e.persisted) { drawn = ""; start(); } });
 })();
 </script>
 <script>

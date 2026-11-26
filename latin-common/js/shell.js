@@ -2,7 +2,7 @@
  * LatinShell: what the Latin games share around their own screens.
  *
  *   var shell = LatinShell.mount({ id, title, sub, logo, onPlayer(player, how, shell), onSettings(), onHome(),
- *                                  starsOf(player), filesIn(grade), sourcesHref, gamesHref })
+ *                                  starsOf(player), filesIn(grade), sourcesHref, gamesHref, folder })
  *     -> the top bar ("All games" house back to the site's front page, gamesHref, default ../index.html, false hides it;
  *        logo and title; player chip, music, sound, settings), the Inspector in a round brass
  *        frame with his speech bubble, the desk for the game (shell.desk) and the players screens.
@@ -463,6 +463,8 @@
     }
 
     /* dialogs: { title, html | el, buttons: [{ label, kind, value }], sheet: bool, close: true } -> Promise(value | null) */
+    var openDialogs = [];
+    function closeDialogs() { openDialogs.slice().forEach(function (c) { try { c(null); } catch (e) { /* ignore */ } }); }
     function dialog(o) {
       o = o || {};
       return new Promise(function (resolve) {
@@ -492,12 +494,14 @@
           }
         }
         function close(v) {
+          openDialogs = openDialogs.filter(function (c) { return c !== close; });
           doc.removeEventListener("keydown", key, true);
           if (scrim.parentNode) { scrim.parentNode.removeChild(scrim); }
           if (box.parentNode) { box.parentNode.removeChild(box); }
           if (back && back.focus) { try { back.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
           resolve(v);
         }
+        openDialogs.push(close);
         if (o.close !== false) { scrim.addEventListener("click", function () { close(null); }); var xb = box.querySelector(".dlg-x"); if (xb) { xb.addEventListener("click", function () { close(null); }); } }
         doc.addEventListener("keydown", key, true);
         doc.body.appendChild(scrim);
@@ -541,6 +545,41 @@
     /* the player: chip, menu, screens */
     var playing = null, view = "game", ui = null, shown = null;
     function player() { var p = P(); if (!p || !playing) { return null; } try { return p.get(playing); } catch (e) { return null; } }
+
+    /* The players are picked on the site's front page, once for every game (ilya, 2026-11-25): a game opens as the
+       player chosen there, and "Switch player", "Change chapter" (and a visit with nobody chosen) go to
+       {gamesHref}?play=<this game's folder>#<screen>, which comes back here after the pick. The in-game players screens
+       stay only for a page with gamesHref: false, or when this browser cannot keep the choice (no localStorage). */
+    var folder = (function () {
+      if (opts.folder && /^[a-z0-9-]+$/.test(opts.folder)) { return opts.folder; }
+      try {
+        var parts = String(root.location.pathname || "").split("/");
+        if (!parts[parts.length - 1] || /\.html?$/i.test(parts[parts.length - 1])) { parts.pop(); }
+        var f = parts.pop() || "";
+        return /^[a-z0-9-]+$/.test(f) ? f : "";
+      } catch (e) { return ""; }
+    })();
+    var atHome = opts.gamesHref !== false && (function () {
+      try { var k = "latinGames.probe"; root.localStorage.setItem(k, "1"); root.localStorage.removeItem(k); return true; } catch (e) { return false; }
+    })();
+    function homeUrl(screen) {
+      return (opts.gamesHref || "../index.html") + (folder ? "?play=" + folder : "") + "#" + (screen || "players");
+    }
+    /* replace, not push: the front page's "Back to <game>" and the pick come back here, so a round trip leaves one
+       entry for the game in the history and one Back leaves it */
+    function goHome(screen) {
+      closeMenu();
+      try { root.location.replace(homeUrl(screen)); } catch (e) { /* ignore */ }
+    }
+    /* back from the front page: #added, #chapter or #picked tells what was done there */
+    var arrived = (function () {
+      try {
+        var m = /^#(added|chapter|picked)$/.exec(root.location.hash || "");
+        if (!m) { return null; }
+        root.history.replaceState(null, "", root.location.pathname + root.location.search);
+        return m[1];
+      } catch (e) { return null; }
+    })();
     function syncChip() {
       var p = player(), pl = P();
       chip.hidden = !pl;
@@ -577,8 +616,13 @@
     function openMenu() {
       var pl = P(); if (!pl) { return; }
       var p = player(), items = [];
-      if (p) { items.push(["chapter", "Change chapter", "book"]); }
-      items.push(["switch", p ? "Switch player" : "Choose a player", "users"], ["add", "Add a player", "plus"], ["manage", "Manage players", "user"]);
+      if (atHome) {
+        items.push(["switch", "Switch player", "users"]);
+        if (p) { items.push(["chapter", "Change chapter", "book"]); }
+      } else {
+        if (p) { items.push(["chapter", "Change chapter", "book"]); }
+        items.push(["switch", p ? "Switch player" : "Choose a player", "users"], ["add", "Add a player", "plus"], ["manage", "Manage players", "user"]);
+      }
       if (typeof opts.onSettings === "function") { items.push(["settings", "Settings", "gear"]); }
       var head = "";
       if (p) {
@@ -660,10 +704,13 @@
       try { root.scrollTo(0, 0); } catch (e) { /* ignore */ }
       if (typeof opts.onPlayer === "function") { try { opts.onPlayer(p ? (player() || p) : null, how, shell); } catch (e) { if (root.console) { root.console.error(e); } } }
     }
-    function showPlayers() { var u = screens(); if (u) { u.players(); } }
-    function addPlayer() { var u = screens(); if (u) { u.add(); } }
-    function managePlayers() { var u = screens(); if (u) { u.manage(); } }
-    function changeChapter(id) { var u = screens(), p = id ? { id: id } : player(); if (u) { if (p) { u.changeChapter(p.id); } else { u.players(); } } }
+    function showPlayers() { if (atHome && P()) { goHome("players"); return; } var u = screens(); if (u) { u.players(); } }
+    function addPlayer() { if (atHome && P()) { goHome("add"); return; } var u = screens(); if (u) { u.add(); } }
+    function managePlayers() { if (atHome && P()) { goHome("manage"); return; } var u = screens(); if (u) { u.manage(); } }
+    function changeChapter(id) {
+      if (atHome && P()) { goHome(player() ? "chapter" : "players"); return; }
+      var u = screens(), p = id ? { id: id } : player(); if (u) { if (p) { u.changeChapter(p.id); } else { u.players(); } }
+    }
 
     /* changes from this page, the players screens or another tab */
     function onChange() {
@@ -671,6 +718,12 @@
       syncAudio();
       pruneAll();
       var pl = P();
+      if (pl && atHome) {
+        var c = null;
+        try { c = pl.current(); } catch (e) { c = null; }
+        if (!c) { closeDialogs(); syncChip(); goHome("players"); return; }
+        if (c.id !== playing) { closeDialogs(); toGame(c, "continue"); return; }
+      }
       if (!pl || !playing) { syncChip(); return; }
       var p = player();
       syncChip();
@@ -707,10 +760,16 @@
     setTimeout(function () {
       var pl = P(), cur = null;
       if (pl) { try { cur = pl.current(); } catch (e) { cur = null; } }
-      if (cur) { toGame(cur, "continue"); }
+      /* came back from the front page and still nobody is chosen: this browser does not keep the choice, so the
+         players screens stay here instead of sending the child back and forth */
+      if (!cur && arrived) { atHome = false; }
+      if (cur) { toGame(cur, arrived === "added" ? "added" : arrived === "chapter" ? "chapter" : "continue"); }
+      else if (pl && atHome) { app.style.visibility = "hidden"; goHome("players"); }
       else if (pl && screens()) { showPlayers(); }
       else { toGame(null, "none"); }
     }, 0);
+    /* back here with the Back button from the front page: the page comes from the cache, so read the players again */
+    if (root.addEventListener) { root.addEventListener("pageshow", function (e) { if (e && e.persisted) { app.style.visibility = ""; onChange(); } }); }
     return shell;
   }
 

@@ -66,6 +66,7 @@
   /* ------------------------------------------------------------------- mount */
   shell = S.mount({
     id: "climb",
+    folder: "climb-to-consul",                       /* the front page sends the child back here after picking a player */
     title: "Climb to Consul",
     sub: "Wheelock’s Latin · words",
     logo: A.logo(),

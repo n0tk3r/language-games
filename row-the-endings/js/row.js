@@ -98,6 +98,7 @@
   /* ------------------------------------------------------------------ the shell */
   var shell = S.mount({
     id: "row",
+    folder: "row-the-endings",                       /* the front page sends the child back here after picking a player */
     title: "Row the Endings",
     sub: "Wheelock’s Latin · charts",
     logo: A.LOGO,

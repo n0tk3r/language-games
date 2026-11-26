@@ -151,7 +151,7 @@
 
   /* ------------------------------------------------------------- the store */
   function cleanName(s) {
-    s = String(s == null ? "" : s).replace(/[<>\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, "").replace(/\s+/g, " ").trim();
+    s = String(s == null ? "" : s).replace(/[<>\u0000-\u001f\u007f-\u009f\u200e\u200f\u2028-\u202e\u2066-\u2069]/g, "").replace(/\s+/g, " ").trim();
     var cps = Array.from ? Array.from(s) : s.split("");
     if (cps.length > NAME_MAX) { s = cps.slice(0, NAME_MAX).join("").trim(); }
     return s;
@@ -296,7 +296,7 @@
     }
     function say(name, mood, who) {
       if (typeof host.say !== "function") { return; }
-      var l = lines(name).map(function (x) { return x.replace(/\{name\}/g, esc(who || "")); });
+      var l = lines(name).map(function (x) { return x.replace(/\{name\}/g, function () { return esc(who || ""); }); });
       try { host.say(l, mood || "idle"); } catch (e) { /* ignore */ }
     }
     function show(el, kind) {
@@ -344,7 +344,7 @@
       on(el, '[data-act="add"]', function () { addScreen(); });
       on(el, '[data-act="manage"]', function () { manage(); });
       show(el, "players");
-      say(cur ? "playersBack" : "playersFirst", "wave");
+      say("playersBack", "wave");
     }
 
     /* the three steps of Add a player; also used to change a grade (from Manage) */
@@ -455,7 +455,7 @@
           '<input class="lpf-input" id="lpfRen' + esc(p.id) + '" type="text" maxlength="' + NAME_MAX + '" autocomplete="off" spellcheck="false">' +
           '<button type="submit" class="btn primary sm">Save</button><button type="button" class="btn wood sm" data-act="cancel">Cancel</button></form></li>';
       });
-      html += '</ul><div class="lpf-row"><button type="button" class="btn primary" data-act="done" data-focus>Done' + icon("next") + "</button></div>" + foot("") + "</div>";
+      html += '</ul><div class="lpf-row"><button type="button" class="btn primary" data-act="done">Done' + icon("next") + "</button></div>" + foot("") + "</div>";
       var el = make(html);
       Array.prototype.forEach.call(el.querySelectorAll("[data-pid]"), function (li) {
         var id = li.getAttribute("data-pid"), form = li.querySelector("form"), inp = form.querySelector("input"), btns = li.querySelector(".lpf-mbtns");
@@ -512,8 +512,8 @@
   /* a small confirm box in the same look (styles: .dlg in latin-common/css/common.css) */
   function confirmBox(title, text, yes, no, done) {
     var back = doc.activeElement, scrim = doc.createElement("div"), box = doc.createElement("section");
-    scrim.className = "scrim";
-    box.className = "dlg open";
+    scrim.className = "scrim lpf-cf";                  /* lpf-cf: the look on a page without common.css (css/players.css) */
+    box.className = "dlg open lpf-cf";
     box.setAttribute("role", "alertdialog");
     box.setAttribute("aria-modal", "true");
     box.setAttribute("aria-labelledby", "lpfCfT");

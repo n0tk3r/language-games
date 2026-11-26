@@ -8,6 +8,7 @@ Latin text helpers. Static files, classic scripts, no build step; works from `fi
 |---|---|
 | `css/common.css` | Case Detective's tokens and fonts (from `../../case-detective/fonts/`), base, top bar, player chip, stage and bubble, desk, buttons, cards, sheets and dialogs, toasts, macron keys, players screens, focus ring, reduced motion, print base |
 | `js/players-fallback.js` | `window.LatinPlayers` when Case Detective 2.2's `players.js` is not there: same API, same storage |
+| `css/players.css` | The players screens' look on a page without `common.css` (the site's front page, where the players are picked): built by `tools/build_players_css.py` from `common.css`, every rule scoped to `.lp` (the screens' box) and `.lpf-cf` (the confirm box). Rebuild it after changing buttons, cards, dialogs or `.lpf-*` in `common.css` |
 | `js/shell.js` | `window.LatinShell` (also `require("./shell.js")` in node for the text helpers) |
 | `js/words.js`, `js/charts.js` | `LATIN_WORDS`, `LATIN_CHARTS` (built by `tools/`, do not edit) |
 | `sources.html` | For parents: where the words and charts come from (printable) |
@@ -73,7 +74,8 @@ player or their grade or chapter changes. Rebuild your home screen there. `playe
 ## `LatinShell.mount(opts)` → `shell`
 
 Options: `id`, `title`, `sub`, `logo` (SVG string), `onPlayer(player, how, shell)`, `onSettings()`,
-`onHome()`, `filesIn(grade)`, `starsOf(player)`, `sourcesHref` (default: this folder's `sources.html`;
+`onHome()`, `filesIn(grade)`, `starsOf(player)`, `folder` (this game's folder, for the way back from the front
+page), `sourcesHref` (default: this folder's `sources.html`;
 `false` hides the link), `gamesHref` (the "All games" link back to the site's front page; default
 `../index.html`, `false` hides it), `hello` (a first line for the bubble), `root` (default `document.body`).
 
@@ -84,7 +86,16 @@ What it builds (`.ls-app`):
   your progress pips or a round counter), then the player chip, music, sound and the optional settings gear.
   Chip text: "Playing as **{name}** · 6th grade · Chapter 2" on a laptop, "{name} · 6th grade · Chapter 2" on a
   tablet, the player's initial on a phone (below 480 px, where Settings moves into the chip menu too). The
-  chip opens a menu: Change chapter, Switch player, Add a player, Manage players.
+  chip opens a menu: Switch player, Change chapter (and Settings on a phone).
+- **Players are picked on the site's front page** (ilya, 2026-11-25: "The profiles should be loaded at the All
+  games level"). The game opens as `LatinPlayers.current()`. With nobody chosen it goes, with `location.replace`,
+  to `{gamesHref}?play={folder}#players`; Switch player and Change chapter (and `showPlayers()`, `addPlayer()`,
+  `managePlayers()`, `changeChapter()`) open `{gamesHref}?play={folder}#players`, `#add`, `#manage` or `#chapter`.
+  The front page draws the players screens there and, after the pick, opens `{folder}/index.html` again. When
+  another tab chooses another player the game follows it; when the player is removed it goes to the front page.
+  `folder` is the game's folder name (an option, or read from the page's address); the front page accepts only
+  the site's own game folders. The players screens stay in the game only with `gamesHref: false`, or when this
+  browser cannot write localStorage (so the choice could not be kept between the pages).
 - **Stage**: Inspector Cāsus as a bust in a round brass frame, and his speech bubble. A tap on him while he
   is quiet makes him wave or think (like Case Detective).
 - **Desk**: `shell.desk` is yours (a wooden desk, max width `--maxw`, default 860 px: set `.ls-app { --maxw: ... }`
@@ -100,7 +111,7 @@ What it builds (`.ls-app`):
 | `mood(m)`, `act(m, ms)` | `setMood`, `play` of the Inspector. Moods: idle wave think search point cheer oops proud |
 | `detective` | The `Detective` element itself, or `null` if `detective.js` is missing. 2.2 adds `violin(on)`, `bow()`; check before calling |
 | `player()` | A fresh copy of the player in play (`{ id, name, color, grade, chapter }`) or `null` |
-| `showPlayers()`, `addPlayer()`, `managePlayers()`, `changeChapter(id?)` | Open those screens. They end by calling your `onPlayer` |
+| `showPlayers()`, `addPlayer()`, `managePlayers()`, `changeChapter(id?)` | Open those screens on the front page (see above), which comes back to the game; with `gamesHref: false`, in the game itself. Either way the game then calls your `onPlayer` |
 | `view()` | `"game"` or `"players"` |
 | `toast(html, { kind: "good" \| "bad", ms })` | A short note at the bottom (also read out) |
 | `dialog({ title, text \| html \| el, buttons: [{ label, kind, value }], sheet, alert, close })` | A modal; `sheet: true` makes it rise from the bottom (settings). Returns a Promise of the button's `value`, or `null` (Esc, scrim, ×). Focus is trapped and given back |
