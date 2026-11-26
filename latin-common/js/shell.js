@@ -546,7 +546,7 @@
     var playing = null, view = "game", ui = null, shown = null;
     function player() { var p = P(); if (!p || !playing) { return null; } try { return p.get(playing); } catch (e) { return null; } }
 
-    /* The players are picked on the site's front page, once for every game (ilya, 2026-11-25): a game opens as the
+    /* The players are picked on the site's front page, once for every game (the parent, 2026-11-25): a game opens as the
        player chosen there, and "Switch player", "Change chapter" (and a visit with nobody chosen) go to
        {gamesHref}?play=<this game's folder>#<screen>, which comes back here after the pick. The in-game players screens
        stay only for a page with gamesHref: false, or when this browser cannot keep the choice (no localStorage). */

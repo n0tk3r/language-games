@@ -87,7 +87,7 @@ What it builds (`.ls-app`):
   Chip text: "Playing as **{name}** · 6th grade · Chapter 2" on a laptop, "{name} · 6th grade · Chapter 2" on a
   tablet, the player's initial on a phone (below 480 px, where Settings moves into the chip menu too). The
   chip opens a menu: Switch player, Change chapter (and Settings on a phone).
-- **Players are picked on the site's front page** (ilya, 2026-11-25: "The profiles should be loaded at the All
+- **Players are picked on the site's front page** (the parent, 2026-11-25: "The profiles should be loaded at the All
   games level"). The game opens as `LatinPlayers.current()`. With nobody chosen it goes, with `location.replace`,
   to `{gamesHref}?play={folder}#players`; Switch player and Change chapter (and `showPlayers()`, `addPlayer()`,
   `managePlayers()`, `changeChapter()`) open `{gamesHref}?play={folder}#players`, `#add`, `#manage` or `#chapter`.

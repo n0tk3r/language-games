@@ -16,11 +16,12 @@
 .ls-app[data-game="row"] .logo-btn { min-width: 44px; }
 @media (max-width: 899.98px) { .pips { display: none; } }
 .legtag {
-  position: absolute; top: 5px; right: 8px; z-index: 6; padding: 2px 9px 3px; border-radius: 9px;   /* clear of the ship's streak badge */
+  position: absolute; top: 5px; right: 8px; z-index: 6; padding: 2px 9px 3px; border-radius: 9px;
   background: rgba(7, 13, 31, .66); color: var(--brass-lt); font: 800 12px/1.25 var(--f-ui); letter-spacing: .3px; white-space: nowrap;
-  box-shadow: 0 0 0 1px rgba(226, 169, 60, .45); pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(226, 169, 60, .45); pointer-events: none; transition: opacity .4s ease;
 }
 .legtag[hidden] { display: none; }
+.legtag.dim { opacity: 0; }             /* while the Corvus is under it, near the far harbor (row.js tagClear), and once our ship docks */
 @media (min-width: 900px) { .legtag { display: none; } }
 
 /* ------------------------------------------------------------------ pictures: small motions */
@@ -152,13 +153,15 @@
 .rv { gap: 10px; }
 .sea-wrap { position: relative; flex: none; }
 .sea {
-  --hw: 50px; --sw: 100px;
-  position: relative; height: 66px; overflow: hidden; isolation: isolate; border: 2px solid #2a160c; border-radius: 14px;
+  --hw: 50px; --sw: 100px; --sh: 66px; --grow: 0px; --lift: 0px; --rise: var(--lift);
+  position: relative; height: calc(var(--sh) + var(--grow)); overflow: hidden; isolation: isolate; border: 2px solid #2a160c; border-radius: 14px;
   box-shadow: 0 3px 0 #2a160c, 0 8px 16px rgba(3, 7, 18, .35);
 }
-.sea .sky { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: linear-gradient(180deg, #13244a 0%, #2a3f73 46%, #9a5f5a 84%, #e09a5c 100%); }
-.sea.s2 .sky { background: linear-gradient(180deg, #0c1630 0%, #1e3a6e 64%, #46679c 100%); }
-.sea.s3 .sky { background: linear-gradient(180deg, #070d1f 0%, #1b2438 58%, #33405a 100%); }
+/* the horizon is the top of the far water, about halfway down the strip (in the tall and snug strips the sky ends higher, with
+   the far water, so the warm glow stays on the horizon) */
+.sea .sky { position: absolute; top: 0; right: 0; bottom: var(--lift); left: 0; background: linear-gradient(180deg, #13244a 0%, #2a3f73 26%, #9a5f5a 46%, #e09a5c 58%, #e09a5c 100%); }
+.sea.s2 .sky { background: linear-gradient(180deg, #0c1630 0%, #1e3a6e 38%, #46679c 58%, #46679c 100%); }
+.sea.s3 .sky { background: linear-gradient(180deg, #070d1f 0%, #1b2438 36%, #33405a 58%, #33405a 100%); }
 .sky-art { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 .sky-art .drift { animation: drift 46s linear infinite alternate; }
 .sky-art .drift.fast { animation-duration: 16s; }
@@ -211,9 +214,80 @@
 .ship.surge .spray { animation: spray .55s ease-out; }
 @keyframes spray { 0% { opacity: 0; transform: scale(.4) translateY(6px); } 30% { opacity: 1; } 100% { opacity: 0; transform: scale(1.25) translateY(-4px); } }
 
-/* the run in stroke rides on the ship */
+/* the Corvus: a rival bireme in a lane behind ours, at 70% of our size. It rows farther out, on the far water (a
+   band of waves of its own, behind the harbors, covers its waterline), with its waterline at our rail, so it shows
+   above our deck even when the race is level; its track is offset so the two prows are level when the race is */
+.sea { --rw: calc(var(--sw) * .7); }
+.wv-far { bottom: 0; z-index: 1; height: calc(var(--sw) * .288 + 4px + var(--lift)); }
+.wv-far .wv-in { height: calc(var(--sw) * .288 + 4px); animation-duration: 24s; }
+.s2 .wv-far .wv-in { animation-duration: 17s; } .s3 .wv-far .wv-in { animation-duration: 10s; }
+.rtrack {
+  position: absolute; z-index: 1; bottom: calc(var(--sw) * .205 + var(--lift)); height: calc(var(--rw) * .59);
+  left: calc(var(--hw) - 14px + var(--sw) - var(--rw)); right: calc(var(--hw) + var(--rw) - 18px);
+  transition: opacity .5s ease;
+}
+.rtrack.gone { opacity: 0; }
+.rrun { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transition: transform .6s cubic-bezier(.3, .7, .3, 1); }
+.rship { position: absolute; left: 0; bottom: 0; width: var(--rw); height: 100%; transition: opacity .6s ease; }
+.rbob { width: 100%; height: 100%; transform-origin: 50% 78%; animation: bob 3.4s ease-in-out -1.3s infinite; }
+.s2 .rbob { animation-name: bob2; animation-duration: 2.6s; }
+.s3 .rbob { animation-name: rbob3; animation-duration: 1.9s; }
+@keyframes rbob3 { 0%, 100% { transform: rotate(3deg); } 50% { transform: translateY(2.8px) rotate(-3.5deg); } }
+.rbob svg { width: 100%; height: 100%; }
+/* its oars stroke on the drum's beats, hold up while it rests or is held two strokes clear, surge on our clash */
+.rship.row .oars { animation: stroke var(--beat, 1200ms) ease-in-out; }
+.rship.row .ob2 { animation-delay: 40ms; }
+.rship.wait .oars { transform: skewX(16deg) scaleY(.82); transition: transform .45s ease; }
+.rship.surge .rbob { animation: surge .55s ease-out; }
+.rship.surge .spray { animation: spray .55s ease-out; }
+.rship .spray { border-width: 2px; }
+/* moored at the far harbor: the sail furled */
+.rship.moored { opacity: .85; }
+.rship.moored .sail { animation: none; transform: scaleY(.35); transition: transform .6s ease; }
+
+/* the tall strip (row.js fitSea): when a leg races and the page has room, the strip grows by --grow and the far water
+   and the Corvus's lane rise by --lift, so it rows higher up the strip, farther out at sea, with its raven sail clear
+   above our ship. Only heights change: the tracks keep their left and right, so the prows are level when the race is.
+   The far water's waves keep their size; the water under them is the same blue. Never animated.
+   The snug strip (fitSea too), from 600 px wide when a leg races and no tall step fits: the strip keeps its height,
+   fitSea sets a smaller --sw (both ships a little smaller, the tracks longer by as much, so the ships start and dock
+   where they did and the prows are level when the race is) and the lane rises by the headroom that frees (--lift).
+   The far band of waves is lower under smaller ships, so the horizon rises by less than the lift: --rise */
+.sea.tall .wv-far, .sea.snug .wv-far { background: linear-gradient(#1f3d72, #1f3d72) 0 100% / 100% calc(var(--lift) + 1px) no-repeat; }
+.sea.tall .sky-art { height: calc(100% - var(--lift)); }
+/* the sky's glow on the far water, just under the horizon: dusk at Calm water, blue at Open sea and in the Storm */
+.sea.tall .wv-far::after, .sea.snug .wv-far::after { content: ""; position: absolute; top: 0; right: 0; left: 0; height: calc(var(--rise) + 14px); background: linear-gradient(180deg, rgba(224, 154, 92, .16), rgba(224, 154, 92, 0)); pointer-events: none; }
+.sea.tall.s2 .wv-far::after, .sea.tall.s3 .wv-far::after, .sea.snug.s2 .wv-far::after, .sea.snug.s3 .wv-far::after { background: linear-gradient(180deg, rgba(120, 156, 214, .16), rgba(120, 156, 214, 0)); }
+/* the Storm's rain falls the whole height of the taller strip */
+.sea.tall .rain i { animation-name: drop-tall; }
+@keyframes drop-tall { from { transform: translate(0, 0) rotate(14deg); } to { transform: translate(-32px, 160px) rotate(14deg); } }
+/* the port town grows with the far water, so its hill still rises as far above the horizon (the hilltop is 100/120 of
+   the box's width up: 1.2 px of width for each px the horizon rises). The tracks keep --hw, so our ship docks where
+   it did */
+.sea.tall .hb-to, .sea.snug .hb-to { width: calc(var(--hw) + var(--rise) * 1.2); }
+
+/* the race's chips, top center of the strip, only at three moments: "Race on!", "Final stretch!", the result */
+.racechip {
+  position: absolute; top: 5px; left: 50%; z-index: 6; padding: 2px 10px 3px; border-radius: 9px;
+  background: var(--red); color: #fff; font: 800 12px/1.25 var(--f-ui); letter-spacing: .3px; white-space: nowrap;
+  box-shadow: 0 0 0 1.5px #ffe39a, 0 2px 6px rgba(3, 7, 18, .45); pointer-events: none;
+  opacity: 0; transform: translateX(-50%); transition: opacity .3s ease;
+}
+.racechip[hidden] { display: none; }
+.racechip.in { opacity: 1; animation: chip-in .4s cubic-bezier(.2, 1.3, .4, 1); }
+.racechip.out { opacity: 0; }
+.racechip.brass { background: var(--brass-grad); color: var(--brass-ink); box-shadow: 0 0 0 1.5px #7a4e10, 0 2px 6px rgba(3, 7, 18, .45); }
+.racechip.parch { background: var(--parch); color: var(--ink); box-shadow: 0 0 0 1.5px var(--parch-edge), 0 2px 6px rgba(3, 7, 18, .45); }
+@keyframes chip-in { from { opacity: 0; transform: translate(-50%, -6px) scale(.9); } to { opacity: 1; transform: translateX(-50%); } }
+@media (min-width: 600px) { .racechip { top: 6px; font-size: 13px; } }
+/* a narrow phone with the "Leg 2 of 5" tag at the top right: the chip moves left, clear of it */
+@media (max-width: 419.98px) { .legtag:not([hidden]) ~ .racechip { left: calc(50% - 38px); } }
+
+/* the run in stroke rides on the ship's side, under the mast: inside our own hull, below the far water, so it never
+   covers the Corvus (nor the leg tag or the race chip at the top of the strip) */
 .streak {
-  position: absolute; left: 2%; top: -1px; z-index: 2; display: inline-flex; align-items: baseline; gap: 3px; padding: 1px 7px 2px; border-radius: 9px;
+  position: absolute; left: 0; right: 5.4%; top: 58%; z-index: 2; width: -webkit-max-content; width: max-content; margin: -9px auto 0;
+  display: inline-flex; align-items: baseline; gap: 3px; padding: 1px 7px 2px; border-radius: 9px;
   background: var(--red); color: #fff; font: 700 11.5px/1.25 var(--f-ui); white-space: nowrap; box-shadow: 0 0 0 1.5px #ffe39a, 0 2px 5px rgba(3, 7, 18, .4);
 }
 .streak b { font-size: 13px; }
@@ -293,6 +367,7 @@ td.box {
 .rv-info .rv-title { color: var(--brass-lt); font: 800 21px/1.15 var(--f-serif); }
 .rv-info p { color: var(--cream-2); font: 700 14px/1.3 var(--f-ui); }
 .rv-note { display: none; color: var(--cream-2); font: 600 14px/1.4 var(--f-ui); }
+.rv-side .rv-note[hidden] { display: none; }       /* it steps aside for a note after a miss that needs its room (row.js msg) */
 .rv-ask {
   display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "st n q dr"; align-items: center; gap: 6px 7px;
   color: var(--cream); font: 700 15px/1.25 var(--f-ui);
@@ -348,6 +423,14 @@ td.box {
 .rr-miss { color: var(--ink-2); font-size: 15px; }
 .rr-miss i { color: var(--red-dk); }
 .rv-res .dock .btn { flex: 1 1 130px; }
+/* the race, in one line (in place of the best run in stroke, which it carries) */
+.rr-race { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 10px; font: 800 15.5px/1.3 var(--f-ui); }
+.rr-race .ic { flex: none; width: 22px; height: 22px; }
+.rr-race.brass { background: var(--brass-grad); color: var(--brass-ink); box-shadow: inset 0 0 0 1.5px #b9801c; }
+.rr-race.parch { background: rgba(255, 255, 255, .5); color: var(--ink); box-shadow: inset 0 0 0 1.5px rgba(107, 74, 34, .35); }
+.rr-race.parch .ic { color: #2a1f18; }
+.rr-run { font-weight: 700; white-space: nowrap; }
+.rv-res .dock .btn[data-a="dare"] .ic { width: 20px; height: 20px; }
 
 /* ----------------------------------------------------------------------- called boxes */
 /* the chart of the called box on its parchment (blank, the box called out), the question and four forms in the oars panel */
@@ -391,6 +474,15 @@ td.box {
 .re-t b { font: 800 17px/1.15 var(--f-serif); }
 .re-t small { color: var(--ink-2); font: 700 13px/1.25 var(--f-ui); }
 .re-sc { font: 800 17px/1 var(--f-ui); color: #5a3a12; }
+/* tonight's regatta, under the score, and a mark after each leg's score */
+.re-race { display: flex; align-items: center; gap: 7px; margin-top: 4px; color: var(--ink); font-weight: 800; line-height: 1.3; }
+.re-race .ic { flex: none; width: 22px; height: 22px; color: #2a1f18; }
+.re-race.won .ic { color: #4f6e26; }
+.re-mk { display: flex; flex: none; align-items: center; justify-content: center; width: 22px; height: 22px; }
+.re-mk .ic { width: 20px; height: 20px; }
+.re-mk.won .ic { color: #4f6e26; }
+.re-mk.lost .ic { color: #2a1f18; }
+.re-mk.heat b { color: #7a4e10; font: 900 19px/1 var(--f-ui); }
 
 /* ----------------------------------------------------------------------- settings */
 .rs-g { margin: 0 0 14px; padding: 0; border: 0; min-width: 0; }
@@ -407,7 +499,7 @@ td.box {
   .ls-app.voyage .ls-stage { padding-top: 5px; padding-bottom: 2px; }
   .ls-app.voyage .bubble-wrap { padding: 9px 0 6px; }
   .rv { gap: 8px; }
-  .sea { height: 62px; --sw: 96px; }
+  .sea { --sh: 62px; --sw: 96px; }
   td.box { height: 27px; }
   .chh-e { font-size: 13.5px; }
   .rv-side .tiles { gap: 6px; }
@@ -415,11 +507,22 @@ td.box {
   .rc .rv-side { gap: 6px; }
   .rc-q { font-size: 17.5px; }
   .tile.wide { min-height: 46px; font-size: 20px; }
+  .rr-race { gap: 6px; padding: 2px 7px; font-size: 13px; line-height: 1.25; }
+  .rr-race .ic { width: 17px; height: 17px; }
+  /* the end card: a leg's race mark sits under its score, not beside it, so a long title keeps the width it had
+     before the race ("laudō and moneō: the present" wrapped) and every row its height */
+  .re-legs li { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; row-gap: 0; }
+  .re-pen, .re-t { grid-row: 1 / 3; }
+  .re-sc { grid-column: 3; grid-row: 1 / 3; }
+  .re-sc:not(:last-child) { grid-row: 1; align-self: end; }
+  .re-mk { grid-column: 3; grid-row: 2; justify-self: center; align-self: start; width: 18px; height: 17px; }
+  .re-mk .ic { width: 17px; height: 17px; }
+  .re-mk.heat b { font-size: 16px; }
 }
 /* a phone of ordinary height: the twelve rows of a noun chart with its vocatives fit above the oars panel */
 @media (max-width: 599.98px) and (max-height: 880px) {
   td.box { height: 25px; }
-  .sea { height: 58px; }
+  .sea { --sh: 58px; }
   .rc td.box { height: 20px; }
 }
 @media (max-width: 899.98px) {
@@ -432,11 +535,18 @@ td.box {
   .rv-side { margin-top: auto; }
   .rv-side .rv-msg { display: none; }               /* on a phone or a tablet the Inspector says it */
   .rv-side .rv-res { margin: 2px 0 0; }
+  /* a raced card in the docked panel is never taller than the card was before the race, and its race line is one
+     line: the next-step line is the Inspector's (a screen reader still finds it in the card); a race line that would
+     wrap leaves its second half to screen readers (row.js raceLineFit adds .short), then the best run too (.tight);
+     with no line for it to take the place of, the race line itself is for a screen reader only (.sr-line), as the
+     ribbon on the strip shows the result */
+  .rv-res.raced .rr-n2, .rr-race.short .rr-more, .rr-race.tight .rr-run, .rr-race.sr-line { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+  .rv-res.raced { position: relative; }
   .rc .rv-info { display: none; }                   /* the prompt says which chart; the panel stays low */
   .rc .chh-g { display: none; }                     /* the called box's chart is a map: the entries are enough */
 }
 @media (min-width: 600px) {
-  .sea { --hw: 70px; --sw: 136px; height: 90px; }
+  .sea { --hw: 70px; --sw: 136px; --sh: 90px; }
   td.box { height: 32px; padding: 0 8px; }
   table.chart { border-spacing: 4px 3px; }
   col.c-rl { width: 48px; }
@@ -450,11 +560,13 @@ td.box {
 }
 @media (min-width: 600px) and (max-width: 899.98px) {
   .rv-side { padding-top: 10px; }
+  .rr-race { padding: 1px 10px; }                   /* no taller than the "Best run in stroke" line it takes the place of */
+  .rr-race .ic { width: 20px; height: 20px; }
   .rc td.box { height: 28px; }
 }
 /* a laptop: the chart at the left, the oars panel at the right */
 @media (min-width: 900px) {
-  .sea { --hw: 80px; --sw: 150px; height: 96px; }
+  .sea { --hw: 80px; --sw: 150px; --sh: 96px; }
   .rv-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, 350px); align-items: start; gap: 14px; }
   .rv-side { gap: 10px; padding: 12px 14px 14px; border-radius: 16px; background: rgba(7, 13, 31, .2); box-shadow: inset 0 0 0 1.5px rgba(226, 169, 60, .25); }
   .rv-side .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -465,6 +577,9 @@ td.box {
   .re { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 560px); align-items: start; gap: 22px; }
   .re-scene { aspect-ratio: 400 / 230; }
   .re-card { margin-top: 20px; }
+  /* the card shows its next-step line here ("This chart comes back once more at the end of tonight."), so the
+     race line does not say it again ("The rematch is tonight.") */
+  .rr-more.dup { display: none; }
 }
 @media (min-width: 900px) and (max-height: 820px) {
   td.box { height: 29px; }

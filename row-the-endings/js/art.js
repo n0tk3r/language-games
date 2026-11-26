@@ -19,13 +19,20 @@
     '<linearGradient id="rtBeam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffe7a8" stop-opacity=".55"/><stop offset="1" stop-color="#ffe7a8" stop-opacity="0"/></linearGradient>' +
     '<linearGradient id="rtBeamL" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#ffe7a8" stop-opacity=".5"/><stop offset="1" stop-color="#ffe7a8" stop-opacity="0"/></linearGradient>' +
     '<linearGradient id="rtTile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7e2b4"/><stop offset="1" stop-color="#d9b06a"/></linearGradient>' +
+    /* the Corvus: a cream sail and a dark hull */
+    '<linearGradient id="rtSailR" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d8c08e"/><stop offset=".42" stop-color="#f3e6c4"/><stop offset=".7" stop-color="#ead8ac"/><stop offset="1" stop-color="#d8c08e"/></linearGradient>' +
+    '<linearGradient id="rtHullR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a4636"/><stop offset=".55" stop-color="#3b2d22"/><stop offset="1" stop-color="#2a1f18"/></linearGradient>' +
+    '<linearGradient id="rtAmph" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8f4a26"/><stop offset=".45" stop-color="#c97a4a"/><stop offset="1" stop-color="#8f4a26"/></linearGradient>' +
     "</defs></svg>";
 
   function range(a, b, step) { var out = []; for (var x = a; x <= b; x += step) { out.push(x); } return out; }
 
-  /* the bireme, facing right (it rows from the left harbor to the right one). viewBox 0 0 220 130, waterline ~ y 102 */
+  /* the bireme, facing right (it rows from the left harbor to the right one). viewBox 0 0 220 130, waterline ~ y 102.
+     o.rival: the Corvus out of Ostia (a cream sail with a black raven, a dark hull, a teal-green wale with a brass edge);
+     o.cargo: 0 to 3 amphorae on its deck; o.light: a dare, a brass pennant at its masthead */
   function ship(o) {
     o = o || {};
+    var rv = !!o.rival;
     var up = range(58, 178, 12), low = range(64, 172, 12);
     var shafts1 = up.map(function (x) { return "M" + x + " 81.5L" + (x - 17) + " 121"; }).join("");
     var blades1 = up.map(function (x) { return "M" + (x - 16) + " 119L" + (x - 20) + " 127"; }).join("");
@@ -34,37 +41,58 @@
     var ports1 = up.map(function (x) { return '<circle cx="' + x + '" cy="81.5" r="1.7"/>'; }).join("");
     var ports2 = low.map(function (x) { return '<circle cx="' + x + '" cy="91" r="1.6"/>'; }).join("");
     var posts = range(44, 184, 14).map(function (x) { return "M" + x + " 66.5V72"; }).join("");
-    return '<svg class="ship-svg" viewBox="0 0 220 130" aria-hidden="true" focusable="false">' +
+    /* our emblem: a laurel wreath around a sun, in brass */
+    var wreath = '<g fill="none" stroke="#ffd77a" stroke-width="1.5" stroke-linecap="round"><path d="M100 48Q92 41 97 31"/><path d="M108 48Q116 41 111 31"/></g>' +
+        '<g fill="#f0bb4c" stroke="#7a4e10" stroke-width=".5">' +
+          '<ellipse cx="95.6" cy="35.5" rx="1.5" ry="2.8" transform="rotate(-25 95.6 35.5)"/><ellipse cx="95" cy="41" rx="1.5" ry="2.8" transform="rotate(-55 95 41)"/><ellipse cx="98.4" cy="45.6" rx="1.5" ry="2.8" transform="rotate(-80 98.4 45.6)"/>' +
+          '<ellipse cx="112.4" cy="35.5" rx="1.5" ry="2.8" transform="rotate(25 112.4 35.5)"/><ellipse cx="113" cy="41" rx="1.5" ry="2.8" transform="rotate(55 113 41)"/><ellipse cx="109.6" cy="45.6" rx="1.5" ry="2.8" transform="rotate(80 109.6 45.6)"/>' +
+          '<circle cx="104" cy="38.5" r="4.3"/></g>' +
+        '<g stroke="#ffe39a" stroke-width="1" stroke-linecap="round"><path d="M104 31.6v1.8M104 43.6v1.8M97.1 38.5h1.8M109.1 38.5h1.8"/></g>';
+    /* the Corvus's emblem: a black raven, perched, facing the way the ship rows */
+    var raven = '<g fill="#1b1410">' +
+        '<path d="M88.5 46.5L95.5 41.4Q99 35.6 106 35.4Q109.4 31 113.6 31.4Q117 31.8 118 34.2L123.4 35.6L118 37Q117 40.6 113.4 43.4Q108 47.6 100 47.2L94.6 47.6Z"/>' +
+        '<path d="M98.6 38.6Q104 33.4 110.6 36.4Q105.6 38.2 102 42.6Z" fill="#3a2c22"/>' +
+        '<path d="M104.4 46.8L103.4 51.6M108.6 46.4L108.2 51.4M101.4 51.8h4M106.2 51.6h4" stroke="#1b1410" stroke-width="1.3" stroke-linecap="round" fill="none"/></g>' +
+      '<circle cx="114.6" cy="34" r=".9" fill="#f3e6c4"/>';
+    /* amphorae standing on the Corvus's deck: its cargo */
+    var amph = "", n = rv ? Math.max(0, Math.min(3, +o.cargo || 0)) : 0;
+    for (var a = 0; a < n; a++) {
+      var x = 150 + a * 12;
+      amph += '<g class="amph" transform="translate(' + x + ' 55.5)">' +
+        '<path d="M-1.6 0h3.2v1.6Q3.8 2.8 4 6.6Q4.2 11.4 0 16.2Q-4.2 11.4 -4 6.6Q-3.8 2.8 -1.6 1.6Z" fill="url(#rtAmph)" stroke="#5a2a12" stroke-width=".8" stroke-linejoin="round"/>' +
+        '<path d="M-1.8 1.4Q-4.6 1.6 -3.6 4.6M1.8 1.4Q4.6 1.6 3.6 4.6" fill="none" stroke="#5a2a12" stroke-width=".9" stroke-linecap="round"/>' +
+        '<path d="M-3.2 6.2h6.4" stroke="#e8b48a" stroke-width=".7" opacity=".7"/></g>';
+    }
+    /* the flag at the masthead; a dare flies a long brass pennant */
+    var flag = !rv ? '<path class="flag" d="M104 8.2L121 11.2L104 14.4Z" fill="#e2584f" stroke="#7c121b" stroke-width=".7" stroke-linejoin="round"/>' :
+      o.light ? '<path class="flag" d="M104 6.6L138 10.4L128 11.6L138 13.2L104 16Z" fill="url(#rtBrass)" stroke="#7a4e10" stroke-width=".8" stroke-linejoin="round"/>' :
+      '<path class="flag" d="M104 8.2L121 11.2L104 14.4Z" fill="#2f6b6d" stroke="#123335" stroke-width=".7" stroke-linejoin="round"/>';
+    return '<svg class="ship-svg' + (rv ? " rival" : "") + '" viewBox="0 0 220 130" aria-hidden="true" focusable="false">' +
       /* the steering oar at the stern */
       '<path d="M44 77L27 116" stroke="#3a2015" stroke-width="3.2" stroke-linecap="round"/><path d="M27 115L22 127" stroke="#54301d" stroke-width="7" stroke-linecap="round"/>' +
       /* rigging, mast and yard */
       '<path d="M104 9L197 60M104 9L31 41" stroke="#2a160c" stroke-width=".9" fill="none" opacity=".75"/>' +
       '<path d="M104 8V73" stroke="#4a2a18" stroke-width="3.6" stroke-linecap="round"/>' +
       '<g class="sail">' +
-        '<path d="M66.5 20.5Q104 14.5 141.5 20.5L138.5 60Q104 67.5 69.5 60Z" fill="url(#rtSail)" stroke="#5a0c12" stroke-width="1.3" stroke-linejoin="round"/>' +
-        '<path d="M85 17.6L86.3 63.4M104 16V65.6M123 17.6L121.7 63.4" stroke="#7c121b" stroke-width=".9" opacity=".55"/>' +
-        '<path d="M69.5 60Q104 67.5 138.5 60" stroke="#e2a93c" stroke-width="1.6" fill="none"/>' +
-        /* the brass emblem: a laurel wreath around a sun */
-        '<g fill="none" stroke="#ffd77a" stroke-width="1.5" stroke-linecap="round"><path d="M100 48Q92 41 97 31"/><path d="M108 48Q116 41 111 31"/></g>' +
-        '<g fill="#f0bb4c" stroke="#7a4e10" stroke-width=".5">' +
-          '<ellipse cx="95.6" cy="35.5" rx="1.5" ry="2.8" transform="rotate(-25 95.6 35.5)"/><ellipse cx="95" cy="41" rx="1.5" ry="2.8" transform="rotate(-55 95 41)"/><ellipse cx="98.4" cy="45.6" rx="1.5" ry="2.8" transform="rotate(-80 98.4 45.6)"/>' +
-          '<ellipse cx="112.4" cy="35.5" rx="1.5" ry="2.8" transform="rotate(25 112.4 35.5)"/><ellipse cx="113" cy="41" rx="1.5" ry="2.8" transform="rotate(55 113 41)"/><ellipse cx="109.6" cy="45.6" rx="1.5" ry="2.8" transform="rotate(80 109.6 45.6)"/>' +
-          '<circle cx="104" cy="38.5" r="4.3"/></g>' +
-        '<g stroke="#ffe39a" stroke-width="1" stroke-linecap="round"><path d="M104 31.6v1.8M104 43.6v1.8M97.1 38.5h1.8M109.1 38.5h1.8"/></g>' +
+        '<path d="M66.5 20.5Q104 14.5 141.5 20.5L138.5 60Q104 67.5 69.5 60Z" fill="url(#' + (rv ? "rtSailR" : "rtSail") + ')" stroke="' + (rv ? "#6b5434" : "#5a0c12") + '" stroke-width="1.3" stroke-linejoin="round"/>' +
+        '<path d="M85 17.6L86.3 63.4M104 16V65.6M123 17.6L121.7 63.4" stroke="' + (rv ? "#a08a5c" : "#7c121b") + '" stroke-width=".9" opacity=".55"/>' +
+        '<path d="M69.5 60Q104 67.5 138.5 60" stroke="' + (rv ? "#2f6b6d" : "#e2a93c") + '" stroke-width="1.6" fill="none"/>' +
+        (rv ? raven : wreath) +
       "</g>" +
       '<path d="M65 18.5Q104 12 143 18.5" stroke="#4a2a18" stroke-width="3" fill="none" stroke-linecap="round"/>' +
-      '<path class="flag" d="M104 8.2L121 11.2L104 14.4Z" fill="#e2584f" stroke="#7c121b" stroke-width=".7" stroke-linejoin="round"/>' +
+      flag +
       /* the rail and its posts */
       '<path d="' + posts + '" stroke="#93603a" stroke-width="1.6"/><path d="M40 66.6H186" stroke="#93603a" stroke-width="1.4"/>' +
+      amph +
       /* the hortator's drum on deck */
-      '<g class="drum"><rect x="56" y="62.6" width="15" height="9.4" rx="1.6" fill="#b3202a" stroke="#2a160c" stroke-width=".9"/>' +
+      '<g class="drum"><rect x="56" y="62.6" width="15" height="9.4" rx="1.6" fill="' + (rv ? "#2f6b6d" : "#b3202a") + '" stroke="#2a160c" stroke-width=".9"/>' +
         '<path d="M56.4 65.2h14.2M56.4 69.4h14.2" stroke="#e2a93c" stroke-width="1.1"/><ellipse cx="63.5" cy="62.6" rx="7.5" ry="2.3" fill="#f6e7c1" stroke="#2a160c" stroke-width=".9"/>' +
         '<path d="M59 56.5l3.4 5M68.5 56l-3 5.6" stroke="#4a2a18" stroke-width="1.3" stroke-linecap="round"/><circle cx="58.8" cy="56.2" r="1.3" fill="#e2a93c"/><circle cx="68.8" cy="55.7" r="1.3" fill="#e2a93c"/></g>' +
       /* the hull */
-      '<path d="M36 72L188 72Q197 70 199.5 59.5L205 60.5Q204 76 200 86L216 97L214 102.5L196 103.5Q130 114 56 106.5Q38 102.5 32 90Q28 80 36 72Z" fill="url(#rtHull)" stroke="#2a160c" stroke-width="1.4" stroke-linejoin="round"/>' +
+      '<path class="hull" d="M36 72L188 72Q197 70 199.5 59.5L205 60.5Q204 76 200 86L216 97L214 102.5L196 103.5Q130 114 56 106.5Q38 102.5 32 90Q28 80 36 72Z" fill="url(#' + (rv ? "rtHullR" : "rtHull") + ')" stroke="#2a160c" stroke-width="1.4" stroke-linejoin="round"/>' +
       '<path d="M37 72.6H188" stroke="#e2a93c" stroke-width="1.6"/>' +
-      /* the red wale with a brass edge */
-      '<path d="M37.5 77.6L197 77.6Q198.6 81.4 197.6 85.2L40 85.2Q37 81.4 37.5 77.6Z" fill="#b3202a" stroke="#5a0c12" stroke-width=".8"/>' +
+      /* the wale with a brass edge: red on ours, teal-green on the Corvus */
+      '<path d="M37.5 77.6L197 77.6Q198.6 81.4 197.6 85.2L40 85.2Q37 81.4 37.5 77.6Z" fill="' + (rv ? "#1f4a4c" : "#b3202a") + '" stroke="' + (rv ? "#0f2a2b" : "#5a0c12") + '" stroke-width=".8"/>' +
       '<path d="M39.5 85.4L197.4 85.4" stroke="#e2a93c" stroke-width="1"/>' +
       '<g fill="#1a0d06">' + ports1 + ports2 + "</g>" +
       /* the stern post curling over (aplustre) */
@@ -75,7 +103,7 @@
       '<path d="M203 92.6L213.5 99M201.6 96.6L212 100.6" stroke="#5a3a0a" stroke-width=".7"/>' +
       '<path d="M181.5 92.6Q188 87.4 194.5 92.6Q188 97.6 181.5 92.6Z" fill="#fffaf0" stroke="#2a160c" stroke-width="1"/>' +
       '<circle cx="189" cy="92.5" r="2.5" fill="#13244a"/><circle cx="189.8" cy="91.7" r=".8" fill="#fff"/>' +
-      '<path d="M181 90.6Q188 85.4 195 90.6" fill="none" stroke="#b3202a" stroke-width="1.1"/>' +
+      '<path d="M181 90.6Q188 85.4 195 90.6" fill="none" stroke="' + (rv ? "#e2a93c" : "#b3202a") + '" stroke-width="1.1"/>' +
       /* two banks of oars (each bank pivots at its oar ports) */
       '<g class="oars ob2"><path d="' + shafts2 + '" stroke="#b07a46" stroke-width="1.5" stroke-linecap="round"/><path d="' + blades2 + '" stroke="#8a5532" stroke-width="3.4" stroke-linecap="round"/></g>' +
       '<g class="oars ob1"><path d="' + shafts1 + '" stroke="#c99560" stroke-width="1.7" stroke-linecap="round"/><path d="' + blades1 + '" stroke="#93603a" stroke-width="3.8" stroke-linecap="round"/></g>' +
@@ -202,12 +230,14 @@
     return d + "V" + h + "H0Z";
   }
   var WAVES = { 1: [3, 160, 4], 2: [6, 160, 9], 3: [10, 200, 14] };
+  /* layer "front", "back", or "far" (the far water, behind the harbors: the Corvus's lane sits on it) */
   function waves(step, layer) {
-    var w = WAVES[step] || WAVES[1], back = layer === "back";
-    var amp = back ? w[0] * 0.8 : w[0], mid = back ? 14 : 20;
+    var w = WAVES[step] || WAVES[1], back = layer === "back", far = layer === "far";
+    var amp = far ? w[0] * 0.5 : back ? w[0] * 0.8 : w[0], mid = far ? 7 : back ? 14 : 20, period = far ? w[1] * 1.6 : back ? w[1] * 1.25 : w[1];
+    var fill = far ? "#1f3d72" : back ? "#24467f" : "#11234a", line = far ? "#6f93cf" : back ? "#5a80bf" : "#7fa3d8";
     return '<svg viewBox="0 0 1600 60" preserveAspectRatio="none" aria-hidden="true" focusable="false">' +
-      '<path d="' + wavePath(amp, back ? w[1] * 1.25 : w[1], mid, 60) + '" fill="' + (back ? "#24467f" : "#11234a") + '"/>' +
-      '<path d="' + wavePath(amp, back ? w[1] * 1.25 : w[1], mid, 60).replace(/V60H0Z$/, "") + '" fill="none" stroke="' + (back ? "#5a80bf" : "#7fa3d8") + '" stroke-width="' + (back ? 1.4 : 1.8) + '" opacity="' + (back ? ".5" : ".65") + '"/>' +
+      '<path d="' + wavePath(amp, period, mid, 60) + '" fill="' + fill + '"/>' +
+      '<path d="' + wavePath(amp, period, mid, 60).replace(/V60H0Z$/, "") + '" fill="none" stroke="' + line + '" stroke-width="' + (far ? 1.2 : back ? 1.4 : 1.8) + '" opacity="' + (far ? ".45" : back ? ".5" : ".65") + '"/>' +
       "</svg>";
   }
 
@@ -251,7 +281,14 @@
     ship: '<path d="M12 3v13" stroke="currentColor" stroke-width="1.8"/><path d="M6.5 5q5.5-1.2 11 0l-1 7.5q-4.5 1.2-9 0Z" fill="currentColor" opacity=".85"/><path d="M2.5 16h19l-2.5 4.5H5Z" fill="currentColor"/>',
     bell: '<path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 19a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="2"/>',
     lock: '<rect x="5" y="10.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2"/>',
-    print: '<path d="M7 9V3h10v6M7 17H4v-6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 14h10v7H7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>'
+    print: '<path d="M7 9V3h10v6M7 17H4v-6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6h-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M7 14h10v7H7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+    /* the Corvus's raven, perched */
+    raven: '<path d="M2.2 17.2L6.6 13.6Q8.6 9 13.2 8.8Q15.2 5.8 18 6Q20.4 6.3 21 8L23.6 8.9L21 9.8Q20.4 12.6 17.8 14.6Q14.2 17.6 8.8 17.2L5.4 17.6Z" fill="currentColor"/>' +
+      '<path d="M11.4 17.2L10.8 21M14.4 16.8L14.2 21M9.6 21.2h2.6M12.9 21.1h2.6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>',
+    /* a laurel leaf on its sprig */
+    leaf: '<path d="M4 20.5Q9 15 19.5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
+      '<path d="M19.5 4Q13 4.2 11.2 8.6Q10 11.8 12.4 13.4Q16.6 11.8 18.4 8.2Q19.6 5.8 19.5 4Z" fill="currentColor"/>' +
+      '<path d="M9.6 14.4Q5.6 12.8 3.2 14.6Q5 18 9 17.4Z" fill="currentColor" opacity=".85"/>'
   };
   function icon(name, cls) { return '<svg class="ic ' + (cls || "") + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (ICONS[name] || "") + "</svg>"; }
   function stepIcon(step) { return icon(["calm", "open", "storm"][step - 1] || "calm", "step-ic"); }

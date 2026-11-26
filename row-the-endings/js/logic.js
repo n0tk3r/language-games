@@ -22,7 +22,8 @@
   var RANGES = { 6: [1, 8], 7: [9, 17], 8: [18, 27], 9: [28, 40] };
   var BEATS = ["off", "slow", "steady"];
   var BEAT_MS = { off: 0, slow: 1800, steady: 1200 };
-  var DEFAULTS = { beat: "slow", voc: "book", typing: true, macrons: "light" };
+  var RACE_SET = ["race", "dare", "alone"];
+  var DEFAULTS = { beat: "slow", voc: "book", typing: true, macrons: "light", race: "race" };
   var GENDER = { "M.": "masculine", "F.": "feminine", "N.": "neuter", "M. and F.": "masculine and feminine" };
   var MAX_TILES = 10;     /* the number keys 1 to 9 and 0 */
   /* boxes where one vowel's length is the very point of the chart's note: under "light" a slip on that vowel
@@ -376,14 +377,15 @@
   function judgeChoice(q, text) { return q.answers.some(function (a) { return S.norm(a) === S.norm(text); }); }
 
   /* ------------------------------------------------------------------ records */
-  function fresh() { return { charts: {}, set: settings(null), night: null }; }
+  function fresh() { return { charts: {}, set: settings(null), night: null, race: raceRec(null) }; }
   function settings(set) {
     set = set || {};
     return {
       beat: BEATS.indexOf(set.beat) >= 0 ? set.beat : DEFAULTS.beat,
       voc: ["book", "always", "never"].indexOf(set.voc) >= 0 ? set.voc : DEFAULTS.voc,
       typing: set.typing == null ? DEFAULTS.typing : !!set.typing,
-      macrons: ["light", "strict"].indexOf(set.macrons) >= 0 ? set.macrons : DEFAULTS.macrons
+      macrons: ["light", "strict"].indexOf(set.macrons) >= 0 ? set.macrons : DEFAULTS.macrons,
+      race: RACE_SET.indexOf(set.race) >= 0 ? set.race : DEFAULTS.race       /* the Corvus: "race", "dare" (once unlocked), "alone" */
     };
   }
   function rec(prog, id) {
@@ -472,6 +474,205 @@
   /* an answer within one beat (and a little grace) of the box being called is "in stroke" */
   function inStroke(ms, beat) { return beat > 0 && ms >= 0 && ms <= beat + 250; }
 
+  /* -------------------------------------------------------- the race with the Corvus */
+  /* A rival bireme (the Corvus, out of Ostia) rows one stroke on every drum beat while a box waits for its answer.
+     The child moves one box a stroke, as always. All in ms of "race clock" and in strokes; nothing here touches the
+     judging, the score, the pass, the pennants, the again-queue or tonight's legs.
+       GRACE  the in-stroke grace before a box starts to cost      REST   the most a right box costs (beats)
+       MISS   what a wrong box costs (beats), more than any think  BONUS  Corvus strokes of margin the cargo aims at
+       FIRST  the usual (strokes) of a first race ever at a step   FIRST_CHART  x the other charts' usual: a chart's first race at a step
+       CLIP   one race moves a chart's usual by at most 20%         MERCY  the Corvus is never more than 2 strokes clear
+       HEAT   a dead heat under a quarter stroke; PROW  "by a prow" under one stroke
+       RUSH   a wrong tile within 0.7 s of its box is rushed        KEEP   the last 3 races make the usual */
+  var RACE = { GRACE: 250, REST: 3, MISS: 4, BONUS: 2, FIRST: 2.5, FIRST_CHART: 1.5, CLIP: 0.2, MERCY: 2, HEAT: 0.25, PROW: 1, RUSH: 700, KEEP: 3 };
+  var RACE_KEYS = ["calm", "open", "storm", "type"];
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+  function mean(list) { return list.reduce(function (s, x) { return s + x; }, 0) / list.length; }
+
+  /* the Corvus races when the leg's drum beats (beat: the leg's own beat name, if the panel drum changed it) and the
+     player has not chosen "Sail alone" */
+  function raceOn(set, step, beat) {
+    set = set || {};
+    return (beat || beatFor(set.beat, step)) !== "off" && set.race !== "alone";
+  }
+  /* one Corvus stroke: a beat when tapping; two when typing in the Storm (in heavy seas they bail every other beat) */
+  function strokeMs(beatMs, mode) { return mode === "type" ? 2 * beatMs : beatMs; }
+  /* the usual pace is kept per chart and per key */
+  function raceKey(step, mode) { return step === 1 ? "calm" : step === 2 ? "open" : mode === "type" ? "type" : "storm"; }
+  /* what one answered box costs on the race clock: a right one its think time after the grace and the free beats,
+     at most REST beats; a wrong one MISS beats however fast */
+  function boxCost(ms, beatMs, ok, free) {
+    if (!ok) { return RACE.MISS * beatMs; }
+    return clamp((+ms || 0) - RACE.GRACE - (free || 0) * beatMs, 0, RACE.REST * beatMs);
+  }
+  /* the drum beats while a box is younger than this; then both crews hold their oars up (all legs) */
+  function restMs(beatMs, free) { return RACE.GRACE + (RACE.REST + (free || 0)) * beatMs; }
+  /* the Inspector's lines at a miss, one beat of free reading each on the next box: the correction, "We'll row this
+     chart once more at the end of tonight", the rushed-tile tip */
+  function missNotes(o) {
+    o = o || {};
+    var out = ["clash"];
+    if (o.comeback) { out.push("comeback"); }
+    if (o.rush) { out.push("rush"); }
+    return out;
+  }
+  /* the free beats of a box: one if it starts a new column, one per line said at the miss before it */
+  function freeBeats(turn, lines) { return (turn ? 1 : 0) + Math.max(0, +lines || 0); }
+  /* a wrong tile tapped too soon after its box appeared (typed forms are never rushed) */
+  function rushed(ms, mode) { return mode === "tap" && ms >= 0 && ms < RACE.RUSH; }
+  /* right in the race: as judged, except that a macron slip (judged right, "Mind the macrons") costs a miss */
+  function raceRight(res) { return !!(res && res.ok && !res.slip); }
+
+  /* the usual cost per counted box (ms) for this chart and key: the mean of its last KEEP races; with none yet,
+     FIRST_CHART x the other charts' usuals at the key; with none at the key, FIRST strokes. At most REST beats
+     in the last two. -> { u, from: "chart" | "key" | "first" } */
+  function usualOf(list) { var l = (list || []).slice(-RACE.KEEP); return l.length ? mean(l) : null; }
+  function usual(rr, id, key, beatMs, mode) {
+    var all = rr && rr.usual || {}, own = usualOf(all[id] && all[id][key]), cap = RACE.REST * beatMs, others = [];
+    if (own != null) { return { u: own, from: "chart" }; }
+    Object.keys(all).forEach(function (cid) { var x = cid !== id && all[cid] ? usualOf(all[cid][key]) : null; if (x != null) { others.push(x); } });
+    if (others.length) { return { u: Math.min(cap, RACE.FIRST_CHART * mean(others)), from: "key" }; }
+    return { u: Math.min(cap, RACE.FIRST * strokeMs(beatMs, mode)), from: "first" };
+  }
+  /* the cargo H: the Corvus must row n + H strokes. A child rowing at their usual pace wins by about BONUS strokes;
+     a child faster than the drum (u under (n - 1.5)/(n - 1) of a stroke) races level (H 0); a dare lets H go down to
+     -floor(n/2) (the Corvus sails light) */
+  function cargo(u, n, beatMs, mode, dare) {
+    var S = strokeMs(beatMs, mode), h = Math.round(Math.min(u, RACE.REST * beatMs) * (n - 1) / S - n + RACE.BONUS);
+    return dare ? Math.max(-Math.floor(n / 2), h) : Math.max(0, h);
+  }
+  /* the amphorae on its deck (H is never shown as a number) */
+  function amphorae(H, n) { return H <= 0 ? 0 : H <= 0.2 * n ? 1 : H <= 0.6 * n ? 2 : 3; }
+
+  /* one race: n boxes (plan.of), cargo H, the leg's beat (ms), the mode ("tap" | "type"), a dare.
+     c: the Corvus's strokes rowed of need; done: the boxes the child has answered; dock: where the child was when
+     the Corvus reached the far harbor (boxes, with the part of the box used), or null */
+  function race(n, H, beatMs, mode, dare) {
+    return { n: n, H: H, B: beatMs, S: strokeMs(beatMs, mode), mode: mode, dare: !!dare, need: n + H, c: 0, done: 0, clock: 0, costs: [], dock: null, held: 0 };
+  }
+  /* the mercy rule: while the child is on box `done`, the Corvus has rowed at most (done + MERCY) / n of the course */
+  function raceCap(st) { return (st.done + RACE.MERCY) * st.need / st.n; }
+  /* the child answers the box st.done (ms since it appeared, right or not, its free beats). The first answer starts
+     the race and its box is free. Strokes held back by the mercy rule are not made up. */
+  function raceBox(st, ms, ok, free) {
+    var i = st.done, k = i === 0 ? 0 : boxCost(ms, st.B, ok, free);
+    if (i > 0) { st.costs.push(k); st.clock += k; }
+    if (st.dock === null && k > 0) {
+      var gain = k / st.S, want = st.c + gain, cap = raceCap(st), nc = Math.min(want, cap);
+      if (nc < want - 1e-9) { st.held++; }
+      if (nc >= st.need - 1e-9) { st.dock = i + clamp((st.need - st.c) / gain, 0, 1); nc = st.need; }
+      st.c = nc;
+    }
+    st.done = Math.min(st.n, i + 1);
+    return st;
+  }
+  /* where the Corvus is while box st.done waits (ms since it appeared): its share of the course p, whether the
+     mercy rule holds it, whether it has moored at the far harbor */
+  function raceLive(st, ms, free) {
+    if (st.dock !== null) { return { p: 1, held: false, moored: true }; }
+    if (st.done === 0) { return { p: st.c / st.need, held: false, moored: false }; }
+    var want = st.c + boxCost(ms, st.B, true, free) / st.S, cap = raceCap(st), c = Math.min(want, cap, st.need);
+    return { p: c / st.need, held: want > cap + 1e-9, moored: c >= st.need - 1e-9 };
+  }
+  /* the child's lead in strokes (boxes): positive ahead, negative behind; p the Corvus's share (default: as committed) */
+  function raceLead(st, p) { return st.done - (p == null ? st.c / st.need : p) * st.n; }
+  /* "Final stretch!": three boxes or fewer to go and the race within two strokes */
+  function stretch(st) { var left = st.n - st.done; return st.dock === null && left > 0 && left <= 3 && Math.abs(raceLead(st)) <= 2; }
+  /* the end: the child first, by n x (1 - p); the Corvus first, by the boxes the child still had to row.
+     -> { r: "won" | "heat" | "lost", m (signed: + the child), kind: "heat" | "prow" | "strokes", by (rounded), cost (mean per counted box) } */
+  function raceEnd(st) {
+    var m = st.dock !== null ? -(st.n - st.dock) : st.n * (1 - st.c / st.need), a = Math.abs(m);
+    var r = a < RACE.HEAT ? "heat" : m > 0 ? "won" : "lost";
+    return { r: r, m: m, kind: r === "heat" ? "heat" : a < RACE.PROW ? "prow" : "strokes", by: Math.max(1, Math.round(a)), cost: st.costs.length ? mean(st.costs) : null };
+  }
+  /* where to draw the Corvus on its track (px from the start of the track, tw px long). From 600 px up, where the
+     race clock says; on a phone a box is a few px, so it is drawn from our ship, at most 3 strokes either way
+     (leadPx). o: { lo: px it may go back past the start (over the quay), hi: px past the far end (its mooring in
+     the harbor), wait: the race has not started (it waits at the quay, behind us, where it shows), moored: it docked
+     first (it moors in the harbor, ahead of our prow) } */
+  var LEAD_PX = 24, LEAD_BACK = 48, LEAD_NEAR = 38, LEAD_FORE = 10, NEAR = 0.01;
+  /* on a phone: how many px behind our ship the Corvus is drawn (negative: ahead) for a lead in strokes (positive:
+     we lead, it is behind). Our sail is 33 px wide and its sail 23 px, on masts 15 px apart when the prows are level:
+     from about 3 px ahead of level (7 px when the ships pitch in the Storm) to about 34 px behind it, our sail
+     covers more than two fifths of its sail. And a close race rests there: a child who takes three beats or more
+     over a box has the Corvus row its three strokes and hold water within a few hundredths of a stroke of level
+     (the cargo is set so). So the mapping is steep through there, on both sides of level: the first NEAR of a
+     stroke behind is drawn LEAD_NEAR px back (its sail is out past our stern), the first NEAR of a stroke ahead
+     LEAD_FORE px forward (its sail is out past our sail's leading edge). Then it is gentle: a whole stroke behind
+     is LEAD_BACK px (so in the final stretch it stays near us), a whole stroke ahead LEAD_PX px, and LEAD_PX a
+     stroke beyond a stroke either way. Level is 0 (the prows side by side); continuous, never decreasing, and flat
+     beyond 3 strokes either way */
+  function leadPx(lead) {
+    lead = clamp(+lead || 0, -3, 3);
+    return lead <= -1 ? lead * LEAD_PX :
+      lead < -NEAR ? -LEAD_FORE + (lead + NEAR) / (1 - NEAR) * (LEAD_PX - LEAD_FORE) :
+      lead <= 0 ? lead / NEAR * LEAD_FORE :
+      lead <= NEAR ? lead / NEAR * LEAD_NEAR :
+      lead <= 1 ? LEAD_NEAR + (lead - NEAR) / (1 - NEAR) * (LEAD_BACK - LEAD_NEAR) : LEAD_BACK + (lead - 1) * LEAD_PX;
+  }
+  function rivalX(done, n, p, tw, phone, o) {
+    o = o || {};
+    var lo = Math.max(0, +o.lo || 0), hi = Math.max(0, +o.hi || 0);
+    if (o.wait) { return -lo; }
+    if (o.moored) { return tw + hi; }
+    if (!phone) { return clamp(p, 0, 1) * tw; }
+    return clamp(done / n * tw - leadPx(done - p * n), -lo, tw + hi);
+  }
+
+  /* the race records of a player, cleaned (odd or old values dropped, as settings() does) */
+  function emptyUsual() { return { calm: [], open: [], storm: [], type: [] }; }
+  function count(x) { x = +x; return isFinite(x) && x >= 0 ? Math.floor(x) : 0; }
+  function dayOf(v) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; }
+  function raceRec(prog) {
+    var x = prog && prog.race && typeof prog.race === "object" && !Array.isArray(prog.race) ? prog.race : {};
+    var usualAll = {}, src = x.usual && typeof x.usual === "object" && !Array.isArray(x.usual) ? x.usual : {};
+    Object.keys(src).forEach(function (id) {
+      var per = src[id], o = emptyUsual(), any = false;
+      if (!per || typeof per !== "object" || Array.isArray(per)) { return; }
+      RACE_KEYS.forEach(function (k) {
+        o[k] = (Array.isArray(per[k]) ? per[k] : []).filter(function (v) { return typeof v === "number" && isFinite(v) && v >= 0 && v <= 60000; }).slice(-RACE.KEEP);
+        if (o[k].length) { any = true; }
+      });
+      if (any) { usualAll[id] = o; }
+    });
+    var b = x.best, t = x.told && typeof x.told === "object" ? x.told : {};
+    var best = b && typeof b === "object" && typeof b.m === "number" && isFinite(b.m) && b.m > 0 && typeof b.id === "string" ?
+      { m: b.m, id: b.id, step: [1, 2, 3].indexOf(b.step) >= 0 ? b.step : 1 } : null;
+    return {
+      usual: usualAll, races: count(x.races), won: count(x.won), heat: count(x.heat), lost: count(x.lost), best: best,
+      run: count(x.run), bestRun: Math.max(count(x.bestRun), count(x.run)), dareOk: x.dareOk === true,
+      told: { first: t.first === true, mercy: t.mercy === true, rush: dayOf(t.rush), port: dayOf(t.port), rest: dayOf(t.rest), nudge: dayOf(t.nudge), alone: t.alone === true }
+    };
+  }
+  /* a race rowed to the end (never one called off). o: { id, step, key, cost, u, from, pass, r, m, H, B, dare }.
+     The cost always goes into the chart's usual at the key (clipped to within CLIP of the usual it was raced against,
+     when that came from this chart's own races); the result only on a passed chart: laurels come with a pass.
+     -> { rec (the result was recorded), dare (Dare newly unlocked), first (the first race ever at this key) } */
+  function recordRace(prog, o) {
+    prog = prog || fresh();
+    o = o || {};
+    var rr = prog.race = raceRec(prog), cost = o.cost;
+    if (typeof cost === "number" && isFinite(cost) && cost >= 0 && o.id && RACE_KEYS.indexOf(o.key) >= 0) {
+      if (o.from === "chart" && o.u > 0) { cost = clamp(cost, o.u * (1 - RACE.CLIP), o.u * (1 + RACE.CLIP)); }
+      var per = rr.usual[o.id] = rr.usual[o.id] || emptyUsual();
+      per[o.key] = per[o.key].concat([Math.round(cost)]).slice(-RACE.KEEP);
+    }
+    rr.races++;
+    var out = { rec: false, dare: false, first: o.from === "first" };
+    if (o.pass && (o.r === "won" || o.r === "heat" || o.r === "lost")) {
+      out.rec = true;
+      rr[o.r]++;
+      if (o.r === "won") {
+        rr.run++;
+        if (!rr.best || o.m > rr.best.m) { rr.best = { m: Math.round(o.m * 100) / 100, id: o.id, step: o.step }; }
+        /* Dare unlocks at the first passed level race won at the steady drum */
+        if (!rr.dareOk && o.H === 0 && !o.dare && o.B === BEAT_MS.steady) { rr.dareOk = true; out.dare = true; }
+      } else if (o.r === "lost") { rr.run = 0; }      /* a dead heat keeps the run */
+      rr.bestRun = Math.max(rr.bestRun, rr.run);
+    }
+    return out;
+  }
+
   var RowLogic = {
     STEPS: STEPS, BEATS: BEATS, BEAT_MS: BEAT_MS, DEFAULTS: DEFAULTS,
     range: range, gradeCharts: gradeCharts, lastChartChapter: lastChartChapter, playChapter: playChapter, inPlay: inPlay, chaptersWithCharts: chaptersWithCharts,
@@ -482,7 +683,11 @@
     wrongForms: wrongForms, giveaway: giveaway, called: called, judgeChoice: judgeChoice,
     fresh: fresh, settings: settings, rec: rec, passes: passes, record: record, unlocked: unlocked, highestPassed: highestPassed,
     fullyPassed: fullyPassed, nextStep: nextStep, voyage: voyage, oldest: oldest, queueAgain: queueAgain,
-    beatFor: beatFor, beatMs: beatMs, inStroke: inStroke
+    beatFor: beatFor, beatMs: beatMs, inStroke: inStroke,
+    RACE: RACE, RACE_KEYS: RACE_KEYS, RACE_SET: RACE_SET, LEAD_PX: LEAD_PX, LEAD_BACK: LEAD_BACK, LEAD_NEAR: LEAD_NEAR, LEAD_FORE: LEAD_FORE, NEAR: NEAR,
+    raceOn: raceOn, strokeMs: strokeMs, raceKey: raceKey, boxCost: boxCost, restMs: restMs, missNotes: missNotes, freeBeats: freeBeats,
+    rushed: rushed, raceRight: raceRight, usual: usual, cargo: cargo, amphorae: amphorae, race: race, raceCap: raceCap, raceBox: raceBox,
+    raceLive: raceLive, raceLead: raceLead, stretch: stretch, raceEnd: raceEnd, leadPx: leadPx, rivalX: rivalX, raceRec: raceRec, recordRace: recordRace
   };
   if (root) { root.RowLogic = RowLogic; }
   if (typeof module !== "undefined" && module.exports) { module.exports = RowLogic; }
