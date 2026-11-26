@@ -525,46 +525,91 @@
   }
 
   /* ------------------------------------------------------------ Erase Away */
+  /* Only the first try at a blank counts, as in Case Detective. A right chip fills the blank; a wrong chip (or a
+     decoy, a piece that fits no blank) shakes and stays in the tray, and the blank is filled at once with its
+     right piece in red chalk, that piece's chip used up with it. The last step shows the stars. */
+  function starSvg(on, i) {
+    return '<svg class="cc-star' + (on ? " on" : "") + '" style="--i:' + i + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<path d="M12 2.4l2.9 6 6.6.8-4.85 4.55 1.25 6.55L12 17.05l-5.9 3.25 1.25-6.55L2.5 9.2l6.6-.8z"/></svg>';
+  }
   function eraseAway() {
     view = "erase";
     shell.compact(true);
-    var seed = Date.now() >>> 0, set = L.eraseSet(W, me, prog, seed, window.innerWidth < 600 ? 5 : 0), rounds = L.eraseRounds(set, seed);   /* a phone gets 5 entries */
-    var st = { r: 0, filled: {}, sel: -1 };
+    var seed = Date.now() >>> 0, chapter = L.playChapter(W, me);
+    var set = L.eraseSet(W, me, prog, seed, window.innerWidth < 600 ? 5 : 0), rounds = L.eraseRounds(set, seed, W, me);   /* a phone gets 5 entries */
+    var st = { r: 0, filled: {}, sel: -1, tries: {}, hold: false, saved: false };
+    /* what a piece is called in "Fill: the genitive of amīcus" (mortālis has one other form: its neuter, mortāle) */
+    function nameOf(p) {
+      if (p.k === "forms" && p.text.indexOf(",") < 0 && !/is$/.test(p.text)) { return "the neuter"; }
+      return { gen: "the genitive", forms: "the other forms", gender: "the gender", "case": "the case", parts: "the principal parts", mean: "the meaning" }[p.k] || p.k;
+    }
     function entryHtml(e, rd, fresh) {
       var h = '<span class="cc-chalk head" lang="la">' + esc(e.head) + "</span>";
+      /* fixed text after a piece, never erased, in chalk like the piece: a plural-only noun's "(pl.)" after its gender */
+      function tail(p) { if (p.tail) { h += '<span class="cc-chalk">' + esc(p.tail) + "</span>"; } }
       e.parts.forEach(function (p) {
         var lead = p.k === "mean" ? " — " : p.lead;
         var gone = rd && rd.erase.indexOf(p.k) >= 0;
         h += '<span class="cc-sep' + (p.k === "mean" ? " dash" : "") + '">' + esc(lead) + "</span>";
-        if (!gone) { h += '<span class="cc-chalk' + (p.k === "mean" ? " en" : "") + '"' + (p.la ? ' lang="la"' : "") + ">" + esc(p.text) + "</span>"; return; }
+        if (!gone) { h += '<span class="cc-chalk' + (p.k === "mean" ? " en" : "") + '"' + (p.la ? ' lang="la"' : "") + ">" + esc(p.text) + "</span>"; tail(p); return; }
         var j = rd.blanks.findIndex(function (b) { return b.id === e.id && b.n === p.n; });
         var isNew = fresh && rd.adds.some(function (a) { return a.id === e.id && a.n === p.n; });
-        h += '<button type="button" class="cc-smudge' + (isNew ? " wiping" : "") + (p.k === "mean" ? " en" : "") + '" data-j="' + j + '" aria-label="Blank: ' + esc(nameOf(p.k)) + " of " + esc(e.head) + '"><span class="cc-was"' + (p.la ? ' lang="la"' : "") + ">" + esc(p.text) + "</span>" + (isNew ? A.sponge() : "") + "</button>";
+        /* every blank has the same size: the erased piece is out of the layout until it is filled (while the
+           sponge wipes, it fades inside the blank) */
+        h += '<button type="button" class="cc-smudge' + (isNew ? " wiping" : "") + (p.k === "mean" ? " en" : "") + '" data-j="' + j + '" aria-label="Blank: ' + esc(nameOf(p)) + " of " + esc(p.of || e.head) + '"><span class="cc-was"' + (p.la ? ' lang="la"' : "") + ">" + esc(p.text) + "</span>" + (isNew ? A.sponge() : "") + "</button>";
+        tail(p);
       });
       return h;
     }
-    function nameOf(k) { return { gen: "the genitive", forms: "the other forms", gender: "the gender", "case": "the case", parts: "the principal parts", mean: "the meaning" }[k] || k; }
+    /* "Fill: the genitive of amīcus", by the chalk pieces */
+    function fillHtml(j) {
+      var rd = rounds[st.r], bl = rd && rd.blanks && rd.blanks[j];
+      if (!bl) { return "&nbsp;"; }
+      var e = set.filter(function (x) { return x.id === bl.id; })[0], p = e.parts[bl.n];
+      return "<b>Fill:</b> " + esc(nameOf(p)) + " of " + li(p.of || e.head);
+    }
+    /* the piece in the Inspector's line: Latin in italics, a meaning in quotes */
+    function pieceSay(bl) {
+      if (bl.k === "mean") { return "“" + esc(bl.text) + "”"; }
+      if (bl.k === "gender" || bl.k === "case") { return "<b>" + esc(bl.text) + "</b>"; }
+      return li(bl.text);
+    }
+    function firstTries(n) { var t = st.tries[n] || [], c = 0; t.forEach(function (x) { if (x === true) { c++; } }); return c; }
+    function ftText(n) { return firstTries(n) + " of " + rounds[n].blanks.length + " first try"; }
     function draw(fresh) {
-      var rd = rounds[st.r], last = st.r >= rounds.length;
-      var top = '<div class="cc-etop"><span class="cc-pill">' + (last ? "Last step" : st.r === 0 ? "Read aloud" : "Round " + st.r + " of " + (rounds.length - 1)) + "</span><b>" +
-        (last ? "Only the first words are left" : st.r === 0 ? "The full entries" : esc(cap(rd.name)) + " are erased") + '</b><button type="button" class="tlink cc-stop" data-act="stop">Stop</button></div>';
+      var rd = rounds[st.r], last = st.r >= rounds.length, sc = null;
+      var top;
+      if (last) {
+        sc = L.eraseScore(rounds, st.tries);
+        if (!st.saved) { st.saved = true; L.eraseDone(prog, chapter, sc, today()); save(); }
+        var stars = "";
+        for (var k = 0; k < 3; k++) { stars += starSvg(k < sc.stars, k); }
+        top = '<div class="cc-etop final"><span class="cc-pill">Last step</span><span class="cc-stars" role="img" aria-label="' + sc.stars + ' of 3 stars">' + stars + "</span>" +
+          '<span class="cc-ftall">' + sc.right + " of " + plural(sc.total, "piece", "pieces") + ' on the first try</span><button type="button" class="tlink cc-stop" data-act="stop">Stop</button></div>';
+      } else {
+        top = '<div class="cc-etop"><span class="cc-pill">' + (st.r === 0 ? "Read aloud" : "Round " + st.r + " of " + (rounds.length - 1)) + "</span>" +
+          (st.r ? '<span class="cc-pill cc-ft">' + ftText(st.r) + "</span>" : "") + "<b>" +
+          (st.r === 0 ? "The full entries" : esc(cap(rd.name)) + " are erased") + '</b><button type="button" class="tlink cc-stop" data-act="stop">Stop</button></div>';
+      }
       var body;
       if (last) {
         body = '<ol class="cc-lines final">' + set.map(function (e, i) {
-          return '<li><button type="button" class="cc-say" data-i="' + i + '" aria-expanded="false"><span class="cc-chalk head" lang="la">' + esc(e.head) + '</span><span class="cc-full">' + entryHtml(e, null, false) + "</span></button></li>";
+          var miss = sc.miss.indexOf(e.id) >= 0;
+          return '<li><button type="button" class="cc-say' + (miss ? " miss" : "") + '" data-i="' + i + '" aria-expanded="false"><span class="cc-say-h"><span class="cc-chalk head" lang="la">' + esc(e.head) + "</span>" +
+            (miss ? '<span class="cc-again">say it once more</span>' : "") + '</span><span class="cc-full">' + entryHtml(e, null, false) + "</span></button></li>";
         }).join("") + "</ol>";
       } else {
         body = '<ol class="cc-lines">' + set.map(function (e) { return '<li class="cc-eline"><span class="cc-eline-in">' + entryHtml(e, st.r ? rd : null, fresh) + "</span></li>"; }).join("") + "</ol>";
       }
-      var chips = !last && st.r > 0 ? '<div class="cc-chips" role="group" aria-label="Chalk pieces">' + rd.chips.map(function (c, i) {
+      var chips = !last && st.r > 0 ? '<div class="cc-pieces"><p class="cc-fill" id="cc-fill" aria-live="polite">&nbsp;</p><div class="cc-chips" role="group" aria-label="Chalk pieces" aria-describedby="cc-fill">' + rd.chips.map(function (c, i) {
         return '<button type="button" class="cc-chip' + (c.k === "mean" ? " en" : "") + '" data-c="' + i + '"' + (c.k === "mean" || c.k === "gender" || c.k === "case" ? "" : ' lang="la"') + ">" + esc(c.text) + "</button>";
-      }).join("") + "</div>" : "";
+      }).join("") + "</div></div>" : "";
       var btn = last ? '<button type="button" class="btn primary grow" data-act="done" disabled>Done</button>'
         : st.r === 0 ? '<button type="button" class="btn primary grow" data-act="next">Start erasing ' + S.icon("next") + "</button>"
         : '<button type="button" class="btn primary grow" data-act="next" disabled>' + (st.r + 1 >= rounds.length ? "Last step" : "Next round") + " " + S.icon("next") + "</button>";
-      render(top + '<div class="cc-slate"><div class="cc-slate-in">' + body + "</div></div>" + chips + '<div class="dock">' + btn + "</div>", "cc-erase" + (last ? " final" : st.r === 0 ? " zero" : " filling"));
+      render(top + '<div class="cc-slate"><div class="cc-slate-in">' + body + "</div></div>" + chips + '<div class="dock">' + btn + "</div>", "cc-erase" + (last ? " final" : st.r === 0 ? " zero" : " filling" + (rd.kinds.indexOf("mean") >= 0 ? " meanings" : "")));
       act("stop", function () { sfx("tap"); home(); });
-      if (last) { return wireFinal(); }
+      if (last) { return wireFinal(sc); }
       act("next", function (e, b) { if (b.disabled) { return; } sfx("tap"); st.r++; st.filled = {}; st.sel = -1; draw(true); });
       keys = { enter: function () { var b = q('[data-act="next"]'); if (b && !b.disabled) { b.click(); } } };
       if (st.r === 0) {
@@ -572,63 +617,99 @@
         later(function () { focus(q('[data-act="next"]')); }, 60);
         return;
       }
+      st.tries[st.r] = [];
       var smudges = qa(".cc-smudge");
       if (fresh) {
         sfx("ruleout");
+        st.hold = true;
         smudges.forEach(function (b) { if (b.classList.contains("wiping")) { b.disabled = true; } });
-        later(function () { smudges.forEach(function (b) { b.classList.remove("wiping"); b.disabled = false; var sp = b.querySelector(".cc-sponge"); if (sp) { sp.parentNode.removeChild(sp); } }); select(firstOpen()); }, reduced() ? 0 : 1250);
+        later(function () { st.hold = false; smudges.forEach(function (b) { b.classList.remove("wiping"); b.disabled = false; var sp = b.querySelector(".cc-sponge"); if (sp) { sp.parentNode.removeChild(sp); } }); select(firstOpen()); }, reduced() ? 0 : 1250);
       } else { select(firstOpen()); }
-      smudges.forEach(function (b) { on(b, "click", function () { if (!st.filled[+b.getAttribute("data-j")]) { sfx("tap"); select(+b.getAttribute("data-j")); } }); });
+      smudges.forEach(function (b) { on(b, "click", function () { var j = +b.getAttribute("data-j"); if (!st.filled[j] && !st.hold) { sfx("tap"); select(j); } }); });
       qa(".cc-chip").forEach(function (c) { on(c, "click", function () { chip(c); }); });
-      shell.say(["The sponge took " + esc(rd.name) + ".", "Tap a blank, then the chalk piece that fits."], ["search", "point"]);
+      /* the first round puts the rule in the first line, so a child who never taps the bubble on still reads it (in
+         words that keep the bubble as tall as before on a phone, 320 px wide too); later rounds keep a short start */
+      if (st.r === 1) { shell.say([esc(cap(rd.name)) + " are gone. Only the first try counts!", "Each piece goes into the blinking blank. Tap a blank to choose it."], ["search", "point"]); }
+      else { shell.say(["The sponge took " + esc(rd.name) + ".", "Only the first try counts! The chalk piece goes into the blinking blank."], ["search", "point"]); }
     }
     function firstOpen() { var rd = rounds[st.r]; for (var j = 0; j < rd.blanks.length; j++) { if (!st.filled[j]) { return j; } } return -1; }
     function select(j) {
       st.sel = j;
-      qa(".cc-smudge").forEach(function (b) { b.classList.toggle("sel", +b.getAttribute("data-j") === j); b.setAttribute("aria-pressed", +b.getAttribute("data-j") === j ? "true" : "false"); });
+      qa(".cc-smudge").forEach(function (b) { var on = +b.getAttribute("data-j") === j; b.classList.toggle("sel", on); if (!b.disabled || on) { b.setAttribute("aria-pressed", on ? "true" : "false"); } });
+      var f = q(".cc-fill");
+      if (f) { f.innerHTML = fillHtml(j); f.classList.toggle("on", j >= 0); }
     }
+    function useChip(c) { c.disabled = true; c.classList.add("used"); }
     function chip(c) {
-      var rd = rounds[st.r], i = +c.getAttribute("data-c"), ch = rd.chips[i];
-      if (st.sel < 0) { select(firstOpen()); }
-      var j = st.sel, bl = rd.blanks[j];
-      if (!bl || c.disabled) { return; }
-      if (L.chipFits(bl, ch)) {
-        st.filled[j] = true;
+      if (st.hold || c.disabled) { return; }
+      var rd = rounds[st.r], ch = rd.chips[+c.getAttribute("data-c")];
+      if (st.sel < 0 || st.filled[st.sel]) { select(firstOpen()); }
+      var j = st.sel, bl = rd.blanks[j], b = q('.cc-smudge[data-j="' + j + '"]'), said = null;
+      if (!bl || !b) { return; }
+      var ok = L.chipFits(bl, ch);
+      st.tries[st.r][j] = ok;   /* only the first try counts: the blank is filled either way */
+      if (ok) {
         sfx("stamp");
-        var b = q('.cc-smudge[data-j="' + j + '"]');
-        b.classList.add("filled");
-        b.classList.remove("sel");
-        b.disabled = true;
-        c.disabled = true;
-        c.classList.add("used");
-        var nx = firstOpen();
-        if (nx < 0) {
-          select(-1);
-          later(function () {
-            var cs = q(".cc-chips");
-            if (!cs) { return; }
-            cs.classList.add("done");
-            /* on a wide screen the chalk tray keeps its place, with a word from the Inspector's slate */
-            cs.insertAdjacentHTML("beforeend", '<p class="cc-tray">' + A.spongeIc() + "<span><b>Every piece is back.</b> Say each whole entry aloud.</span></p>");
-          }, reduced() ? 0 : 320);
-          var nb = q('[data-act="next"]');
-          nb.disabled = false;
-          q(".cc-erase").classList.remove("filling");   /* a short phone shows the Next button only now */
-          sfx("star");
-          shell.act("cheer", 1400);
-          shell.say(st.r + 1 >= rounds.length ? "All filled! Now the last step." : "All filled! Say them aloud, then on to the next round.", "cheer");
-          later(function () { focus(nb); reveal(nb.parentNode); }, 60);
-        } else { select(nx); }
+        useChip(c);
       } else {
         sfx("wrong");
         c.classList.remove("shake");
         void c.offsetWidth;
         c.classList.add("shake");
+        /* the right piece goes in, in red chalk, and its chip is used up with it */
+        var right = qa(".cc-chip").filter(function (x) { return !x.disabled && L.chipFits(bl, rd.chips[+x.getAttribute("data-c")]); })[0];
+        if (right) { useChip(right); }
+        said = "That one is " + pieceSay(bl) + (/[.?!]$/.test(bl.text) ? "" : ".");   /* "That one is f." */
+        st.hold = true;
+        later(function () { st.hold = false; }, reduced() ? 120 : 420);
       }
+      st.filled[j] = true;
+      b.classList.add("filled");
+      if (!ok) { b.classList.add("missed"); }
+      b.classList.remove("sel");
+      b.disabled = true;
+      b.removeAttribute("aria-pressed");
+      b.setAttribute("aria-label", bl.text + (ok ? "" : " (missed)"));
+      var ft = q(".cc-ft");
+      if (ft) { ft.textContent = ftText(st.r); }
+      var nx = firstOpen();
+      if (nx >= 0) {
+        select(nx);
+        if (said) { shell.say(said, "think"); }
+        return;
+      }
+      select(-1);
+      var all = firstTries(st.r) === rd.blanks.length;
+      if (ft && all) { ft.classList.add("all"); }
+      var pc = q(".cc-pieces");
+      later(function () {
+        var cs = q(".cc-chips");
+        if (!cs) { return; }
+        cs.classList.add("done");
+        if (pc) { pc.classList.add("done"); }
+        /* on a wide screen the chalk tray keeps its place, with a word from the Inspector's slate */
+        cs.insertAdjacentHTML("beforeend", '<p class="cc-tray">' + A.spongeIc() + "<span><b>Every piece is back.</b> Say each whole entry aloud.</span></p>");
+      }, reduced() ? 0 : 320);
+      var nb = q('[data-act="next"]');
+      nb.disabled = false;
+      q(".cc-erase").classList.remove("filling");   /* a phone shows the Next button only now */
+      q(".cc-erase").classList.remove("meanings");  /* a laptop's slate takes back its room for the filled meanings */
+      sfx("star");
+      shell.act(all ? "cheer" : "proud", 1400);
+      var done = st.r + 1 >= rounds.length ? "All filled! Now the last step." : "All filled! Say them aloud, then on to the next round.";
+      shell.say(said ? [said, done] : done, said ? ["think", "cheer"] : "cheer");
+      later(function () { focus(nb); reveal(nb.parentNode); }, 60);
     }
-    function wireFinal() {
-      var seen = {};
-      shell.say(["Only the first words are left.", "Say each whole entry aloud, then tap it to check."], ["point", "think"]);
+    function wireFinal(sc) {
+      var seen = {}, lines = [], moods = [];
+      if (sc.stars === 3) { lines.push("Three stars! Every piece went in on the first try."); moods.push("cheer"); }
+      else if (sc.stars) { lines.push(plural(sc.stars, "star", "stars") + "! " + sc.right + " of " + sc.total + " pieces on the first try."); moods.push("proud"); }
+      else { lines.push(sc.right + " of " + sc.total + " pieces on the first try. Play again for stars!"); moods.push("think"); }
+      lines.push("Say each whole entry aloud, then tap it to check.");
+      moods.push("point");
+      if (sc.miss.length) { lines.push("The marked ones had a miss: say them once more."); moods.push("point"); }
+      shell.say(lines, moods);
+      if (sc.stars === 3) { sfx("fanfare"); }
       qa(".cc-say").forEach(function (b) {
         on(b, "click", function () {
           var i = +b.getAttribute("data-i");
@@ -641,17 +722,12 @@
             d.disabled = false;
             sfx("fanfare");
             shell.act("proud", 1800);
-            shell.say("Every entry, start to finish. You are ready for the quiz!", "proud");
+            shell.say("Every entry, start to finish. " + (sc.stars === 3 ? "You are ready for the quiz!" : sc.stars ? "Say the marked ones once more!" : "Play again for stars!"), "proud");
             later(function () { focus(d); }, 60);
           }
         });
       });
-      act("done", function () {
-        prog.erase = { n: (prog.erase.n || 0) + 1, last: today() };
-        save();
-        sfx("tap");
-        home();
-      });
+      act("done", function () { sfx("tap"); home(); });
       keys = { enter: function () { var d = q('[data-act="done"]'); if (d && !d.disabled) { d.click(); } } };
     }
     function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }

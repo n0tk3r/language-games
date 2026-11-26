@@ -209,6 +209,15 @@
 .cc-etop { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--cream); }
 .cc-etop .cc-pill { background: var(--red); color: #fff; }
 .cc-etop b { font: 800 18px/1.15 var(--f-serif); color: var(--brass-lt); }
+/* the round's score: how many pieces went in on the first try (gold when every one did) */
+.cc-etop .cc-pill.cc-ft { background: rgba(0, 0, 0, .3); color: var(--cream); box-shadow: inset 0 0 0 1.5px rgba(255, 227, 154, .4); }
+.cc-etop .cc-pill.cc-ft.all { background: var(--brass-grad); color: var(--brass-ink); box-shadow: none; }
+/* the last step: the stars and the count for the whole game */
+.cc-stars { display: inline-flex; align-items: center; gap: 2px; }
+.cc-star { width: 28px; height: 28px; fill: rgba(255, 255, 255, .1); stroke: rgba(255, 227, 154, .6); stroke-width: 1.4; stroke-linejoin: round; }
+.cc-star.on { fill: #f4b730; stroke: #7a4e10; animation: cc-star-pop .5s cubic-bezier(.2, 1.7, .4, 1) backwards; animation-delay: calc(var(--i, 0) * .14s + .15s); }
+@keyframes cc-star-pop { from { opacity: 0; transform: scale(.2) rotate(-40deg); } to { opacity: 1; transform: none; } }
+.cc-ftall { color: var(--brass-lt); font: 800 17px/1.2 var(--f-serif); }
 .cc-slate { padding: 9px; border-radius: 14px; background: var(--wood-grad); box-shadow: inset 0 1px 0 rgba(255, 220, 160, .4), 0 4px 0 #2a160c, 0 8px 18px rgba(3, 8, 22, .4); }
 .cc-slate-in {
   position: relative; padding: 10px 12px; border-radius: 6px; overflow: hidden;
@@ -226,22 +235,41 @@
 /* from round 1 on, every line is as tall as a line with a blank, so the slate's lines stay evenly spaced */
 .cc-erase:not(.zero):not(.final) .cc-eline { display: flex; align-items: center; min-height: 46px; }
 .cc-eline-in { min-width: 0; }
+/* Every blank has the same size, a Latin blank and an English one alike (--cc-blank, smaller on phones), so a
+   blank tells nothing about the length of what was erased: the erased piece is out of the layout until it is
+   filled. While the sponge wipes, the piece fades where it stood, inside its blank. */
+.cc-erase { --cc-blank: 72px; --cc-miss: #ff8d93; }   /* --cc-miss: red chalk, from the #b3202a family, 5:1 on the slate */
 .cc-smudge {
-  position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 4.6em; min-height: 44px; margin: 1px 0; padding: 2px 10px;
+  position: relative; display: inline-flex; flex: none; align-items: center; justify-content: center; width: var(--cc-blank); min-height: 44px; margin: 1px 0; padding: 0;
   border: 0; border-radius: 14px; background: none; color: inherit; font: inherit; vertical-align: middle; cursor: pointer;
 }
 .cc-smudge::before { content: ""; position: absolute; top: 5px; right: 0; bottom: 5px; left: 0; border-radius: 50%; background: radial-gradient(closest-side, rgba(236, 240, 232, .34), rgba(236, 240, 232, .14) 60%, rgba(236, 240, 232, 0)); }
-.cc-was { position: relative; opacity: 0; font-style: italic; }
-.cc-smudge.wiping .cc-was { animation: wipe-out .7s ease .45s forwards; opacity: 1; }
+.cc-was { position: relative; display: none; opacity: 0; font-style: italic; }
+.cc-smudge.wiping .cc-was { display: block; max-width: 100%; padding: 0 6px; overflow: hidden; white-space: nowrap; animation: wipe-out .7s ease .45s forwards; opacity: 1; }
 .cc-smudge.wiping::before { opacity: 0; animation: fade-in .5s ease .7s forwards; }
 @keyframes wipe-out { to { opacity: 0; } }
 .cc-sponge { position: absolute; left: -10px; top: 50%; width: 44px; height: 30px; margin-top: -15px; opacity: 0; animation: sponge 1.15s ease-in-out forwards; pointer-events: none; }
 @keyframes sponge { 0% { opacity: 0; transform: translateX(-10px) rotate(-8deg); } 15% { opacity: 1; } 50% { transform: translateX(40%) rotate(6deg); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(110%) rotate(-4deg); } }
-.cc-smudge.sel::after { content: ""; position: absolute; top: 2px; right: -2px; bottom: 2px; left: -2px; border: 2px dashed var(--brass-lt); border-radius: 14px; animation: blink 1.4s ease-in-out infinite; }
-.cc-smudge.filled { min-width: 0; padding: 2px 1px; cursor: default; }
+/* the selected blank: a brighter smudge and a dashed ring that pulses but never fades out, so it shows at any
+   moment which blank a chip goes into (with reduced motion the ring stays still, at full strength) */
+.cc-smudge.sel::before { background: radial-gradient(closest-side, rgba(255, 227, 154, .5), rgba(255, 227, 154, .2) 60%, rgba(255, 227, 154, 0)); }
+.cc-smudge.sel::after { content: ""; position: absolute; top: 2px; right: 2px; bottom: 2px; left: 2px; border: 2px dashed var(--brass-lt); border-radius: 14px; animation: cc-sel 1.4s ease-in-out infinite; }
+@keyframes cc-sel { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+/* a filled blank is as tall as its text, so an entry that wraps keeps its second line close to its first (the
+   line's own min-height keeps the slate's lines evenly spaced) */
+.cc-smudge.filled { width: auto; min-height: 0; padding: 2px 1px; cursor: default; }
 .cc-smudge.filled::before { opacity: 0; }
-.cc-smudge.filled .cc-was { opacity: 1; color: #ffe9a8; animation: chalk-in .45s ease both; }
+.cc-smudge.filled .cc-was { display: block; opacity: 1; color: #ffe9a8; animation: chalk-in .45s ease both; }
+/* a miss: the right piece goes in at once, in red chalk */
+.cc-smudge.filled.missed .cc-was { color: var(--cc-miss); text-shadow: 0 0 1px rgba(255, 141, 147, .5), 0 0 6px rgba(255, 141, 147, .14); }
 @keyframes chalk-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+.cc-pieces { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* "Fill: the genitive of amīcus": the selected blank, by the chalk pieces (its line is kept, so nothing moves) */
+.cc-fill { min-height: 1.35em; color: var(--cream); font: 700 15.5px/1.35 var(--f-ui); text-align: center; visibility: hidden; }
+.cc-fill.on { visibility: visible; }
+.cc-fill b { color: var(--brass-lt); font-weight: 800; }
+.cc-fill i { font: italic 800 1.12em/1 var(--f-serif); color: #fff; }
+.cc-pieces.done .cc-fill { display: none; }
 .cc-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
 .cc-chip {
   min-width: 44px; min-height: 44px; padding: 4px 12px; border: 2px solid #8a5a32; border-radius: 10px; background: linear-gradient(170deg, #3a4a44, #2a3531); color: #f3efe6;
@@ -256,7 +284,11 @@
 .cc-say { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; min-height: 48px; padding: 6px 10px; border: 2px dashed rgba(243, 239, 230, .35); border-radius: 12px; background: rgba(255, 255, 255, .04); color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .cc-say .cc-full { display: block; opacity: 0; max-height: 0; overflow: hidden; transition: opacity .35s ease; }
 .cc-say.open { border-style: solid; border-color: rgba(255, 227, 154, .5); cursor: default; }
-.cc-say.open .cc-chalk.head:first-child { display: none; }
+.cc-say-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 12px; }
+.cc-say.open .cc-say-h { display: none; }
+/* an entry that had a miss: say it once more */
+.cc-say.miss { border-color: rgba(255, 141, 147, .75); }
+.cc-again { color: var(--cc-miss); font: 800 14px/1.2 var(--f-ui); font-style: normal; letter-spacing: .2px; text-shadow: none; }
 .cc-say.open .cc-full { opacity: 1; max-height: none; }
 
 /* ---------------------------------------------------------- the trick ring */
@@ -318,9 +350,22 @@
 @media (max-width: 599.98px) {
   .cc-q.answered .cc-opts { grid-template-columns: minmax(0, 1fr); }
   .cc-end .cc-hillbox, .cc-end .cc-cons { display: none; }
-  /* Erase Away: a smudge no longer shows how long the erased piece was, so each entry keeps to one line */
-  .cc-smudge:not(.filled) { min-width: 2.8em; padding: 2px 8px; }
-  .cc-smudge:not(.filled) .cc-was { display: block; max-width: 3.2em; overflow: hidden; white-space: nowrap; }
+  /* Erase Away: smaller blanks (still all one size), so each entry keeps to one line; the round's title is left to
+     the Inspector, so the round and its score keep to one line; the last step's count goes under its stars */
+  .cc-erase { --cc-blank: 52px; gap: 10px; }
+  .cc-erase:not(.zero):not(.final) .cc-etop b { display: none; }
+  /* a tray that holds its decoys and the "Fill:" line in about the room the chips had before */
+  .cc-erase:not(.zero):not(.final) .cc-eline { min-height: 44px; }
+  .cc-pieces { gap: 3px; }
+  .cc-fill { min-height: 1.2em; font-size: 14.5px; line-height: 1.2; }
+  .cc-chip { padding: 4px 9px; font-size: 17.5px; }
+  .cc-chip.en { font-size: 14.5px; }
+  /* while the blanks are being filled the (disabled) Next button makes room for the chips; it appears as soon
+     as every blank is filled (and is scrolled into view) */
+  .cc-erase.filling > .dock { display: none; }
+  .cc-pieces.done { display: none; }   /* every piece is in: the tray leaves no gap above Next */
+  .cc-etop.final .cc-ftall { order: 5; flex-basis: 100%; font-size: 16px; }
+  .cc-star { width: 26px; height: 26px; }
   .cc-lines { gap: 2px; }
   .cc-eline { padding: 0; }
   .cc-chips { gap: 5px 6px; }
@@ -340,6 +385,7 @@
   .cc-more .btn { min-height: 52px; }
 }
 @media (max-width: 359.98px) {
+  .cc-erase { --cc-blank: 46px; }
   .cc-more .btn { padding: 6px 8px; gap: 7px; font-size: 15px; }
   .cc-more .cc-ic, .cc-more .btn .ic { width: 24px; height: 24px; }
   .cc-t-head .cc-emb, .cc-t-head .cc-ic { width: 40px; height: 40px; }
@@ -372,11 +418,17 @@
   .cc-erase { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(220px, 1fr); grid-template-areas: "top top" "slate chips" "dock dock"; align-items: start; max-width: 940px; width: 100%; margin: 0 auto; }
   .cc-erase > .cc-etop { grid-area: top; }
   .cc-erase > .cc-slate { grid-area: slate; }
-  .cc-erase > .cc-chips { grid-area: chips; justify-content: flex-start; align-content: flex-start; padding-top: 4px; }
+  .cc-erase > .cc-pieces { grid-area: chips; padding-top: 4px; }
+  .cc-pieces > .cc-chips { justify-content: flex-start; align-content: flex-start; gap: 6px; }
+  .cc-chip { padding: 4px 10px; }
+  .cc-fill { text-align: left; }
+  /* the round that erases the meanings: every piece on the slate is a blank, so the slate needs less room, and
+     the tray, which holds the most chips then, gets more (so the round keeps to the screen) */
+  .cc-erase.meanings { grid-template-columns: minmax(0, 1.15fr) minmax(220px, 1fr); }
   .cc-erase > .dock { grid-area: dock; }
   .cc-erase.final, .cc-erase.zero { grid-template-areas: "top top" "slate slate" "dock dock"; }
   /* when every chip is used, the chalk tray keeps its place and says what to do next */
-  .cc-erase > .cc-chips.done { display: flex; }
+  .cc-erase > .cc-pieces > .cc-chips.done { display: flex; }
   .cc-chips.done .cc-chip { display: none; }
   .cc-chips.done .cc-tray {
     display: flex; align-items: center; gap: 12px; margin: 0; padding: 14px 16px; border-radius: 14px; border: 2px dashed rgba(255, 227, 154, .45);
@@ -442,23 +494,26 @@
   .cc-sethint { margin-top: 3px; font-size: 13.5px; }
   .cc-reset { padding-top: 2px; }
 }
-/* very short phones: the chalk chips sit in a two-row strip that scrolls sideways, so the slate and its
-   Next button keep to the screen (every chip keeps its 44 px) */
+/* short phones (up to 680 px tall): the chalk chips sit in a two-row strip that scrolls sideways, so the slate
+   and its Next button keep to the screen (every chip keeps its 44 px) */
 @media (max-width: 599.98px) and (max-height: 680px) {
   .ls-app[data-game="climb"] .ls-desk { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
   .cc-erase:not(.zero):not(.final) .cc-eline { min-height: 44px; }
-  /* while the blanks are being filled the (disabled) Next button and the round's title make room for the
-     chips; the Inspector says what was erased, and Next appears as soon as every blank is filled */
-  .cc-erase.filling > .dock { display: none; }
-  .cc-erase:not(.zero):not(.final) .cc-etop b { display: none; }
-}
-@media (max-width: 359.98px) and (max-height: 680px) {
-  .cc-lines > li { font-size: 15.5px; }
+  .cc-pieces { gap: 2px; }
   .cc-chips:not(.done) {
-    display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: max-content; justify-content: start;
+    display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: max-content; justify-content: start; justify-items: start;
     overflow-x: auto; overscroll-behavior-x: contain; padding: 2px 2px 6px; scroll-padding: 0 8px;
   }
   .cc-chips .cc-chip.used { display: none; }
+}
+/* phones between the short ones and the tall ones (360x740): no room for "Fill: ..." either */
+@media (max-width: 599.98px) and (min-height: 680.02px) and (max-height: 759.98px) {
+  .cc-fill { display: none; }
+}
+@media (max-width: 359.98px) and (max-height: 680px) {
+  .cc-lines > li { font-size: 15.5px; }
+  /* no room for "Fill: ..." here: the blinking border shows the blank (its aria-label names it for a screen reader) */
+  .cc-fill { display: none; }
 }
 /* short laptop screens: the question keeps to the screen */
 @media (min-width: 600px) and (max-height: 820px) {

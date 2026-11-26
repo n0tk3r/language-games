@@ -172,7 +172,7 @@
 
   /* ------------------------------------------------------------- progress */
   function fresh() {
-    return { v: 1, words: {}, set: settings(null), nights: {}, ring: { n: 0, last: "" }, erase: { n: 0, last: "" }, round: null };
+    return { v: 1, words: {}, set: settings(null), nights: {}, ring: { n: 0, last: "" }, erase: eraseSave(null), round: null };
   }
   function settings(s) {
     s = s || {};
@@ -198,9 +198,22 @@
     p.set = settings(o.set);
     if (o.nights && typeof o.nights === "object") { p.nights = o.nights; }
     if (o.ring && typeof o.ring === "object") { p.ring = { n: +o.ring.n || 0, last: o.ring.last || "" }; }
-    if (o.erase && typeof o.erase === "object") { p.erase = { n: +o.erase.n || 0, last: o.erase.last || "" }; }
+    p.erase = eraseSave(o.erase);
     if (o.round && typeof o.round === "object" && Array.isArray(o.round.items)) { p.round = o.round; }
     return p;
+  }
+  /* Erase Away's save: games played, the last day, the best stars per chapter and the words missed in the last
+     game (old saves have only n and last) */
+  function eraseSave(e) {
+    var out = { n: 0, last: "", best: {}, miss: [] };
+    if (!e || typeof e !== "object") { return out; }
+    out.n = Math.max(0, Math.floor(+e.n) || 0);
+    out.last = /^\d{4}-\d{2}-\d{2}$/.test(e.last || "") ? e.last : "";
+    if (e.best && typeof e.best === "object" && !Array.isArray(e.best)) {
+      Object.keys(e.best).forEach(function (ch) { if (/^\d+$/.test(ch) && isFinite(+e.best[ch])) { out.best[ch] = clamp(e.best[ch], 0, 3); } });
+    }
+    if (Array.isArray(e.miss)) { out.miss = uniq(e.miss.filter(function (id) { return typeof id === "string" && id; })).slice(0, 40); }
+    return out;
   }
   /* keep the last 60 nights */
   function trimNights(prog) {
@@ -467,7 +480,7 @@
   function adjRows(w, r) {
     var avoid = entryTokens(w), rows = [];
     /* quī? quae? quod?: its other forms would be tiled against real forms of quī (quārum, quās), so it is asked
-       its part of speech instead; Erase Away still erases quae and quod */
+       its part of speech instead (and Erase Away erases only its meaning: its headword prints quae and quod) */
     if (w.forms && w.forms.length && w.type !== "interrogative") {
       var plural = /ī$/.test(w.hw) && /ae$/.test(w.forms[0]);
       w.forms.forEach(function (right, i) {
@@ -655,26 +668,37 @@
 
   var ERASE_ORDER = [["gen", "forms"], ["gender", "case"], ["parts"], ["mean"]];
   var ERASE_NAMES = ["the genitives", "the genders", "the principal parts", "the meanings"];
+  /* stars for the share of pieces right on the first try: Case Detective's starRules */
+  var ERASE_STARS = [{ min: 1, stars: 3 }, { min: 0.75, stars: 2 }, { min: 0.5, stars: 1 }, { min: 0, stars: 0 }];
   /* An entry as pieces: the first word stays, the others can be erased. The pieces follow the printed entry:
      a paired noun keeps its second word (amīcus, amīcī, m., and amīca, amīcae, f.), a plural-only noun its
-     "(pl.)", causā its genitive before it, careō its "+ abl. of separation". */
+     "(pl.)", causā its genitive before it, careō its "+ abl. of separation". A piece of the second word of a
+     pair says so (of: "amīca"), for the "Fill: the gender of amīca" line. A plural-only noun's "(pl.)" is fixed
+     text after its gender (tail), so its gender piece is "m." like any other: an "m." chip is right for hostēs.
+     An adjective whose headword already prints its other forms (quī? quae? quod?) has no forms piece. */
   function eraseEntry(w) {
     var parts = [], k = 0, lat = String(w.lat || "");
-    function add(kind, text, lead, la) { parts.push({ n: k++, k: kind, text: text, lead: lead, la: la !== false }); }
+    function add(kind, text, lead, la, of, tail) {
+      var p = { n: k++, k: kind, text: text, lead: lead, la: la !== false };
+      if (of) { p.of = of; }
+      if (tail) { p.tail = tail; }
+      parts.push(p);
+    }
     var head = w.pos === "verb" && w.pp ? w.pp[0] : w.hw;
     if (w.pos === "noun") {
       var pe = pairEntry(w), pl = /\(pl\.\)/.test(lat) ? " (pl.)" : "";
       if (w.gen) { add("gen", w.gen, ", "); }
       if (w.takes && !w.gen) { add("case", w.takes === "gen" ? "(after a gen.)" : CASE_SHORT[w.takes], " ", false); }
       if (pe && pe.g1 && GENDERS[pe.g1] && GENDERS[pe.g]) {
-        add("gender", GENDERS[pe.g1] + pl, ", ", false);
+        add("gender", GENDERS[pe.g1], ", ", false, null, pl);
         add("forms", pe.hw + ", " + pe.gen, pe.sep);
-        add("gender", GENDERS[pe.g], ", ", false);
+        add("gender", GENDERS[pe.g], ", ", false, pe.hw);
       } else if (w.g) {
-        add("gender", String(w.g).split(/\s+and\s+/).map(function (x) { return GENDERS[x.trim()]; }).join(" and ") + pl, ", ", false);
+        add("gender", String(w.g).split(/\s+and\s+/).map(function (x) { return GENDERS[x.trim()]; }).join(" and "), ", ", false, null, pl);
       }
     } else if (w.pos === "adjective") {
-      if (w.forms && w.forms.length) { add("forms", w.forms.join(", "), ", "); }
+      var said = String(w.hw || "").split(/[\s,?!]+/).map(key).filter(Boolean);
+      if (w.forms && w.forms.length && !w.forms.every(function (f) { return has(said, key(f)); })) { add("forms", w.forms.join(", "), ", "); }
       else if (w.gen) { add("gen", w.gen, ", (gen.) "); }
     } else if (w.pos === "verb") {
       if (w.pp && w.pp.length > 1) { add("parts", w.pp.slice(1).join(", "), ", "); }
@@ -686,19 +710,23 @@
     add("mean", ask(w), "", false);
     return { id: w.id, head: head, pos: w.pos, plural: !!w.plural, parts: parts };
   }
-  /* 5 to 7 entries of the chapter, weakest offices first, covering nouns, verbs and one other kind.
+  /* 5 to 7 entries of the chapter, covering nouns, verbs and one other kind. The words missed in the last game
+     (prog.erase.miss) come first, then the weakest offices (the missed words among themselves weakest first too).
+     A miss in Erase Away never changes a word's office.
      max (5 to 7, optional): fewer entries for a small screen */
   function eraseSet(W, player, prog, seed, max) {
     var r = rngOf(seed), pc = playChapter(W, player);
+    var miss = (prog && prog.erase && Array.isArray(prog.erase.miss)) ? prog.erase.miss : [];
+    function rank(a, b) { return (has(miss, a.id) ? 0 : 1) - (has(miss, b.id) ? 0 : 1) || officeOf(prog, a.id) - officeOf(prog, b.id); }
     var words = inPlay(W, player).filter(function (w) { return w.ch === pc && countable(w) && w.pos !== "phrase"; });
     var order = {};
     words.forEach(function (w, i) { order[w.id] = i; });
-    var sorted = S.shuffle(words, r).sort(function (a, b) { return officeOf(prog, a.id) - officeOf(prog, b.id); });
+    var sorted = S.shuffle(words, r).sort(rank);
     var n = Math.min(sorted.length, sorted.length >= 12 ? 7 : 6, max ? clamp(max, 5, 7) : 7);
     if (n < 5) {
       /* a short chapter: borrow from the one before */
       var more = inPlay(W, player).filter(function (w) { return w.ch < pc && countable(w); });
-      sorted = sorted.concat(S.shuffle(more, r).sort(function (a, b) { return officeOf(prog, a.id) - officeOf(prog, b.id); }));
+      sorted = sorted.concat(S.shuffle(more, r).sort(rank));
       n = Math.min(5, sorted.length);
     }
     var pick = [];
@@ -712,9 +740,87 @@
     pick.sort(function (a, b) { return (order[a.id] == null ? -1 : order[a.id]) - (order[b.id] == null ? -1 : order[b.id]) || a.ch - b.ch; });
     return pick.map(eraseEntry);
   }
-  /* the rounds: 0 the full entries, then one kind of piece more erased each round; rounds with nothing new are left out */
-  function eraseRounds(entries, seed) {
+  /* The pieces a decoy chip can be: every piece of a word of the grade that is not on the slate and is not
+     related to a word on the slate (no shared sense or word of its meaning, no `same` or near pair). play: words in play; more: the
+     grade's other ready words, used only when the words in play have nothing left of a kind (grade 6, chapter 1
+     has one noun, so its gender decoy comes from chapter 2 or 3). Never a text that is on the slate (macrons and
+     case ignored); for genders only a gender (m., f., n.) that no entry on the slate has, nor its printed entry
+     names (vulgus, vulgī, n. (sometimes m.) gets no "m." decoy); for cases only a case that no case piece on the
+     slate names (careō's "+ abl. of separation" gets no "+ abl." decoy). */
+  var DECOY_STOP = ("the a an to be of from with for in on at by and or as into up out off away down back over upon about " +
+    "one one's oneself someone something it its he she they his her their this that is are not no who whom whose").split(" ");
+  /* the words of a meaning that say something (outside brackets): "neighbor (a woman)" -> neighbor */
+  function meanWords(w) {
+    return uniq(String(w.mean || "").toLowerCase().replace(/\([^)]*\)/g, " ").split(/[^a-z'-]+/).filter(function (x) { return x.length > 1 && DECOY_STOP.indexOf(x) < 0; }));
+  }
+  /* the genders a gender piece names ("m. and f." -> m., f.), and the cases a case piece names ("+ abl. of separation" -> abl) */
+  function sexesOf(text) { return String(text).match(/\b[mfn]\./g) || []; }
+  function casesOf(text) { return (String(text).match(/\b(abl|acc|gen|dat)\./g) || []).map(function (c) { return c.slice(0, -1); }); }
+  function decoyPieces(W, player, entries) {
+    var on = {}, texts = {}, sexes = {}, cases = {}, slate = [], out = { play: [], more: [] }, said = {};
+    entries.forEach(function (e) {
+      on[e.id] = true;
+      e.parts.forEach(function (p) {
+        texts[key(p.text)] = true;
+        if (p.k === "gender") { sexesOf(p.text).forEach(function (g) { sexes[g] = true; }); }
+        if (p.k === "case") { casesOf(p.text).forEach(function (c) { cases[c] = true; }); }
+      });
+    });
+    W.words.forEach(function (w) {
+      if (!on[w.id]) { return; }
+      slate.push(w);
+      meanWords(w).forEach(function (x) { said[x] = true; });
+      /* a gender the printed entry gives as well: "n. (sometimes m.)" */
+      (String(w.lat || "").match(/\b(?:sometimes|also|or|rarely)\s+[mfn]\./g) || []).forEach(function (x) { sexes[x.slice(-2)] = true; });
+    });
+    var play = {};
+    inPlay(W, player).forEach(function (w) { play[w.id] = true; });
+    gradeWords(W, player.grade).forEach(function (w) {
+      if (on[w.id] || !drilled(w) || !countable(w) || w.pos === "phrase" || w.pos === "form" || !isReady(W, w.ch)) { return; }
+      if (slate.some(function (x) { return related(x, w); }) || meanWords(w).some(function (x) { return said[x]; })) { return; }
+      eraseEntry(w).parts.forEach(function (p) {
+        if (texts[key(p.text)]) { return; }
+        if (p.k === "gender" && sexesOf(p.text).some(function (g) { return sexes[g]; })) { return; }
+        if (p.k === "case" && casesOf(p.text).some(function (c) { return cases[c]; })) { return; }
+        (play[w.id] ? out.play : out.more).push({ k: p.k, text: p.text, from: w.id });
+      });
+    });
+    return out;
+  }
+  /* How much a Latin-form decoy (a genitive, other forms or principal parts) looks like a first word on the slate
+     whose piece of that kind is a blank: the letters they start with alike (macrons ignored), up to 3. A decoy
+     that starts like a first word cannot be ruled out by its spelling alone (poenae beside poēta). */
+  var DECOY_LOOK = ["gen", "forms", "parts"];
+  function decoyLook(p, heads) {
+    if (!has(DECOY_LOOK, p.k) || !heads || !heads[p.k]) { return 0; }
+    var t = key(p.text), best = 0;
+    heads[p.k].forEach(function (h) { var n = 0; while (n < 3 && n < t.length && n < h.length && t.charAt(n) === h.charAt(n)) { n++; } best = Math.max(best, n); });
+    return best;
+  }
+  /* the decoys of one round: 1, or 2 when the round has 6 blanks or more; of the kinds the round's blanks have,
+     the newly erased kind first, from the words in play first; no two decoys with the same text. Within each step
+     a Latin-form decoy that looks most like a first word on the slate comes first (heads: kind -> the first words,
+     as keys, of the entries with a blank of that kind); the rest are in seeded random order. */
+  function eraseDecoys(pool, blanks, newKinds, r, heads) {
+    var want = blanks.length >= 6 ? 2 : 1, kinds = uniq(blanks.map(function (b) { return b.k; }));
+    var fresh = kinds.filter(function (k) { return has(newKinds, k); }), older = kinds.filter(function (k) { return !has(newKinds, k); });
+    var out = [], seen = {};
+    [[pool.play, fresh], [pool.play, older], [pool.more, fresh], [pool.more, older]].forEach(function (step) {
+      if (out.length >= want || !step[1].length) { return; }
+      var cands = S.shuffle(step[0].filter(function (p) { return has(step[1], p.k); }), r).map(function (p, i) { return { p: p, i: i, look: decoyLook(p, heads) }; });
+      cands.sort(function (a, b) { return b.look - a.look || a.i - b.i; });
+      cands.forEach(function (c) {
+        if (out.length < want && !seen[key(c.p.text)]) { seen[key(c.p.text)] = true; out.push(c.p); }
+      });
+    });
+    return out;
+  }
+  /* the rounds: 0 the full entries, then one kind of piece more erased each round; rounds with nothing new are
+     left out. With the word data and the player, each round's chalk tray also holds its decoys (chips with
+     decoy: true and j: -1), so the last piece is never free. */
+  function eraseRounds(entries, seed, W, player) {
     var r = rngOf(seed), rounds = [{ n: 0, erase: [], adds: [], blanks: [], chips: [] }], gone = [];
+    var pool = W && player ? decoyPieces(W, player, entries) : null;
     ERASE_ORDER.forEach(function (kinds, i) {
       var adds = [];
       entries.forEach(function (e) { e.parts.forEach(function (p) { if (kinds.indexOf(p.k) >= 0) { adds.push({ id: e.id, n: p.n }); } }); });
@@ -722,13 +828,56 @@
       gone = gone.concat(kinds);
       var blanks = [];
       entries.forEach(function (e) { e.parts.forEach(function (p) { if (gone.indexOf(p.k) >= 0) { blanks.push({ id: e.id, n: p.n, k: p.k, text: p.text }); } }); });
+      var chips = blanks.map(function (b, j) { return { j: j, text: b.text, k: b.k }; }), heads = {};
+      blanks.forEach(function (b) {
+        var e = entries.filter(function (x) { return x.id === b.id; })[0];
+        (heads[b.k] = heads[b.k] || []).push(key(e.head));
+      });
+      if (pool) { eraseDecoys(pool, blanks, kinds, r, heads).forEach(function (d) { chips.push({ j: -1, text: d.text, k: d.k, decoy: true, from: d.from }); }); }
       rounds.push({ n: rounds.length, step: i + 1, name: ERASE_NAMES[i], kinds: kinds.slice(), erase: gone.slice(), adds: adds, blanks: blanks,
-        chips: S.shuffle(blanks.map(function (b, j) { return { j: j, text: b.text, k: b.k }; }), r) });
+        chips: S.shuffle(chips, r) });
     });
     return rounds;
   }
-  /* a chip fits a blank when its text is the blank's text (two "f." chips are the same chip) */
-  function chipFits(blank, chip) { return !!blank && !!chip && blank.text === chip.text; }
+  /* a chip fits a blank when its text is the blank's text (two "f." chips are the same chip); a decoy fits none */
+  function chipFits(blank, chip) { return !!blank && !!chip && !chip.decoy && blank.text === chip.text; }
+  /* stars for right first tries out of all the blanks (0 to 3) */
+  function eraseStars(right, total) {
+    if (!(total > 0)) { return 0; }
+    var share = right / total, i;
+    for (i = 0; i < ERASE_STARS.length; i++) { if (share >= ERASE_STARS[i].min - 1e-9) { return ERASE_STARS[i].stars; } }
+    return 0;
+  }
+  /* The score of a game. Only the first try at a blank counts: tries[n][j] is true when blank j of round n went in
+     on the first try, false when it was missed (then it was filled in red); a blank never tried counts as missed.
+     Gives each round's count, the whole game's count and stars, and the entries that had a miss (in slate order). */
+  function eraseScore(rounds, tries) {
+    var out = { rounds: [], right: 0, total: 0, stars: 0, miss: [] }, missed = {};
+    rounds.forEach(function (rd, n) {
+      if (!n) { return; }
+      var t = (tries && tries[n]) || [], right = 0;
+      rd.blanks.forEach(function (b, j) { if (t[j] === true) { right++; } else { missed[b.id] = true; } });
+      out.rounds.push({ n: n, right: right, total: rd.blanks.length });
+      out.right += right;
+      out.total += rd.blanks.length;
+    });
+    out.stars = eraseStars(out.right, out.total);
+    /* in slate order (the last round has a blank in every entry, in slate order) */
+    var order = [];
+    rounds.slice().reverse().forEach(function (rd) { rd.blanks.forEach(function (b) { if (order.indexOf(b.id) < 0) { order.push(b.id); } }); });
+    out.miss = order.filter(function (id) { return missed[id]; });
+    return out;
+  }
+  /* a game played to the end: one more game, the best stars of the chapter, and its missed words for next time */
+  function eraseDone(prog, chapter, score, today) {
+    var e = eraseSave(prog.erase), ch = String(chapter);
+    e.n++;
+    e.last = today || "";
+    e.best[ch] = Math.max(e.best[ch] || 0, score.stars || 0);
+    e.miss = (score.miss || []).slice(0, 40);
+    prog.erase = e;
+    return e;
+  }
 
   /* ------------------------------------------------------- the trick-verb ring */
   function trickVerbs(W, player) { return inPlay(W, player).filter(function (w) { return w.pos === "verb" && w.trick && w.pp && w.pp.length >= 2; }); }
@@ -769,7 +918,8 @@
     verbRows: verbRows, entryTokens: entryTokens, consulAnswers: consulAnswers, consulQuestion: consulQuestion, typedRows: typedRows,
     typedPraetorQuestion: typedPraetorQuestion, judge: judge, typedWord: typedWord, tagOf: tagOf, question: question, helper: helper,
     weekday: weekday, quizIn: quizIn, quizEve: quizEve, quizToday: quizToday,
-    eraseEntry: eraseEntry, eraseSet: eraseSet, eraseRounds: eraseRounds, chipFits: chipFits,
+    eraseEntry: eraseEntry, eraseSet: eraseSet, eraseRounds: eraseRounds, chipFits: chipFits, decoyPieces: decoyPieces, eraseDecoys: eraseDecoys,
+    decoyLook: decoyLook, ERASE_STARS: ERASE_STARS, eraseStars: eraseStars, eraseScore: eraseScore, eraseSave: eraseSave, eraseDone: eraseDone,
     trickVerbs: trickVerbs, ringSet: ringSet, roll: roll
   };
   if (root) { root.ClimbLogic = ClimbLogic; }

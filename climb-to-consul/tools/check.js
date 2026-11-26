@@ -20,7 +20,7 @@ const W = ctx.window.LATIN_WORDS;
 const SEEDS = +(process.env.SEEDS || 24);
 let checks = 0, fails = 0;
 const failures = [];
-const counts = { quaestor: 0, aedile: 0, praetor: 0, rows: 0, consul: 0, praetorT: 0, rounds: 0, erase: 0, ring: 0, three: 0 };
+const counts = { quaestor: 0, aedile: 0, praetor: 0, rows: 0, consul: 0, praetorT: 0, rounds: 0, erase: 0, decoys: 0, decoyMore: 0, latinDecoys: 0, lookAlike: 0, ring: 0, three: 0 };
 function ok(cond, msg) { checks++; if (!cond) { fails++; if (failures.length < 60) { failures.push(msg); } } return cond; }
 const key = L.key;
 const byId = {};
@@ -486,12 +486,40 @@ players.forEach((p) => {
   ok(L.quizEve({ mode: "none" }, "2026-11-26") === false, "no quiz day: never");
   ok(L.quizEve(null, "2026-11-26") === false, "no quiz settings: never");
 })();
+/* the genders a gender piece names: "m. and f." -> m., f.; the cases a case piece names: "+ abl. of separation" -> abl */
+const sexesOf = (t) => String(t).match(/\b[mfn]\./g) || [];
+const casesOf = (t) => (String(t).match(/\b(abl|acc|gen|dat)\./g) || []).map((c) => c.slice(0, -1));
+/* how alike two Latin texts start (macrons and case ignored), up to 3 letters: written out apart from the game */
+const lookAlike = (a, b) => { const x = S.strip(a).toLowerCase(), y = S.strip(b).toLowerCase(); let n = 0; while (n < 3 && n < x.length && x[n] === y[n]) { n++; } return n; };
+/* every entry's pieces: a plural-only noun's gender piece is a bare gender with "(pl.)" after it, so an "m." chip
+   is right for hostēs; no adjective's forms piece repeats what its headword prints (quī? quae? quod?) */
+L.gradeWords(W, 6).concat(L.gradeWords(W, 8)).filter((w) => L.isReady(W, w.ch) && L.countable(w)).forEach((w) => {
+  const e = L.eraseEntry(w);
+  e.parts.filter((pt) => pt.k === "gender").forEach((pt) => {
+    ok(/^[mfn]\.( and [mfn]\.)?$/.test(pt.text), `${w.id} erase: the gender piece is "${pt.text}"`);
+    if (/\(pl\.\)/.test(w.lat) && pt.tail) { ok(pt.tail === " (pl.)", `${w.id} erase: the gender's tail is "${pt.tail}"`); }
+  });
+  if (w.pos === "noun" && /\(pl\.\)/.test(w.lat)) { ok(e.parts.some((pt) => pt.k === "gender" && pt.tail === " (pl.)"), `${w.id} erase: "(pl.)" is lost`); }
+  const hw = String(w.hw).split(/[\s,?!]+/).map(key).filter(Boolean);
+  e.parts.filter((pt) => pt.k === "forms" && byId[w.id].pos === "adjective").forEach((pt) => {
+    ok(!pt.text.split(/,\s*/).every((f) => hw.includes(key(f))), `${w.id} erase: the forms piece "${pt.text}" is in the headword already`);
+  });
+  ok(!e.parts.some((pt) => /\(pl\.\)/.test(pt.text)), `${w.id} erase: "(pl.)" inside a piece`);
+});
+ok(!L.eraseEntry(byId["19-qui-quae-quod"]).parts.some((pt) => pt.k === "forms"), "Erase Away: quī? quae? quod? has no forms piece");
+ok(L.eraseEntry(byId["18-hostes"]).parts.some((pt) => pt.k === "gender" && pt.text === "m." && pt.tail === " (pl.)"), "Erase Away: hostēs's gender piece is m. with (pl.) after it");
+/* the stars, written out separately from the game: Case Detective's 100% / 75% / 50% first try */
+const starsFor = (right, total) => (!total ? 0 : right === total ? 3 : right * 4 >= total * 3 ? 2 : right * 2 >= total ? 1 : 0);
 players.forEach((p) => {
   const pc = L.playChapter(W, p), words = L.inPlay(W, p), chWords = words.filter((w) => w.ch === pc && L.countable(w));
+  const inPlayIds = new Set(words.map((w) => w.id));
   for (let s = 1; s <= SEEDS; s++) {
     const r = S.rng("erase" + p.id + s), prog = randomProgress(words, r, D(26));
+    /* every third seed: some words were missed in the last game (they come first) */
+    const missed = s % 3 === 0 ? S.shuffle(chWords, r).slice(0, 1 + r.int(4)).map((w) => w.id) : [];
+    prog.erase.miss = missed.slice();
     const max = s % 2 ? 5 : undefined;   /* odd seeds: the phone's set of 5 */
-    const set = L.eraseSet(W, p, prog, s, max), rounds = L.eraseRounds(set, s);
+    const set = L.eraseSet(W, p, prog, s, max), rounds = L.eraseRounds(set, s, W, p);
     counts.erase++;
     ok(set.length >= 5 && set.length <= (max || 7), `${p.id} erase: ${set.length} entries (max ${max || 7})`);
     ok(new Set(set.map((e) => e.id)).size === set.length, `${p.id} erase: an entry twice`);
@@ -500,13 +528,30 @@ players.forEach((p) => {
     if (chWords.some((w) => w.pos === "noun")) { ok(kinds.includes("noun"), `${p.id} erase: no noun`); }
     if (chWords.some((w) => w.pos === "verb")) { ok(kinds.includes("verb"), `${p.id} erase: no verb`); }
     if (chWords.some((w) => w.pos !== "noun" && w.pos !== "verb")) { ok(kinds.some((k) => k !== "noun" && k !== "verb"), `${p.id} erase: no other kind`); }
-    /* weakest first: a word left out is never weaker than every chosen word of its kind's group */
-    const maxO = Math.max.apply(null, set.map((e) => L.officeOf(prog, e.id)));
-    const weaker = chWords.filter((w) => !set.some((e) => e.id === w.id) && L.officeOf(prog, w.id) < maxO);
-    const fill = set.filter((e) => L.officeOf(prog, e.id) === maxO);
-    ok(!weaker.length || fill.length <= 3, `${p.id} erase: weaker words left out (${weaker.map((w) => w.id)})`);
+    if (!missed.length) {
+      /* weakest first: a word left out is never weaker than every chosen word of its kind's group */
+      const maxO = Math.max.apply(null, set.map((e) => L.officeOf(prog, e.id)));
+      const weaker = chWords.filter((w) => !set.some((e) => e.id === w.id) && L.officeOf(prog, w.id) < maxO);
+      const fill = set.filter((e) => L.officeOf(prog, e.id) === maxO);
+      ok(!weaker.length || fill.length <= 3, `${p.id} erase: weaker words left out (${weaker.map((w) => w.id)})`);
+    } else if (missed.length <= set.length - 3) {
+      /* the words missed last time come first: all of them are on the slate (the kinds rule takes up to 3 places) */
+      ok(missed.every((id) => set.some((e) => e.id === id)), `${p.id} erase s${s}: a word missed last time is left out (${missed})`);
+    }
     /* rounds: 0 shows all, then genitives, genders, principal parts, meanings, cumulative */
     ok(rounds[0].erase.length === 0, `${p.id} erase: round 0 erases nothing`);
+    const slateIds = new Set(set.map((e) => e.id));
+    const slateTexts = new Set(), slateSexes = new Set(), slateCases = new Set();
+    set.forEach((e) => e.parts.forEach((pt) => {
+      slateTexts.add(key(pt.text));
+      if (pt.k === "gender") { sexesOf(pt.text).forEach((g) => slateSexes.add(g)); }
+      if (pt.k === "case") { casesOf(pt.text).forEach((c) => slateCases.add(c)); }
+    }));
+    /* the genders the printed entries name as well: vulgus, vulgī, n. (sometimes m.) */
+    set.forEach((e) => { if (byId[e.id].pos === "noun") { sexesOf(byId[e.id].lat).forEach((g) => slateSexes.add(g)); } });
+    const unfair = (pt) => (pt.k === "gender" && sexesOf(pt.text).some((g) => slateSexes.has(g))) || (pt.k === "case" && casesOf(pt.text).some((c) => slateCases.has(c)));
+    const pool = L.decoyPieces(W, p, set), headOf = {};
+    set.forEach((e) => { headOf[e.id] = e.head; });
     let prevStep = 0, prev = [];
     rounds.slice(1).forEach((rd) => {
       ok(rd.step > prevStep, `${p.id} erase: rounds out of order`);
@@ -514,15 +559,154 @@ players.forEach((p) => {
       ok(JSON.stringify(rd.erase.slice(prev.length)) === JSON.stringify(L.ERASE_ORDER[rd.step - 1]), `${p.id} erase: round ${rd.n} erases ${rd.erase.slice(prev.length)}`);
       const want = [];
       set.forEach((e) => e.parts.forEach((pt) => { if (rd.erase.includes(pt.k)) { want.push(pt.text); } }));
-      ok(JSON.stringify(rd.chips.map((c) => c.text).sort()) === JSON.stringify(want.sort()), `${p.id} erase: round ${rd.n} chips are its blanks`);
-      ok(rd.blanks.every((b) => rd.chips.some((c) => L.chipFits(b, c))), `${p.id} erase: a blank with no chip`);
+      const real = rd.chips.filter((c) => !c.decoy), decoys = rd.chips.filter((c) => c.decoy);
+      ok(JSON.stringify(real.map((c) => c.text).sort()) === JSON.stringify(want.sort()), `${p.id} erase: round ${rd.n} chips are its blanks`);
+      ok(rd.blanks.every((b) => real.some((c) => L.chipFits(b, c))), `${p.id} erase: a blank with no chip`);
+      /* decoys: 1, or 2 when the round has 6 blanks or more, so the last piece is never free */
+      counts.decoys += decoys.length;
+      ok(decoys.length === (rd.blanks.length >= 6 ? 2 : 1), `${p.id} erase s${s}: round ${rd.n} has ${decoys.length} decoys for ${rd.blanks.length} blanks`);
+      const blankKinds = new Set(rd.blanks.map((b) => b.k));
+      ok(new Set(decoys.map((d) => key(d.text))).size === decoys.length, `${p.id} erase: round ${rd.n} has two decoys alike`);
+      /* a gender chip is never another text for the same gender as a gender blank ("m. (pl.)" beside "m.") */
+      rd.blanks.filter((b) => b.k === "gender").forEach((b) => {
+        ok(!rd.chips.some((c) => c.k === "gender" && c.text !== b.text && sexesOf(c.text).join() === sexesOf(b.text).join()), `${p.id} erase s${s}: round ${rd.n} has another chip for ${b.text}`);
+      });
+      /* a Latin-form decoy looks as much like a first word with a blank of its kind as the best one in play does */
+      const fresh = L.ERASE_ORDER[rd.step - 1].filter((k) => blankKinds.has(k)), look = (pt) => (["gen", "forms", "parts"].includes(pt.k)
+        ? Math.max(0, ...rd.blanks.filter((b) => b.k === pt.k).map((b) => lookAlike(pt.text, headOf[b.id]))) : 0);
+      const bestLook = Math.max(0, ...pool.play.filter((pt) => fresh.includes(pt.k)).map(look));
+      if (decoys.length) { ok(Math.max(...decoys.map(look)) >= bestLook, `${p.id} erase s${s}: round ${rd.n} decoys ${decoys.map((d) => d.text)} look less alike than ${bestLook}`); }
+      counts.lookAlike += decoys.filter((d) => look(d) >= 2).length;
+      counts.latinDecoys += decoys.filter((d) => ["gen", "forms", "parts"].includes(d.k)).length;
+      decoys.forEach((d) => {
+        const tag = `${p.id} erase s${s} round ${rd.n} decoy "${d.text}" (${d.k}, ${d.from})`;
+        ok(blankKinds.has(d.k), `${tag}: not of the round's kinds (${[...blankKinds]})`);
+        ok(!rd.blanks.some((b) => b.text === d.text || key(b.text) === key(d.text)), `${tag}: equal to a blank`);
+        ok(!slateTexts.has(key(d.text)), `${tag}: a piece that is on the slate`);
+        ok(rd.blanks.every((b) => !L.chipFits(b, d)), `${tag}: fits a blank`);
+        const w = byId[d.from];
+        ok(!!w && !slateIds.has(d.from), `${tag}: from a word on the slate`);
+        if (!w) { return; }
+        ok(w.ch <= Math.max.apply(null, L.readyChapters(W, p.grade)) && L.gradeChapters(W, p.grade).includes(w.ch), `${tag}: not a word of grade ${p.grade}`);
+        ok(L.eraseEntry(w).parts.some((pt) => pt.k === d.k && pt.text === d.text), `${tag}: not a real piece of ${w.id}`);
+        if (d.k === "gender") { ok(sexesOf(d.text).every((g) => !slateSexes.has(g)), `${tag}: a gender the slate uses`); }
+        if (d.k === "case") { ok(casesOf(d.text).every((c) => !slateCases.has(c)), `${tag}: a case the slate uses`); }
+        /* never a word whose meaning is close to a word on the slate (independent of the game's sense rules) */
+        set.forEach((e) => {
+          const o = overlap(byId[e.id], w);
+          ok(!o.length || REVIEWED[pairKey(e.id, w.id)], `${tag}: shares "${o.join(", ")}" with ${e.id} on the slate`);
+        });
+        /* from the words in play, unless the words in play have no fair piece of the round's kinds */
+        if (!inPlayIds.has(d.from)) {
+          const fair = words.filter((x) => !slateIds.has(x.id) && L.countable(x) && x.pos !== "phrase" && !set.some((e) => L.related(byId[e.id], x)))
+            .some((x) => L.eraseEntry(x).parts.some((pt) => blankKinds.has(pt.k) && !slateTexts.has(key(pt.text)) && !unfair(pt)));
+          ok(!fair, `${tag}: from outside play while the words in play have one`);
+          counts.decoyMore++;
+        }
+      });
       prevStep = rd.step; prev = rd.erase;
     });
     const last = rounds[rounds.length - 1];
     ok(last.erase.includes("mean"), `${p.id} erase: the meanings are erased last`);
     ok(set.every((e) => e.parts.every((pt) => last.erase.includes(pt.k))), `${p.id} erase: only the first words are left at the end`);
+    /* the score: only the first try counts; a game played with random first tries */
+    const tries = {}, missEntries = new Set();
+    let right = 0, total = 0;
+    rounds.forEach((rd, n) => {
+      if (!n) { return; }
+      tries[n] = rd.blanks.map(() => r() < 0.8);
+      tries[n].forEach((t, j) => { total++; if (t) { right++; } else { missEntries.add(rd.blanks[j].id); } });
+    });
+    const sc = L.eraseScore(rounds, tries);
+    ok(sc.right === right && sc.total === total, `${p.id} erase: score ${sc.right} of ${sc.total}, want ${right} of ${total}`);
+    ok(sc.stars === starsFor(right, total), `${p.id} erase: ${right} of ${total} gives ${sc.stars} stars`);
+    ok(sc.rounds.length === rounds.length - 1 && sc.rounds.every((x, i) => x.total === rounds[i + 1].blanks.length && x.right === tries[i + 1].filter(Boolean).length), `${p.id} erase: the rounds' counts`);
+    ok(JSON.stringify(sc.miss) === JSON.stringify(set.map((e) => e.id).filter((id) => missEntries.has(id))), `${p.id} erase: the entries with a miss (${sc.miss})`);
+    /* the end of the game: one more game, the best stars kept, the missed words for next time, no office moves */
+    const before = JSON.stringify(prog.words), oldBest = 1 + r.int(3);
+    prog.erase.best = { [pc]: oldBest };
+    L.eraseDone(prog, pc, sc, D(26));
+    ok(JSON.stringify(prog.words) === before, `${p.id} erase: a miss changed a word's office`);
+    ok(prog.erase.best[pc] === Math.max(oldBest, sc.stars) && prog.erase.n === 1 && prog.erase.last === D(26), `${p.id} erase: the save after a game ${JSON.stringify(prog.erase)}`);
+    ok(JSON.stringify(prog.erase.miss) === JSON.stringify(sc.miss), `${p.id} erase: the missed words are saved`);
+    const next = L.eraseSet(W, p, L.load(JSON.parse(JSON.stringify(prog))), s + 1000, max);
+    if (sc.miss.length && sc.miss.length <= next.length - 3 && sc.miss.every((id) => byId[id].ch === pc)) {
+      ok(sc.miss.every((id) => next.some((e) => e.id === id)), `${p.id} erase s${s}: the next game leaves out a missed word`);
+    }
   }
 });
+/* the stars, plainly (Case Detective: 3 at 100%, 2 at 75%, 1 at 50%) */
+[[22, 22, 3], [21, 22, 2], [19, 22, 2], [17, 22, 2], [16, 22, 1], [11, 22, 1], [10, 22, 0], [0, 22, 0], [3, 4, 2], [2, 4, 1], [1, 4, 0], [1, 2, 1], [0, 0, 0]].forEach(([a, b, want]) => {
+  ok(L.eraseStars(a, b) === want, `Erase Away: ${a} of ${b} gives ${L.eraseStars(a, b)} stars, want ${want}`);
+  ok(starsFor(a, b) === want, `check.js: ${a} of ${b}`);
+});
+/* the score of a small game, by hand: 2 rounds, 3 + 4 blanks, 2 misses on one entry */
+(function () {
+  const rounds = [{ blanks: [] }, { blanks: [{ id: "a" }, { id: "b" }, { id: "c" }] }, { blanks: [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "b" }] }];
+  const sc = L.eraseScore(rounds, { 1: [true, false, true], 2: [true, false, true] });
+  ok(sc.right === 4 && sc.total === 7 && sc.stars === 1 && JSON.stringify(sc.miss) === '["b"]', `Erase Away: a small game scores ${JSON.stringify(sc)}`);
+  const none = L.eraseScore(rounds, { 1: [true, true, true] });
+  ok(none.right === 3 && none.total === 7 && JSON.stringify(none.miss) === '["a","b","c"]', "Erase Away: a blank never tried counts as missed");
+})();
+/* old saves load: prog.erase without best and miss, or broken */
+(function () {
+  const old = L.load({ v: 1, words: { "02-fama": { o: 2, d: "2026-11-01", s: "2026-11-01", n: 3, m: 1, r: 0 } }, erase: { n: 3, last: "2026-11-20" } });
+  ok(old.erase.n === 3 && old.erase.last === "2026-11-20" && JSON.stringify(old.erase.best) === "{}" && Array.isArray(old.erase.miss) && old.erase.miss.length === 0, `an old save's Erase Away loads: ${JSON.stringify(old.erase)}`);
+  ok(old.words["02-fama"].o === 2, "an old save keeps its words");
+  ok(L.eraseSet(W, { grade: 6, chapter: 2 }, old, 4).length >= 5, "an old save plays Erase Away");
+  const none = L.load({ v: 1, words: {} });
+  ok(none.erase.n === 0 && none.erase.last === "" && JSON.stringify(none.erase.best) === "{}" && none.erase.miss.length === 0, "a save with no Erase Away loads");
+  const bad = L.load({ erase: { n: "x", last: 5, best: { 2: 7, x: 2, 3: "a", 21: -1 }, miss: [1, "02-fama", "02-fama", null, ""] } });
+  ok(bad.erase.n === 0 && bad.erase.last === "" && JSON.stringify(bad.erase.best) === '{"2":3,"21":0}' && JSON.stringify(bad.erase.miss) === '["02-fama"]', `a broken Erase Away save is made safe: ${JSON.stringify(bad.erase)}`);
+  ok(JSON.stringify(L.load({ erase: "junk" }).erase) === JSON.stringify(L.fresh().erase), "Erase Away: a junk save gives the defaults");
+  const round = L.load(JSON.parse(JSON.stringify(L.load({ erase: { n: 2, last: "2026-11-21", best: { 21: 2 }, miss: ["21-navis"] } }))));
+  ok(round.erase.n === 2 && round.erase.best["21"] === 2 && round.erase.miss[0] === "21-navis", "Erase Away: a save survives a JSON round trip");
+})();
+/* missed words come first, plainly: three Consuls missed last time are on the slate while Citizens are left */
+(function () {
+  const p = { grade: 8, chapter: 21 }, words = L.inPlay(W, p).filter((w) => w.ch === 21 && L.countable(w) && w.pos !== "phrase"), prog = L.fresh();
+  words.forEach((w) => { prog.words[w.id] = { o: 0, d: "", s: "", n: 1, m: 0, r: 0 }; });
+  const miss = words.filter((w) => w.pos === "noun").slice(0, 2).map((w) => w.id).concat(words.filter((w) => w.pos === "verb").slice(-1).map((w) => w.id));
+  miss.forEach((id) => { prog.words[id].o = 4; });
+  prog.erase.miss = miss;
+  [5, undefined].forEach((max) => [1, 2, 3].forEach((seed) => {
+    const set = L.eraseSet(W, p, prog, seed, max);
+    ok(miss.every((id) => set.some((e) => e.id === id)), `Erase Away: missed Consuls come first (max ${max}, seed ${seed})`);
+    ok(set.some((e) => e.pos === "noun") && set.some((e) => e.pos === "verb") && set.some((e) => e.pos !== "noun" && e.pos !== "verb"), "Erase Away: with misses the kinds are still covered");
+    ok(set.length === (max || 7), `Erase Away: with misses ${set.length} entries`);
+  }));
+})();
+/* vulgus, vulgī, n. (sometimes m.): beside it no "m." decoy, even on a slate with no masculine noun (with casa
+   and vīcīna, f., too, no gender is left, so the decoys are of the round's other kinds) */
+(function () {
+  const p = { grade: 8, chapter: 21 };
+  [[["21-casa", "21-vicina", "21-vulgus", "21-asper", "21-iterum", "21-rapio", "21-tango"], ""], [["21-vulgus", "21-asper", "21-iterum", "21-rapio", "21-tango"], "f."]].forEach(([ids, want]) => {
+    const set = ids.map((id) => L.eraseEntry(byId[id]));
+    const genders = new Set();
+    for (let seed = 1; seed <= 300; seed++) {
+      L.eraseRounds(set, seed, W, p).slice(1).forEach((rd) => {
+        const decoys = rd.chips.filter((c) => c.decoy);
+        ok(decoys.length === (rd.blanks.length >= 6 ? 2 : 1), `Erase Away: the vulgus slate has ${decoys.length} decoys (seed ${seed})`);
+        decoys.filter((c) => c.k === "gender").forEach((c) => genders.add(c.text));
+      });
+    }
+    ok([...genders].join() === want, `Erase Away: beside vulgus the gender decoys are "${[...genders]}", want "${want}"`);
+    const pl = L.decoyPieces(W, p, set);
+    ok(!pl.play.concat(pl.more).some((pt) => pt.k === "gender" && /m\./.test(pt.text)), "Erase Away: an m. decoy in the pool beside vulgus");
+  });
+})();
+/* a case decoy never names a case that a case piece on the slate names: with a made-up "prae + abl." word in
+   chapter 20, careō's "+ abl. of separation" never gets "+ abl." beside it, while another slate does */
+(function () {
+  const W2 = JSON.parse(JSON.stringify(W));
+  W2.words.push({ id: "20-zz-prae", ch: 20, lat: "prae + abl.", hw: "prae", pos: "preposition", as: "preposition", mean: "in front of, before", takes: "abl", ask: "in front of" });
+  const p = { grade: 8, chapter: 20 };
+  const withCareo = ["20-careo", "21-casa", "21-asper", "21-tango", "21-iterum"].map((id) => L.eraseEntry(byId[id]));
+  const without = ["19-contra", "21-casa", "21-asper", "21-tango", "21-iterum"].filter((id) => byId[id]).map((id) => L.eraseEntry(byId[id]));
+  const pieces = (set) => { const pl = L.decoyPieces(W2, p, set); return pl.play.concat(pl.more).filter((pt) => pt.k === "case").map((pt) => pt.text); };
+  ok(!pieces(withCareo).includes("+ abl."), `Erase Away: a "+ abl." decoy beside careō (${pieces(withCareo)})`);
+  ok(pieces(without).includes("+ abl."), `Erase Away: the made-up "+ abl." is no decoy elsewhere either (${pieces(without)})`);
+})();
 /* weakest first, plainly: Consuls stay out while Citizens are left */
 (function () {
   const p = { grade: 6, chapter: 2 }, words = L.inPlay(W, p).filter((w) => w.ch === 2), prog = L.fresh();
@@ -547,7 +731,7 @@ players.forEach((p) => {
 console.log("Climb to Consul checks");
 console.log(`  players: ${players.map((p) => p.grade + "/" + p.chapter).join(", ")}; seeds: ${SEEDS}`);
 console.log(`  questions: ${counts.quaestor} Quaestor, ${counts.aedile} Aedile, ${counts.praetor} Praetor (${counts.rows} tile rows, ${counts.three} with 3 tiles), ${counts.consul} Consul, ${counts.praetorT} typed Praetor`);
-console.log(`  rounds: ${counts.rounds}; Erase Away sets: ${counts.erase}; trick-verb rings: ${counts.ring}`);
+console.log(`  rounds: ${counts.rounds}; Erase Away sets: ${counts.erase} (${counts.decoys} decoys, ${counts.decoyMore} from outside play, ${counts.lookAlike} of ${counts.latinDecoys} Latin-form decoys start like a first word); trick-verb rings: ${counts.ring}`);
 if (notes.length) { console.log("  notes for the data owner (chapters not ready yet):"); notes.forEach((n) => console.log("    " + n)); }
 console.log(`  ${checks} checks, ${fails} failed`);
 if (fails) {
