@@ -499,6 +499,7 @@
      320 px and one line from 600 px, so the race's lines never make a play screen taller than it was (tools/play.js
      pages through them; the step's own longest line, "Tap the endings of the empty ones, down the porta column
      first.", takes more) */
+  var DARE_BTN = '<button type="button" class="btn wood" data-a="dare">' + A.icon("raven") + "<span>Dare them: they sail light</span></button>";
   var CARGO = ["smelly " + la("garum") + " fish sauce", "sacks of figs", "a marble Neptune", "a stubborn goat", "a senator’s luggage", "jars of olive oil"];
   function drumLines(mode) {
     var rr = prog.race, t = rr.told, day = S.today(), out = [];
@@ -719,8 +720,8 @@
     }
     if (state === "result" && side && G.plan) {
       /* the result card takes the oars panel's place: a chart not passed (two misses, of the chart's middle length),
-         the race line, the buttons. Drawn unseen in a copy of the panel to learn its height, which the panel then
-         keeps for the measure */
+         the race line, the buttons; and, on the one leg that may unlock Dare, the card with the Dare button. Drawn
+         unseen in a copy of the panel to learn the taller one's height, which the panel then keeps for the measure */
       var plan = G.plan, night = V && V.kind === "night";
       var byLen = plan.ask.slice().sort(function (a, b) { return (a.f + a.name).length - (b.f + b.name).length; });
       var worst = byLen.slice(Math.max(0, (byLen.length >> 1) - 1), (byLen.length >> 1) + 1);
@@ -729,14 +730,26 @@
       c.removeAttribute("aria-label");
       c.setAttribute("aria-hidden", "true");
       c.style.cssText = "position:absolute;left:0;top:0;right:auto;bottom:auto;height:auto;visibility:hidden;margin:0;width:" + side.offsetWidth + "px";
-      c.innerHTML = cardHTML({
+      var missed = worst.map(function (b) { return la(b.f) + " <small>(" + esc(b.name) + ")</small>"; });
+      var cards = [{
         RL: { cls: "parch", card: "Prow to prow! Pass the chart for the laurels." + more, cut: more, dup: night },
         newly: false, pass: false, head: plan.of + " of " + plan.of + " boxes", line: "Not passed yet: at most one missed box passes.", next2: n2,
-        misses: worst.map(function (b) { return la(b.f) + " <small>(" + esc(b.name) + ")</small>"; }), best: plan.of, buttons: resButtons(false, G.step, "lost")
-      });
+        misses: missed, best: plan.of, buttons: resButtons(false, G.step, "lost")
+      }];
+      /* the leg that may unlock Dare (RowLogic.recordRace: a passed level race won at the steady drum, the first
+         time) gets a card with a button more: a passed chart with its one miss, the level race won */
+      var R = G.race;
+      if (R && !R.off && R.H === 0 && !R.dare && R.st.B === L.BEAT_MS.steady && !(prog.race && prog.race.dareOk) && set.race !== "dare") {
+        cards.push({
+          RL: { cls: "brass", card: "Level race won! You out-rowed the drum.", cut: " You out-rowed the drum." },
+          newly: true, pass: true, head: plan.of + " of " + plan.of + " boxes", line: stepName(G.step) + " passed! Pennant raised.",
+          next2: G.step < 3 ? stepName(G.step + 1) + " is open on the quay." : "All three pennants fly for this chart!",
+          misses: missed.slice(-1), best: plan.of, buttons: resButtons(true, G.step, "won") + DARE_BTN
+        });
+      }
       side.parentNode.appendChild(c);
-      raceLineFit(c, n2, plan.of);
-      var h = c.offsetHeight;
+      var h = 0;
+      cards.forEach(function (o) { c.innerHTML = cardHTML(o); raceLineFit(c, o.next2, o.best); h = Math.max(h, c.offsetHeight); });
       side.parentNode.removeChild(c);
       if (h > h0) {
         side.style.minHeight = h + "px";
@@ -1299,7 +1312,7 @@
     if (again) { next2 = "This chart comes back once more at the end of tonight."; }
     var buttons = resButtons(pass, step, info.r);
     /* Dare unlocked: the first passed level race won at the steady drum */
-    if (recd && recd.dare && set.race !== "dare") { buttons += '<button type="button" class="btn wood" data-a="dare">' + A.icon("raven") + "<span>Dare them: they sail light</span></button>"; }
+    if (recd && recd.dare && set.race !== "dare") { buttons += DARE_BTN; }
     var side = q(".rv-side");
     side.innerHTML = cardHTML({ RL: RL, newly: newly, pass: pass, head: head, line: line, next2: next2, misses: misses, best: G.best, buttons: buttons });
     var res = q(".rv-res");
@@ -1618,7 +1631,7 @@
       /* a dead heat is shared laurels, never a loss: it is named, not counted against the child */
       if (rg.n === 1 && rg.won) { rgLine = "You won tonight’s race!"; }
       else if (rg.n === 1 && rg.heat) { rgLine = "Tonight’s race: prow to prow, shared laurels!"; }
-      else if (rg.won === rg.n) { rgLine = "You won all " + rg.n + " races!"; }
+      else if (rg.won === rg.n) { rgLine = rg.n === 2 ? "You won both races!" : "You won all " + rg.n + " races!"; }
       else if (rg.heat && !rg.lost) { rgLine = rg.won ? "Regatta: " + rg.won + " won and " + rg.heat + " prow to prow!" : "Regatta: " + rg.heat + " races prow to prow, shared laurels!"; }
       else if (rg.heat) { rgLine = "Regatta: laurels in " + (rg.won + rg.heat) + " of " + rg.n + " races!"; }
       else if (rg.won) { rgLine = "Regatta: " + rg.won + " of " + rg.n + " races to you!"; }
