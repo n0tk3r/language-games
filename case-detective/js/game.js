@@ -1522,7 +1522,7 @@
       var muN = 0, muC = "";
       try { muN = MUSIC.count(); muC = typeof MUSIC.credit === "function" ? String(MUSIC.credit() || "") : ""; } catch (e) { muC = ""; }
       h += '<section class="nb-sec nb-music"><h3>The music</h3>' +
-        "<p>That violin is playing " + (muN >= 24 ? "the" : muN === 1 ? "one of the" : muN + " of the") + " <b>24 Caprices</b> by Niccolò Paganini, who wrote them about 200 years ago. Nobody recorded it: the game makes every note itself.</p>" +
+        "<p>That violin is playing " + (muN >= 24 ? "the" : muN === 1 ? "one of the" : muN + " of the") + " <b>24 Caprices</b> by Niccolò Paganini, who wrote them about 200 years ago. The game plays them note by note, and each note is a recording of a real violin.</p>" +
         '<p class="mu-now"><svg class="ic" aria-hidden="true"><use href="#i-music"></use></svg><span id="muTitle"></span></p>' +
         '<p class="mu-row"><button type="button" class="btn sm mu-btn" id="muToggle" data-action="music" aria-pressed="true">Music: on</button>' +
         '<button type="button" class="btn sm mu-btn" id="muNext" data-action="music-next">Next piece</button></p>' +
