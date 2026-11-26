@@ -7,7 +7,12 @@ official Wheelock GrammarQuick card, the University of Victoria 7th-edition page
 Two charts have cells that section does not print as a word: nauta (declined like porta, the
 porta endings on the base naut-) and the interrogative quis, quid (singular from the section's own
 line on it, plural = the relative quī, quae, quod, as that line says). Those cells are marked "pattern"
-and get an independent Latin review.
+and get an independent Latin review. amīcus and frūctus are in section 7 and in Wheelock's own chapter 3
+and 20 tables, but the curriculum's paradigm source notes (05b) list them as "pattern only": the sources
+checked there (GrammarQuick card, UVic pages, Wiktionary) were not seen printing those exact words. So
+they carry "pattern" until someone checks them against the book; two Latin reviews checked every cell.
+The fourth declension table has no vocative row: both frūctus and cornū vocatives copy the nominative
+(add_voc), so those cells are "pattern" in both columns.
 
     python3 build_charts.py path/to/hillsdale-latin-curriculum.md ../js/charts.js
 """
@@ -165,7 +170,7 @@ INFP = [("infp", "Inf.", "present passive infinitive", "Present passive infiniti
 charts.append(verb_chart("c01-present", 1, "laudō and moneō: the present", "Present active, with the imperative and the infinitive",
                          ["laudō", "moneō"],
                          [("Present active", pres, PERSONS), ("Imperative", ipi, IMPV), ("Infinitive", ipi, INFA)],
-                         note="Personal endings: -ō, -s, -t, -mus, -tis, -nt. The present stem is the infinitive without -re: laudā-, monē-."))
+                         note="Present ending tiles are the stem vowel plus a personal ending: laud + ās, mon + ēs. In laudō the ā drops out. Endings: -ō, -s, -t, -mus, -tis, -nt."))
 
 # ---- chapter 2: porta with magna
 t1 = T("First declension (Ch. 2)")
@@ -179,9 +184,9 @@ t2 = T("Second declension, masculine (Ch. 3)")
 tadj = T("First and second declension adjective")
 magnus_m = col(tadj, "Masculine")
 charts.append(noun_chart("c03-amicus-magnus", 3, "amīcus magnus", "Second declension, with magnus",
-    [{"w": "amīcus", "entry": "amīcus, amīcī, m.", "gloss": "friend", "forms": col(t2, "amīcus"), "base": "amīc", "src": REF},
+    [{"w": "amīcus", "entry": "amīcus, amīcī, m.", "gloss": "friend", "forms": col(t2, "amīcus"), "base": "amīc", "src": PAT},
      {"w": "magnus", "entry": "magnus, magna, magnum", "gloss": "large, great", "forms": magnus_m, "base": "magn", "src": REF}],
-    True, note="Nouns and adjectives in -us have a vocative singular in -e: amīce magne."))
+    True, note="Second declension nouns and adjectives in -us have a vocative singular in -e: amīce magne. But nouns in -ius have a vocative in -ī: fīlius, fīlī."))
 charts.append(noun_chart("c03-puer-ager", 3, "puer and ager", "Second declension nouns in -er",
     [{"w": "puer", "entry": "puer, puerī, m.", "gloss": "boy", "forms": col(t2, "puer"), "base": "puer", "src": REF},
      {"w": "ager", "entry": "ager, agrī, m.", "gloss": "field, farm", "forms": col(t2, "ager"), "base": "agr", "src": REF}],
@@ -191,7 +196,7 @@ nauta = {k: "naut" + v.lstrip("-") for k, v in porta_end.items()}
 charts.append(noun_chart("c03-nauta-magnus", 3, "nauta magnus", "A first declension noun that is masculine",
     [{"w": "nauta", "entry": "nauta, nautae, m.", "gloss": "sailor", "forms": nauta, "base": "naut", "src": PAT},
      {"w": "magnus", "entry": "magnus, magna, magnum", "gloss": "large, great", "forms": magnus_m, "base": "magn", "src": REF}],
-    True, note="An adjective agrees in gender, number and case, not in its ending: nauta is masculine, so magnus."))
+    True, note="An adjective agrees with its noun in gender, number and case, but not always in its ending: nauta is masculine, so nauta magnus."))
 
 # ---- chapter 18: laudō and moneō, present system passive
 pp = T("Present passive (Ch. 18, 21)")
@@ -199,10 +204,10 @@ ip = T("Imperfect passive (Ch. 18, 21)")
 fp = T("Future passive (Ch. 18, 21)")
 charts.append(verb_chart("c18-present-passive", 18, "laudō and moneō: present passive", "Present passive, with the passive infinitive",
                          ["laudō", "moneō"], [("Present passive", pp, PERSONS), ("Infinitive", ipi, INFP)],
-                         note="Passive endings: -r, -ris, -tur, -mur, -minī, -ntur."))
+                         note="Passive endings: -or (-r), -ris, -tur, -mur, -minī, -ntur."))
 charts.append(verb_chart("c18-imperfect-passive", 18, "laudō and moneō: imperfect passive", "Imperfect passive: -bā- and the passive endings",
                          ["laudō", "moneō"], [("Imperfect passive", ip, PERSONS)]))
-charts.append(verb_chart("c18-future-passive", 18, "laudō and moneō: future passive", "Future passive: -bō-, -bi-, -bu- and the passive endings",
+charts.append(verb_chart("c18-future-passive", 18, "laudō and moneō: future passive", "Future passive: the tense sign -bi- (-bo-, -be-, -bu-) and the passive endings",
                          ["laudō", "moneō"], [("Future passive", fp, PERSONS)],
                          note="Watch the second singular: laudāberis, monēberis."))
 
@@ -258,14 +263,19 @@ def add_voc(forms):
     f[("Plural", "Voc.")] = forms[("Plural", "Nom.")]
     return f
 charts.append(noun_chart("c20-fructus-cornu", 20, "frūctus and cornū", "Fourth declension",
-    [{"w": "frūctus", "entry": "frūctus, frūctūs, m.", "gloss": "fruit", "forms": add_voc(col(t4, "frūctus")), "base": "frūct", "src": REF},
+    [{"w": "frūctus", "entry": "frūctus, frūctūs, m.", "gloss": "fruit", "forms": add_voc(col(t4, "frūctus")), "base": "frūct", "src": PAT},
      {"w": "cornū", "entry": "cornū, cornūs, n.", "gloss": "horn", "forms": add_voc(col(t4, "cornū")), "base": "corn", "src": REF}],
     False, note="Most fourth declension nouns are masculine like frūctus; the few neuters end in -ū like cornū."))
+for _b in charts[-1]["blocks"]:                    # section 7 prints no fourth declension vocative: built, so "pattern"
+    for _r in _b["rows"]:
+        if _r.get("voc"):
+            for _c in _r["cells"]:
+                _c["src"] = PAT
 
 # ---- chapter 21: agō, audiō, capiō, present system passive
 charts.append(verb_chart("c21-present-passive", 21, "agō, audiō, capiō: present passive", "Present passive, with the passive infinitive",
                          ["agō", "audiō", "capiō"], [("Present passive", pp, PERSONS), ("Infinitive", ipi, INFP)],
-                         note="The third conjugation's passive infinitive drops the -er-: agī, capī; the fourth keeps -īrī: audīrī."))
+                         note="The third conjugation's passive infinitive ends in -ī: agere becomes agī, capere becomes capī. The fourth ends in -īrī: audīre becomes audīrī."))
 charts.append(verb_chart("c21-imperfect-passive", 21, "agō, audiō, capiō: imperfect passive", "Imperfect passive",
                          ["agō", "audiō", "capiō"], [("Imperfect passive", ip, PERSONS)]))
 charts.append(verb_chart("c21-future-passive", 21, "agō, audiō, capiō: future passive", "Future passive",
