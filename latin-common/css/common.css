@@ -131,14 +131,18 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 }
 .tb-btn:active { transform: translateY(1px); }
 .tb-lab { display: none; }
+.tb-games { text-decoration: none; }
+.tb-games .ic { width: 22px; height: 22px; }
+.tb-glab { display: none; }
 .tb-sound .ic-off { display: none; }
 .tb-sound[aria-pressed="false"] .ic-on { display: none; }
 .tb-sound[aria-pressed="false"] .ic-off { display: block; }
 .tb-sound[aria-pressed="false"] { color: var(--cream-2); }
 
-/* the player chip: "Playing as {name} · 6th grade · Chapter 2" (on a phone: the initial only) */
+/* the player chip: "Playing as {name} · 6th grade · Chapter 2" (on a phone: the initial only).
+ * It gives way first (flex-shrink 40, its words end in "…") so the game's name in the logo stays whole. */
 .pchip {
-  display: inline-flex; align-items: center; gap: 7px; flex: 0 40 auto; min-width: auto; max-width: 46vw; height: 44px; padding: 0 6px 0 5px;
+  display: inline-flex; align-items: center; gap: 7px; flex: 0 40 auto; min-width: 0; max-width: 46vw; height: 44px; padding: 0 6px 0 5px;
   border: 0; border-radius: 22px; background: rgba(255, 255, 255, .08); box-shadow: inset 0 0 0 1.5px rgba(226, 169, 60, .6);
   color: var(--cream); font: 700 15px/1.15 var(--f-ui); cursor: pointer; text-align: left;
 }
@@ -449,6 +453,18 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .tb-set { display: none; }
   .pm-item.pm-set { display: flex; }
 }
+/* the "All games" house takes the left corner, so on a phone the game's name keeps the room its emblem had */
+@media (max-width: 599.98px) {
+  .tb-games ~ .logo { padding-left: 2px; font-size: 18px; }
+  .tb-games ~ .logo .logo-ic { display: none; }
+}
+@media (max-width: 359.98px) {
+  .tb-games ~ .logo { padding-right: 0; font-size: 15px; }
+}
+/* a tablet: the gear keeps only its icon, so the game's name and the player chip have the room */
+@media (min-width: 600px) and (max-width: 899.98px) {
+  .tb-set .tb-lab { display: none; }
+}
 @media (max-width: 359.98px) {
   :root { --pad: 10px; }
   .logo { padding-left: 2px; font-size: 19px; }
@@ -464,6 +480,8 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .ls-stage { column-gap: 12px; }
 }
 @media (min-width: 480px) {
+  .pchip { min-width: 112px; }
+  .logo { flex-shrink: .02; }
   .lpf-grades, .lpf-chs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 600px) {
@@ -489,6 +507,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 }
 @media (min-width: 900px) {
   .pc-as { display: inline; color: var(--cream-2); font-weight: 700; }
+  .tb-glab { display: inline; }
   .lpf-chs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (min-width: 1200px) {

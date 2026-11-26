@@ -74,11 +74,13 @@ player or their grade or chapter changes. Rebuild your home screen there. `playe
 
 Options: `id`, `title`, `sub`, `logo` (SVG string), `onPlayer(player, how, shell)`, `onSettings()`,
 `onHome()`, `filesIn(grade)`, `starsOf(player)`, `sourcesHref` (default: this folder's `sources.html`;
-`false` hides the link), `hello` (a first line for the bubble), `root` (default `document.body`).
+`false` hides the link), `gamesHref` (the "All games" link back to the site's front page; default
+`../index.html`, `false` hides it), `hello` (a first line for the bubble), `root` (default `document.body`).
 
 What it builds (`.ls-app`):
 
-- **Top bar**: the logo and title at the left (a button if `onHome`), `shell.mid` (an empty middle slot for
+- **Top bar**: a house button "All games" at the far left on every screen (the words show from 900 px; accessible
+  name "All games: the Language Games home page", the same as Case Detective's), the logo and title (a button if `onHome`), `shell.mid` (an empty middle slot for
   your progress pips or a round counter), then the player chip, music, sound and the optional settings gear.
   Chip text: "Playing as **{name}** · 6th grade · Chapter 2" on a laptop, "{name} · 6th grade · Chapter 2" on a
   tablet, the player's initial on a phone (below 480 px, where Settings moves into the chip menu too). The

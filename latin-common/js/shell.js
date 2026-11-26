@@ -2,8 +2,9 @@
  * LatinShell: what the Latin games share around their own screens.
  *
  *   var shell = LatinShell.mount({ id, title, sub, logo, onPlayer(player, how, shell), onSettings(), onHome(),
- *                                  starsOf(player), filesIn(grade), sourcesHref })
- *     -> the top bar (logo and title; player chip, music, sound, settings), the Inspector in a round brass
+ *                                  starsOf(player), filesIn(grade), sourcesHref, gamesHref })
+ *     -> the top bar ("All games" house back to the site's front page, gamesHref, default ../index.html, false hides it;
+ *        logo and title; player chip, music, sound, settings), the Inspector in a round brass
  *        frame with his speech bubble, the desk for the game (shell.desk) and the players screens.
  *   shell.say(lines, mood, opts)  shell.mood(m)  shell.act(m, ms)  shell.next()  shell.more()
  *   shell.showPlayers()  shell.addPlayer()  shell.managePlayers()  shell.changeChapter()  shell.player()
@@ -82,7 +83,7 @@
     book: '<path fill="currentColor" d="M6.5 2.5h11c1.1 0 2 .9 2 2v15c0 1.1-.9 2-2 2h-11c-1.1 0-2-.9-2-2v-1h1.6a.9.9 0 0 0 0-1.8H4.5v-2.9h1.6a.9.9 0 0 0 0-1.8H4.5v-2.9h1.6a.9.9 0 0 0 0-1.8H4.5V4.5c0-1.1.9-2 2-2zm3 4.3a.8.8 0 0 0 0 1.6h6a.8.8 0 0 0 0-1.6zm0 3.4a.8.8 0 0 0 0 1.6h6a.8.8 0 0 0 0-1.6zm0 3.4a.8.8 0 0 0 0 1.6h3.5a.8.8 0 0 0 0-1.6z"/>',
     user: '<circle cx="12" cy="8" r="4.2" fill="currentColor"/><path fill="currentColor" d="M4 20.5c0-4.4 3.6-7.3 8-7.3s8 2.9 8 7.3z"/>',
     users: '<circle cx="9" cy="8.5" r="3.6" fill="currentColor"/><path fill="currentColor" d="M2.5 20c0-3.8 2.9-6.3 6.5-6.3s6.5 2.5 6.5 6.3z"/><circle cx="16.5" cy="7.5" r="3" fill="currentColor" opacity=".7"/><path fill="currentColor" opacity=".7" d="M15.6 12.6c3.4-.4 6 1.8 6 5.4h-4.5c-.2-2.2-.7-3.8-1.5-5.4z"/>',
-    home: '<path fill="currentColor" d="M12 3.2 2.8 11h2.7v9.3h5V15h3v5.3h5V11h2.7z"/>'
+    home: '<path fill="currentColor" d="M12 3.2 2.8 11h2.7v9.3h5V15h3v5.3h5V11h2.7z"/>',
   };
   function icon(name, cls) {
     var p = ICONS[name];
@@ -348,7 +349,10 @@
       : '<div class="logo">' + logoInner + "</div>";
     app.innerHTML =
       '<div class="wall" aria-hidden="true"></div>' +
-      '<header class="topbar">' + logoHtml + '<div class="tb-mid"></div>' +
+      '<header class="topbar">' +
+        /* back to the site's front page with every game, from every screen of every game */
+        (opts.gamesHref === false ? "" : '<a class="tb-btn tb-games" href="' + esc(opts.gamesHref || "../index.html") + '" aria-label="All games: the Language Games home page">' + icon("home") + '<span class="tb-glab" aria-hidden="true">All games</span></a>') +
+        logoHtml + '<div class="tb-mid"></div>' +
         '<button type="button" class="pchip" data-k="chip" aria-haspopup="menu" aria-expanded="false" hidden><span class="pc-av" aria-hidden="true"></span><span class="pc-t" aria-hidden="true"><span class="pc-as">Playing as </span><b class="pc-name"></b><span class="pc-line"></span></span>' + icon("caret", "pc-caret") + "</button>" +
         '<button type="button" class="tb-btn tb-sound tb-music" data-k="music" aria-pressed="true" aria-label="Music" hidden>' + icon("music", "ic-on") + icon("music-off", "ic-off") + "</button>" +
         '<button type="button" class="tb-btn tb-sound" data-k="sound" aria-pressed="true" aria-label="Sound effects">' + icon("sound", "ic-on") + icon("mute", "ic-off") + "</button>" +
