@@ -868,13 +868,13 @@
     if (!R.started || G.busy || rests) { rivalPose("wait"); return; }
     var lv = L.raceLive(R.st, rt, G.free);
     if (lv.moored) { drawRival(1); moor(); return; }
-    /* typing in the Storm, one Corvus stroke takes two beats (RowLogic.strokeMs): it pulls and moves on every second
-       beat that a box waits, and holds its oars on the beat between. The mooring and the mercy rule are looked at on
-       every beat; the answer draws it where the race clock says, as always */
+    /* typing in the Storm, one Corvus stroke takes two beats (RowLogic.strokeMs): its oars pull on every second beat
+       that a box waits (the first, the third...), and on the beat between it holds them and glides. It is drawn
+       where the race clock says on every beat, so one pull moves it one stroke */
     R.nb = (R.nb || 0) + 1;
-    var pull = R.st.mode !== "type" || R.nb % 2 === 0;
+    var pull = R.st.mode !== "type" || R.nb % 2 === 1;
+    drawRival(lv.p);
     if (lv.held) {
-      drawRival(lv.p);
       rivalPose("wait");
       /* the first time ever that the mercy rule holds it */
       var t = prog.race.told;
@@ -882,7 +882,6 @@
       return;
     }
     if (!pull) { rivalPose("wait"); return; }
-    drawRival(lv.p);
     rivalPose("row");
     Snd.far(Math.abs(L.raceLead(R.st, lv.p)) <= 2 ? 0.08 : 0.05);
     var dr = q(".rship .drum");
