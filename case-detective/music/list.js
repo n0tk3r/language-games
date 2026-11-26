@@ -1,45 +1,31 @@
-/* The music of the game, in two lists, and one line of credit. Read by js/music.js.
-   "calm" is the background: slow, lyrical passages of twelve of the caprices, one after another, the slowest and
-   gentlest first (about 20 and a half minutes before the list begins again). Each is cut out of its piece where a
-   phrase ends (from, to: seconds of the piece at its written tempo, as js/music.js reads it; no from: from the
-   start; no to: to the end), played at `rate` of its written tempo (0.8: eight tenths), softer and with a gentler
-   tone, and faded in and out where it is cut. The three passages of No. 6 play a little softer still (level 0.5):
-   their tremolo sounds without a break.
-   "show" plays while the Inspector plays his violin: brilliant fast caprices, and the fast parts of others, at full
-   speed and full tone.
-   Which bars each passage is and why it was chosen: README.md. Written by hand: tools/build-all.js writes a plain
-   list of whole pieces, so after a rebuild of this folder these two lists have to be brought back. */
+/* The music of the game, in two lists, and one line of credit. Read by js/music.js. Made by tools/build-vivaldi.js
+   from tools/sources-vivaldi.json (the choice, music/vivaldi/choice.json): change the table and build again.
+   "calm" is the background: 12 slow movements by Antonio Vivaldi, one after another, the slowest and gentlest
+   first (33 minutes before the list begins again). Each plays whole, at `rate` of its written tempo (1: as
+   written; 0.9: nine tenths), softer (`level`) and with the gentler tone. Every note is played by the violin, viola or
+   cello, as its part in the piece file says (recordings of real instruments, or the synthesizer until they are in).
+   "show" plays while the Inspector plays his violin: short, lively Vivaldi allegros at full speed and tone, cut where
+   a phrase ends (to: seconds of the piece at its written tempo).
+   note: a few sentences about the piece for the Notebook (Music.now().note; HTML, with <b> around the name).
+   Letters past ASCII are written as \u escapes (\u2019 is the apostrophe ’), so the file reads the same in any page.
+   Which bars each one is and why it was chosen: README.md. */
 Music.list([
-  { n: 6, title: "Caprice No. 6, the opening", marking: "Lento", file: "caprice-06.js", mode: "calm", to: 81, rate: 0.75, level: 0.5 },
-  { n: 3, title: "Caprice No. 3, the opening", marking: "Sostenuto", file: "caprice-03.js", mode: "calm", to: 82.286, rate: 0.8 },
-  { n: 4, title: "Caprice No. 4, the close of the first part", marking: "Maestoso", file: "caprice-04.js", mode: "calm", from: 130.667, to: 154.667, rate: 0.75 },
-  { n: 20, title: "Caprice No. 20, the opening", marking: "Allegretto", file: "caprice-20.js", mode: "calm", to: 48, rate: 0.75 },
-  { n: 6, title: "Caprice No. 6, the second part", marking: "Lento", file: "caprice-06.js", mode: "calm", from: 162, to: 252, rate: 0.8, level: 0.5 },
-  { n: 15, title: "Caprice No. 15, the opening", marking: "Posato", file: "caprice-15.js", mode: "calm", to: 24, rate: 0.75 },
-  { n: 11, title: "Caprice No. 11, the opening", marking: "Andante", file: "caprice-11.js", mode: "calm", to: 84.087, rate: 0.8 },
-  { n: 7, title: "Caprice No. 7, the opening", marking: "Posato", file: "caprice-07.js", mode: "calm", to: 47.75, rate: 0.8 },
-  { n: 6, title: "Caprice No. 6, the close", marking: "Lento", file: "caprice-06.js", mode: "calm", from: 252, rate: 0.8, level: 0.5 },
-  { n: 4, title: "Caprice No. 4, the second part", marking: "Maestoso", file: "caprice-04.js", mode: "calm", from: 320, to: 416, rate: 0.85 },
-  { n: 22, title: "Caprice No. 22, the opening", marking: "Marcato", file: "caprice-22.js", mode: "calm", to: 48, rate: 0.8 },
-  { n: 11, title: "Caprice No. 11, the close", marking: "Andante", file: "caprice-11.js", mode: "calm", from: 164.929, rate: 0.8 },
-  { n: 4, title: "Caprice No. 4, the opening", marking: "Maestoso", file: "caprice-04.js", mode: "calm", to: 85.333, rate: 0.8 },
-  { n: 18, title: "Caprice No. 18, the opening", marking: "Corrente", file: "caprice-18.js", mode: "calm", to: 26.182, rate: 0.75 },
-  { n: 13, title: "Caprice No. 13, the opening", marking: "Allegro", file: "caprice-13.js", mode: "calm", to: 48, rate: 0.75 },
-  { n: 14, title: "Caprice No. 14, the opening", marking: "Moderato", file: "caprice-14.js", mode: "calm", to: 35, rate: 0.75 },
-  { n: 9, title: "Caprice No. 9, the opening", marking: "Allegretto", file: "caprice-09.js", mode: "calm", to: 48, rate: 0.75 },
-  { n: 24, title: "Caprice No. 24 in A minor", marking: "Tema con variazioni. Quasi presto", file: "caprice-24.js", mode: "show" },
-  { n: 5, title: "Caprice No. 5 in A minor", marking: "Agitato", file: "caprice-05.js", mode: "show" },
-  { n: 16, title: "Caprice No. 16 in G minor", marking: "Presto", file: "caprice-16.js", mode: "show" },
-  { n: 1, title: "Caprice No. 1 in E major", marking: "Andante", file: "caprice-01.js", mode: "show" },
-  { n: 3, title: "Caprice No. 3, the middle part", marking: "Presto", file: "caprice-03.js", mode: "show", from: 82.286, to: 149 },
-  { n: 23, title: "Caprice No. 23, the middle part", marking: "Minore", file: "caprice-23.js", mode: "show", from: 67.326, to: 143.372 },
-  { n: 10, title: "Caprice No. 10 in G minor", marking: "Vivace", file: "caprice-10.js", mode: "show" },
-  { n: 11, title: "Caprice No. 11, the middle part", marking: "Presto", file: "caprice-11.js", mode: "show", from: 84.087, to: 165.929 },
-  { n: 22, title: "Caprice No. 22, the middle part", marking: "Minore", file: "caprice-22.js", mode: "show", from: 48, to: 129.818 },
-  { n: 2, title: "Caprice No. 2 in B minor", marking: "Moderato", file: "caprice-02.js", mode: "show" },
-  { n: 13, title: "Caprice No. 13, the middle part", marking: "Minore", file: "caprice-13.js", mode: "show", from: 48, to: 114.461 },
-  { n: 9, title: "Caprice No. 9, the middle part", marking: "Allegretto", file: "caprice-09.js", mode: "show", from: 71, to: 125.333 },
-  { n: 18, title: "Caprice No. 18, the middle part", marking: "Allegro", file: "caprice-18.js", mode: "show", from: 26.182, to: 104.727 },
-  { n: 20, title: "Caprice No. 20, the middle part", marking: "Minore", file: "caprice-20.js", mode: "show", from: 48, to: 115.091 },
-  { n: 12, title: "Caprice No. 12, the first part", marking: "Allegro", file: "caprice-12.js", mode: "show", to: 62.4 }
-], "Notes typeset by Andrew Buck and Samuel Rummel for the Mutopia Project (CC BY-SA 3.0 and CC BY-SA 4.0) and by Musemeister on MuseScore (public domain, CC0 1.0), via PDMX (Long et al., CC BY 4.0). Violin recordings from TinySOL (Cella et al., CC BY 4.0).");
+  { n: 1, title: "Autumn, the slow movement", marking: "Adagio molto", file: "vivaldi-01.js", mode: "calm", rate: 1, level: 0.77, note: "This is the slow middle part of <b>Autumn</b>, from The Four Seasons. Its poem says the mild air makes everyone stop dancing and singing. Words printed over the notes say the villagers are now asleep." },
+  { n: 2, title: "Spring, the slow movement", marking: "Largo e pianissimo sempre", file: "vivaldi-02.js", mode: "calm", rate: 0.9, level: 0.79, note: "This is the slow middle part of <b>Spring</b>, from The Four Seasons. Its poem says a goatherd sleeps in a flowery meadow, with his faithful dog at his side. The solo violin is the goatherd, the other violins are rustling leaves, and the viola is the barking dog." },
+  { n: 3, title: "Winter, the slow movement", marking: "Largo", file: "vivaldi-03.js", mode: "calm", rate: 1, level: 0.7, note: "This is the slow middle part of <b>Winter</b>, from The Four Seasons. Its poem describes quiet, happy days by the fire, while outside the rain soaks lots of people. The violins pluck their strings to make the sound of the rain." },
+  { n: 4, title: "Concerto Op. 3 No. 11, the Siciliano", marking: "Largo e spiccato", file: "vivaldi-04.js", mode: "calm", rate: 0.9, level: 0.79, note: "This slow, rocking music is the <b>Siciliano</b> from Vivaldi\u2019s Concerto Op. 3 No. 11. It belongs to a set of 12 concertos, printed in 1711, that helped make him famous all over Europe. A solo violin sings over soft, steady chords." },
+  { n: 5, title: "Sonata No. 1 (RV 27), the Sarabanda", marking: "Largo", file: "vivaldi-05.js", mode: "calm", rate: 0.9, level: 0.8, note: "This <b>Sarabanda</b> comes from Vivaldi\u2019s Sonata No. 1 (RV 27). It is slow and calm, with three beats in every bar. The violin sings the tune, and a cello plays the low line below it." },
+  { n: 6, title: "Concerto for Two Violins, Op. 3 No. 8, the slow movement", marking: "Larghetto e spiritoso", file: "vivaldi-06.js", mode: "calm", rate: 1, level: 0.71, note: "This slow music comes from Vivaldi\u2019s <b>Concerto for Two Violins</b>, Op. 3 No. 8. The orchestra plays one simple line, all together. The two solo violins take turns over it, and then they sing together." },
+  { n: 7, title: "Cello Sonata in A minor (RV 44), the opening", marking: "Largo", file: "vivaldi-07.js", mode: "calm", rate: 1, level: 0.8, note: "This is the slow opening of Vivaldi\u2019s <b>Cello Sonata in A minor</b> (RV 44). A low bass line starts alone, and then the cello comes in with a long, singing tune." },
+  { n: 8, title: "Concerto Op. 3 No. 4, the opening", marking: "Andante", file: "vivaldi-08.js", mode: "calm", rate: 0.9, level: 0.77, note: "This calm music opens Vivaldi\u2019s <b>Concerto Op. 3 No. 4</b>, from L\u2019estro armonico. The whole orchestra begins at an easy, steady pace. Then each of its four violin parts gets a solo." },
+  { n: 9, title: "Concerto for Two Cellos in G minor, the slow movement", marking: "Largo", file: "vivaldi-09.js", mode: "calm", rate: 1, level: 0.8, note: "This slow part comes from Vivaldi\u2019s <b>Concerto for Two Cellos</b> in G minor. Two solo cellos sing, low and warm, while one more cello plays a soft bass line." },
+  { n: 10, title: "Concerto Op. 3 No. 2, the third movement", marking: "Larghetto", file: "vivaldi-10.js", mode: "calm", rate: 0.9, level: 0.56, note: "This slow music is the third part of Vivaldi\u2019s <b>Concerto Op. 3 No. 2</b>. Two solo violins and a solo cello play softly, and they take turns with the whole orchestra." },
+  { n: 11, title: "Concerto for Violin and Cello (RV 547), the slow movement", marking: "Andante", file: "vivaldi-11.js", mode: "calm", rate: 1, level: 0.66, note: "This is the slow middle part of Vivaldi\u2019s <b>Concerto for Violin and Cello</b> (RV 547). The orchestra\u2019s violins and violas rest here. The solo violin begins a tune, and the cello answers with the same tune, lower down." },
+  { n: 12, title: "Sonata No. 1 (RV 27), the Preludio", marking: "Andante", file: "vivaldi-12.js", mode: "calm", rate: 1, level: 0.8, note: "This <b>Preludio</b> opens Vivaldi\u2019s Sonata No. 1 (RV 27). It moves along gently, with the violin on top and the cello below." },
+  { n: 13, title: "Spring, the opening", marking: "Allegro", file: "vivaldi-13.js", mode: "show", to: 26.869, level: 0.69, note: "This is the happy start of <b>Spring</b>, from The Four Seasons. Its poem begins, \u201cSpring has come,\u201d and says the birds greet it with a joyful song. In 1730, King Louis XV of France asked for Spring to be played at his palace." },
+  { n: 14, title: "Autumn, the harvest dance", marking: "Allegro", file: "vivaldi-14.js", mode: "show", to: 62.5, level: 0.68, note: "This is the start of <b>Autumn</b>, from The Four Seasons. Its poem says the villagers dance and sing to celebrate a good harvest. Words printed over the first notes say \u201cDance and song of the villagers.\u201d" },
+  { n: 15, title: "Spring, the shepherds\u2019 dance", marking: "Danza pastorale. Allegro", file: "vivaldi-15.js", mode: "show", to: 30, level: 0.7, note: "This is the last part of <b>Spring</b>, a shepherds\u2019 dance. Its poem says nymphs and shepherds dance to the happy sound of a bagpipe. Under the tune, the viola and cello hold long notes, like a bagpipe\u2019s drone." },
+  { n: 16, title: "Concerto Op. 3 No. 2, the last movement", marking: "Allegro", file: "vivaldi-16.js", mode: "show", to: 58.5, level: 0.74, note: "This is the lively last part of Vivaldi\u2019s <b>Concerto Op. 3 No. 2</b>, from L\u2019estro armonico. It bounces along, with its notes in quick groups of three." },
+  { n: 17, title: "Autumn, the hunt", marking: "Allegro", file: "vivaldi-17.js", mode: "show", to: 32.25, level: 0.72, note: "This is the last part of <b>Autumn</b>, called \u201cThe Hunt.\u201d Its poem says the hunters set out at dawn with their horns and dogs." },
+  { n: 18, title: "Sonata No. 1 (RV 27), the Giga", marking: "Allegro", file: "vivaldi-18.js", mode: "show", level: 0.89, note: "This quick <b>Giga</b> comes from Vivaldi\u2019s Sonata No. 1 (RV 27). The violin and the cello skip along in groups of three notes." }
+], "Notes typeset for the Mutopia Project by Anonymous (The Four Seasons, CC BY-SA 3.0) and Felix Janda (L\u2019estro armonico, public domain), and on MuseScore by James Brigham, Bill Finan, Francesco Forti, Nerea Garcia Rodriguez, pental and Nungnum (public domain, CC0 1.0), via PDMX (Long et al., CC BY 4.0). Violin, viola and cello recordings from TinySOL (Cella et al., CC BY 4.0).");

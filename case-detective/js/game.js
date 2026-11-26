@@ -553,7 +553,7 @@
     return "The music starts with your first tap.";
   }
   function syncMusic() {
-    var m = null, line, t = $("muTitle"), b = $("muToggle"), nx = $("muNext");
+    var m = null, line, t = $("muTitle"), b = $("muToggle"), nx = $("muNext"), ab = $("muAbout"), about;
     try { m = MUSIC ? MUSIC.now() : null; } catch (e) { m = null; }
     if (musicBtn) {
       musicBtn.hidden = !MUSIC;
@@ -563,6 +563,12 @@
     if (t) {
       line = musicLine(m);
       if (t.textContent !== line) { t.textContent = line; }
+    }
+    /* under the title, the note on the piece (music/list.js gives it, Music.now().note), while the music is on */
+    if (ab) {
+      about = save.music && m && !m.failed && m.note ? String(m.note) : "";
+      if (ab.getAttribute("data-note") !== about) { ab.setAttribute("data-note", about); ab.innerHTML = about ? rich(about) : ""; }
+      ab.hidden = !about;
     }
     if (b) { b.setAttribute("aria-pressed", save.music ? "true" : "false"); b.textContent = save.music ? "Music: on" : "Music: off"; }
     if (nx) { nx.disabled = !save.music; }
@@ -1534,11 +1540,13 @@
     h += '<section class="nb-sec nb-notes' + (MUSIC ? "" : " span") + '"><h3>Field notes</h3><p>' + esc(D.inspector.nameNote) + '</p><ul class="nb-tips"><li>' + esc(L.glossHint) + "</li><li>Clues never cost stars. Ask as often as you like.</li>" +
       '<li class="kb-tip">On a keyboard: <kbd>1</kbd> to <kbd>4</kbd> answer, <kbd>Enter</kbd> continues, <kbd>C</kbd> asks for a clue, <kbd>N</kbd> opens this Notebook and <kbd>M</kbd> turns the sound effects on or off.</li></ul></section>';
     if (MUSIC) {
-      var muN = 0, muC = "";
-      try { muN = MUSIC.count(); muC = typeof MUSIC.credit === "function" ? String(MUSIC.credit() || "") : ""; } catch (e) { muC = ""; }
+      var muC = "";
+      try { muC = typeof MUSIC.credit === "function" ? String(MUSIC.credit() || "") : ""; } catch (e) { muC = ""; }
       h += '<section class="nb-sec nb-music"><h3>The music</h3>' +
-        "<p>That violin is playing " + (muN >= 24 ? "the" : muN === 1 ? "one of the" : muN + " of the") + " <b>24 Caprices</b> by Niccolò Paganini, who wrote them about 200 years ago. The game plays them note by note, and each note is a recording of a real violin.</p>" +
+        "<p><b>Antonio Vivaldi</b> (1678 to 1741) was born in Venice and lived there most of his life. He was a priest with red hair, so people called him “the Red Priest.” On and off for almost 40 years, he taught music at the Ospedale della Pietà, a home for orphan girls in Venice. Its girls’ orchestra was famous, and a French visitor wrote that no instrument was big enough to scare them. Vivaldi wrote about 500 concertos, and his most famous ones, The Four Seasons, came with poems about the scenes in the music.</p>" +
+        "<p>The game plays parts of his concertos and sonatas note by note, using recordings of a real violin, viola and cello. While a piece plays, you can read about it below. Tap <b>Next piece</b> to hear a different one.</p>" +
         '<p class="mu-now"><svg class="ic" aria-hidden="true"><use href="#i-music"></use></svg><span id="muTitle"></span></p>' +
+        '<p class="mu-about" id="muAbout" hidden></p>' +
         '<p class="mu-row"><button type="button" class="btn sm mu-btn" id="muToggle" data-action="music" aria-pressed="true">Music: on</button>' +
         '<button type="button" class="btn sm mu-btn" id="muNext" data-action="music-next">Next piece</button></p>' +
         '<p class="mu-credit">' + (muC ? esc(muC) + " " : "") + '<a href="music/credits.html#from-game" target="_blank" rel="noopener">More about the music</a></p></section>';
