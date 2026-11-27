@@ -1543,8 +1543,8 @@
       var muC = "";
       try { muC = typeof MUSIC.credit === "function" ? String(MUSIC.credit() || "") : ""; } catch (e) { muC = ""; }
       h += '<section class="nb-sec nb-music"><h3>The music</h3>' +
-        "<p><b>Antonio Vivaldi</b> (1678 to 1741) was born in Venice and lived there most of his life. He was a priest with red hair, so people called him “the Red Priest.” On and off for almost 40 years, he taught music at the Ospedale della Pietà, a home for orphan girls in Venice. Its girls’ orchestra was famous, and a French visitor wrote that no instrument was big enough to scare them. Vivaldi wrote about 500 concertos, and his most famous ones, The Four Seasons, came with poems about the scenes in the music.</p>" +
-        "<p>The game plays parts of his concertos and sonatas note by note, using recordings of a real violin, viola and cello. While a piece plays, you can read about it below. Tap <b>Next piece</b> to hear a different one.</p>" +
+        "<p>In the background you hear slow music by <b>Antonio Vivaldi</b> (1678 to 1741), a priest in Venice who wrote about 500 concertos. In between come gentle pieces linked to the stories about <b>Sherlock Holmes</b>, the detective made up by Arthur Conan Doyle. Holmes plays the violin, and these pieces are played on a violin too.</p>" +
+        "<p>The game plays each piece note by note, using recordings of a real violin, viola and cello. While a piece plays, you can read about it below. Tap <b>Next piece</b> to hear a different one.</p>" +
         '<p class="mu-now"><svg class="ic" aria-hidden="true"><use href="#i-music"></use></svg><span id="muTitle"></span></p>' +
         '<p class="mu-about" id="muAbout" hidden></p>' +
         '<p class="mu-row"><button type="button" class="btn sm mu-btn" id="muToggle" data-action="music" aria-pressed="true">Music: on</button>' +
