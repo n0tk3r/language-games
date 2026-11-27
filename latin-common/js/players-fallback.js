@@ -32,6 +32,8 @@
 
   var KEY = "latinGames.v1";
   var NAME_MAX = 20;
+  /* the ids of the chapter steps' earlier lists, unique on the page whichever screens() draws them */
+  var earlyN = 0;
   var doc = root.document;
 
   /* ------------------------------------------------------------ course data */
@@ -418,7 +420,6 @@
       show(el, "setup");
       say(opts.line || "askGrade", "think", draft.name);
     }
-    var earlyN = 0;
     function chapterStep(draft, opts) {
       opts = opts || {};
       var gi = gradeInfo(draft.grade);
@@ -460,15 +461,26 @@
       var el = make(html), btns = el.querySelectorAll("[data-ch]"), opener = el.querySelector(".lpf-ch-open"), elist = el.querySelector(".lpf-early-list");
       /* the chapters that can be reached now (the earlier ones only while their list is open) */
       function shown() { return Array.prototype.filter.call(btns, function (x) { return !(elist && elist.hidden && elist.contains(x)); }); }
-      /* one chapter takes the Tab: the chosen one if it shows, else the first that shows */
+      /* each group that shows takes the Tab once: at its chosen chapter, else at its first (so Tab from an opened
+         "Earlier chapters" goes into the chapters it showed) */
       function rove() {
-        var vis = shown(), on0 = vis.filter(function (x) { return +x.getAttribute("data-ch") === sel; })[0] || vis[0];
-        Array.prototype.forEach.call(btns, function (x) { x.tabIndex = x === on0 ? 0 : -1; });
+        Array.prototype.forEach.call(btns, function (x) { x.tabIndex = -1; });
+        Array.prototype.forEach.call(el.querySelectorAll('[role="radiogroup"]'), function (g) {
+          if (elist && elist.hidden && elist.contains(g)) { return; }
+          var bs = g.querySelectorAll("[data-ch]"), on0 = Array.prototype.filter.call(bs, function (x) { return +x.getAttribute("data-ch") === sel; })[0] || bs[0];
+          if (on0) { on0.tabIndex = 0; }
+        });
+      }
+      /* "Chapter 5 chosen" on the closed button: only while an earlier chapter is chosen and its list is closed */
+      function chosenNote() {
+        var note = opener && opener.querySelector(".lpf-cho-sel");
+        if (note) { note.textContent = "Chapter " + sel + " chosen"; note.hidden = !elist || !elist.hidden || sel >= gi.first; }
       }
       function pick(b, focus) {
         Array.prototype.forEach.call(btns, function (x) { x.setAttribute("aria-checked", x === b ? "true" : "false"); });
         sel = +b.getAttribute("data-ch");
         rove();
+        chosenNote();
         if (focus) { b.focus(); }
       }
       Array.prototype.forEach.call(btns, function (b) {
@@ -485,8 +497,7 @@
           var open1 = elist.hidden;
           elist.hidden = !open1;
           opener.setAttribute("aria-expanded", open1 ? "true" : "false");
-          var note = opener.querySelector(".lpf-cho-sel");
-          if (note) { note.textContent = "Chapter " + sel + " chosen"; note.hidden = open1 || sel >= gi.first; }
+          chosenNote();
           rove();
           /* the focus stays on the button; the first earlier chapter comes into view */
           if (open1) { var f1 = elist.querySelector("[data-ch]"); if (f1 && f1.scrollIntoView) { try { f1.scrollIntoView({ block: "nearest" }); } catch (e) { /* ignore */ } } }

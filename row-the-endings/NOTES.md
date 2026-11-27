@@ -297,6 +297,15 @@ Four reviewers checked the corrected lines: the Storm stroke in the browser (eve
 - The race line's own line height now applies (`.card p` in common.css was winning), the card is fitted again on resize, the Dare button has a row of its own beside the wide card, and in free play below the Storm the strip keeps room for the passed card with three buttons.
 - The Storm's stroke: the count starts again after the Corvus stood still, so it moves off with a pull; the oars ease up into the held pose.
 
+## QA fixes (earlier chapters and the race, independent check)
+
+Four reviewers (the shared players, the home page, each game) checked the earlier chapters and this round of race lines in the browser, and a second reader tried to refute each finding. Climb to Consul and the home page had none; an 8th grader on chapters 1 to 8 plays exactly what a 6th grader on the same chapter plays. Fixed here:
+
+- A finished leg of tonight's voyage counts as rowed however the child leaves its result card (the logo, the house, the chip, a reload, a closed tab): `tonight()` skips the legs whose result is stored. Before, only the logo did it.
+- The first typed race started from the panel drum (as the Inspector asks in the Storm at the Slow drum) now says "In the Storm the Corvus rows every other beat." (`cycleDrum`, `told.type`).
+- On a phone the docked result card no longer scrolls the page (`keepInView` measured it against the top of its own panel), which hid the Inspector's bubble under the top bar with the lines the card leaves to him. Older than the race; found in this check.
+- In latin-common: the "Chapter N chosen" line under a closed "Earlier chapters" follows the choice; each group of chapters takes the Tab once, so Tab from an opened "Earlier chapters" goes into the chapters it showed; the course headings are the small label (a `.card h3` rule was winning); the earlier lists' ids are unique on the page.
+
 ## Requests for latin-common
 
 - **README:** please note there that Row the Endings' "light" macron rule is stricter than `LatinShell.check`'s (see "Extras beyond the spec's three settings"), so the two games' behaviour is documented in one place. No code change is asked.

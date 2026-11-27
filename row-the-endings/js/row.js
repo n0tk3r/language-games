@@ -161,6 +161,9 @@
       prog.night = n;
       save();
     }
+    /* a leg whose result is stored counts as rowed, however the child left its result card (the logo, the house,
+       a reload, a closed tab), so the voyage goes on from the next leg */
+    while (!n.done && n.legs[n.at] && !n.legs[n.at].called && n.played && n.played[n.at]) { n.at++; save(); }
     return n;
   }
 
@@ -1034,7 +1037,9 @@
   function keepInView(t) {
     if (!t) { return; }
     var r = t.getBoundingClientRect(), side = q(".rv-side"), bottom = window.innerHeight, top = (shell.bar ? shell.bar.getBoundingClientRect().bottom : 56) + 6;
-    if (side && getComputedStyle(side).position === "sticky") { bottom = Math.min(bottom, side.getBoundingClientRect().top); }
+    /* the docked panel covers the page's foot, so a box must clear it; a card inside the panel itself needs only the
+       window (it showed in full, and scrolling only hid the Inspector's bubble under the top bar) */
+    if (side && getComputedStyle(side).position === "sticky" && !side.contains(t)) { bottom = Math.min(bottom, side.getBoundingClientRect().top); }
     var dy = 0;
     if (r.bottom > bottom - 8) { dy = r.bottom - bottom + 40; } else if (r.top < top) { dy = r.top - top - 30; }
     if (dy) { try { window.scrollBy({ top: dy, behavior: reduced() ? "auto" : "smooth" }); } catch (e) { window.scrollBy(0, dy); } }
@@ -1272,7 +1277,15 @@
        no race this leg: a race on is called off, and a drum turned on starts none (a race is rowed from box 1) */
     var answered = G.got + G.missed.length > 0, later2 = "";
     if (racing() && G.race.started) { callOff(); later2 = afterLine(); }
-    else if (!answered) { raceSetup(); fitSea(); }
+    else if (!answered) {
+      raceSetup();
+      /* the first typed race, also one started here from the drum as the Inspector asks: the Storm's stroke is told */
+      if (G.race && G.plan.mode === "type" && prog.race.told.first && !prog.race.told.type) {
+        prog.race.told.type = true; save();
+        shell.say(["In the Storm the Corvus rows every other beat."], ["point"]);
+      }
+      fitSea();
+    }
     else if (!G.race && L.raceOn(set, G.step, G.beat)) { later2 = afterLine(); }
     startBeat();
     streakBadge();
