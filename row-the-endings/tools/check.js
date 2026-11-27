@@ -383,6 +383,17 @@ charts.forEach(function (chart) {
   eq(L.inPlay(C.charts, pl(7, 10), W).length, 0, "voyage: grade 7 has no charts yet");
   eq(L.inPlay(C.charts, pl(8, 21), W).map(function (c) { return c.ch; }).filter(function (ch) { return ch > 21; }).length, 0, "voyage: grade 8 chapter 21 rows nothing past 21");
   ok(L.inPlay(C.charts, pl(8, 21), W).every(function (c) { return c.ch >= 18; }), "voyage: grade 8 never rows grade 6 charts");
+  /* a class still on an earlier chapter: the charts follow the chapter's course */
+  eq(L.courseGrade(pl(8, 21), W), 8, "earlier chapters: grade 8 on its own chapter keeps its course");
+  eq(L.courseGrade(pl(8, 2), W), 6, "earlier chapters: grade 8 on chapter 2 rows Latin IA");
+  eq(L.courseGrade(pl(8, 12), W), 7, "earlier chapters: grade 8 on chapter 12 follows Latin IB, which has no charts yet");
+  eq(L.courseGrade(pl(6, 5), W), 6, "earlier chapters: grade 6 is always its own course");
+  eq(L.courseGrade(pl(8, 0), W), 8, "earlier chapters: no chapter yet keeps the grade");
+  eq(L.inPlay(C.charts, pl(8, 2), W).map(function (c) { return c.id; }), L.inPlay(C.charts, pl(6, 2), W).map(function (c) { return c.id; }), "earlier chapters: grade 8 on chapter 2 rows what grade 6 on chapter 2 rows");
+  eq(L.playChapter(C.charts, pl(8, 5), W), 3, "earlier chapters: grade 8 on chapter 5 rows up to chapter 3");
+  eq(L.inPlay(C.charts, pl(8, 12), W).length, 0, "earlier chapters: grade 8 on chapter 12 has nothing to row yet");
+  eq(Object.keys(L.chartsUpTo(C.charts, 8, W)).map(Number).sort(function (a, b) { return a - b; }), [1, 2, 3, 18, 19, 20, 21, 22], "earlier chapters: the files marks for grade 8 hold 1 to 3 and 18 to 22");
+  eq(Object.keys(L.chartsUpTo(C.charts, 6, W)).map(Number).sort(function (a, b) { return a - b; }), [1, 2, 3], "earlier chapters: the files marks for grade 6 stop at its last chapter");
 
   var fresh = L.fresh();
   var v = L.voyage(fresh, g6, 2, "2026-11-25");
@@ -643,7 +654,7 @@ charts.forEach(function (chart) {
   var junk = L.raceRec({ race: { usual: { a: { calm: [1200, "x", -5, 1e9, 1300, 1400, 1500], storm: "no" }, b: "str", c: [1, 2], d: { open: [] } }, races: -3, won: "7", heat: 2.7, lost: null,
     best: { m: "x", id: "a" }, run: 4, bestRun: 2, dareOk: "yes", told: { rush: "yesterday", port: "2026-11-25", first: 1, mercy: true } } });
   eq(junk, { usual: { a: { calm: [1300, 1400, 1500], open: [], storm: [], type: [] } }, races: 0, won: 7, heat: 2, lost: 0, best: null, run: 4, bestRun: 4, dareOk: false,
-    told: { first: false, mercy: true, rush: null, port: "2026-11-25", rest: null, nudge: null, alone: false } }, "race: raceRec cleans odd and old values");
+    told: { first: false, mercy: true, rush: null, port: "2026-11-25", rest: null, nudge: null, alone: false, type: false } }, "race: raceRec cleans odd and old values");
   eq(L.raceRec({ race: [1, 2] }), L.raceRec(null), "race: raceRec of junk is a fresh record");
   ok(L.fresh().race && L.fresh().race.races === 0, "race: a fresh progress has a race record");
 

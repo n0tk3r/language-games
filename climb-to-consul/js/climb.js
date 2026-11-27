@@ -59,7 +59,7 @@
   }
   function filesIn(grade) {
     var out = {};
-    L.readyChapters(W, grade).forEach(function (c) { out[c] = true; });
+    L.readyUpTo(W, grade).forEach(function (c) { out[c] = true; });
     return out;
   }
 
@@ -111,7 +111,7 @@
     var r = prog.round, resume = r && r.day === t && r.i > 0 && r.i < r.items.length;
     var nNew = plan.meet.length + plan.early.length, nDue = plan.due.length, total = counts.reduce(function (a, b) { return a + b; }, 0);
     var tricks = L.trickVerbs(W, p).length;
-    var ready = L.readyChapters(W, p.grade), first = ready[0];
+    var ready = L.readyChapters(W, L.courseGrade(W, p)), first = ready[0];
     var met = Object.keys(prog.words).length > 0;
 
     var tonight;
@@ -182,12 +182,16 @@
   }
   function comingSoon(p) {
     var info = null;
-    try { info = window.LatinPlayers ? window.LatinPlayers.gradeInfo(p.grade) : null; } catch (e) { info = null; }
-    render('<div class="card cc-soon"><h2>Coming soon</h2><p>The words of ' + esc(info && info.course ? info.course : "grade " + p.grade) + " are on their way.</p>" +
-      '<p>For now, Climb to Consul has 6th grade (chapters 1 to 3) and 8th grade (chapters 18 to 22).</p>' +
-      '<div class="dock"><button type="button" class="btn primary" data-act="chapter">Change grade or chapter</button></div></div>', "cc-soonv");
-    act("chapter", function () { shell.managePlayers(); });
-    shell.say(["The words for this grade are on their way.", "Ask a grown-up to pick 6th or 8th grade for now."], ["think", "point"]);
+    /* the course of the player's chapter (a class still on chapter 12: Latin IB), else of the grade */
+    try { info = window.LatinPlayers ? (window.LatinPlayers.courseOf && window.LatinPlayers.courseOf(p.chapter)) || window.LatinPlayers.gradeInfo(p.grade) : null; } catch (e) { info = null; }
+    /* an earlier chapter of a course with no words yet (a class still on chapter 12): named by its chapter, and the
+       way out is another chapter, not another grade */
+    var early = L.courseGrade(W, p) !== +p.grade;
+    render('<div class="card cc-soon"><h2>Coming soon</h2><p>The words of ' + esc(early ? "chapter " + p.chapter + (info && info.course ? " (" + info.course + ")" : "") : info && info.course ? info.course : "grade " + p.grade) + " are on their way.</p>" +
+      '<p>For now, Climb to Consul has chapters 1 to 3 (6th grade) and chapters 18 to 22 (8th grade).</p>' +
+      '<div class="dock"><button type="button" class="btn primary" data-act="chapter">' + (early ? "Change chapter" : "Change grade or chapter") + "</button></div></div>", "cc-soonv");
+    act("chapter", function () { if (early) { shell.changeChapter(); } else { shell.managePlayers(); } });
+    shell.say(early ? ["Chapter " + p.chapter + "’s words are on their way.", "Pick another chapter for now."] : ["The words for this grade are on their way.", "Ask a grown-up to pick 6th or 8th grade for now."], ["think", "point"]);
   }
 
   /* --------------------------------------------------------- the assembly */
@@ -823,7 +827,8 @@
     keys = null;
     shell.compact(true);
     var groups = L.roll(W, me, prog, filter), pc = L.playChapter(W, me);
-    var tabs = [["chapter", "This chapter"], ["play", "All in play"], ["grade", "Whole grade"]];
+    /* a class still on an earlier chapter: the roll is that chapter's course, so "Whole course" */
+    var tabs = [["chapter", "This chapter"], ["play", "All in play"], ["grade", L.courseGrade(W, me) !== +me.grade ? "Whole course" : "Whole grade"]];
     var gl = "";
     try { gl = window.LatinPlayers ? window.LatinPlayers.gradeLine(me, true) : ""; } catch (e) { gl = ""; }
     var html = '<div class="cc-rolltop no-print"><div class="cc-seg" role="group" aria-label="Which words">' + tabs.map(function (t) {

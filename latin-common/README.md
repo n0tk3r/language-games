@@ -53,7 +53,7 @@ The three 2.2 files 404 until Case Detective 2.2 is published (in Chromium from 
     logo: '<svg viewBox="0 0 32 32">...</svg>',         // your own inline SVG, drawn in brass
     onHome: function () { home(); },                    // the logo becomes a "home" button
     onSettings: function () { openSettings(); },        // shows the gear (in the chip menu on phones)
-    filesIn: function (grade) { return { 1: true, 2: true, 3: true }; },  // chapters with content, marked "Ready"
+    filesIn: function (grade) { return { 1: true, 2: true, 3: true }; },  // chapters with content, marked "Ready"; asked for every chapter from 1 to the grade's last
     starsOf: function (p) { return null; },             // optional number on each player card
     onPlayer: function (player, how) {                  // how: "continue" | "added" | "chapter" | "update" | "none"
       state = progress.load(player.id) || fresh();
@@ -167,18 +167,20 @@ Storage, shared by every game on the site: localStorage `latinGames.v1` =
 | `list()` | Copies of the players, the one who played last first |
 | `get(id)`, `current()` | A copy or `null`; `current()` = the player in `last` |
 | `choose(id)` | Makes them `last`, saves, fires change |
-| `add({ name, grade, chapter })` | The new player (`id` "p" + next number, the first free colour); `null` if the name is empty after cleaning. Does not choose them. Grade 7 or 9 (not open yet) becomes 6; a chapter outside the grade becomes the month's chapter |
-| `update(id, { name?, grade?, chapter? })` | The updated copy. A new grade without a chapter moves the chapter to that grade's month chapter |
+| `add({ name, grade, chapter })` | The new player (`id` "p" + next number, the first free colour); `null` if the name is empty after cleaning. Does not choose them. Grade 7 or 9 (not open yet) becomes 6; a chapter the grade may not be on (see `inGrade`) becomes the month's chapter |
+| `update(id, { name?, grade?, chapter? })` | The updated copy. A chapter is kept if `inGrade` allows it. A new grade keeps the chapter only if it is one of the new grade's own (`first` to `last`), else it moves to that grade's month chapter; the same grade keeps any chapter it may be on |
 | `remove(id)` | `true` if removed. Each game's `store().prune()` then drops its progress |
 | `settings()`, `set("sound" \| "music", bool)` | |
 | `onchange(fn)` → unsubscribe | `fn()` after any change here or in another tab |
 | `cleanName(s)` | No `<`, `>` or control characters, spaces collapsed, at most 20 characters |
 | `grades()` | `[{ grade, course, first, last, soon, months, start }]`: 6 Latin IA 1-8, 7 Latin IB 9-17 (soon), 8 Latin II 18-27, 9 Latin III 28-40 (soon). In the fallback `months` is 12 chapters, January first; `start` is the month the school year starts (8). Do not depend on these two |
-| `gradeInfo(g)`, `canPlay(g)`, `inGrade(g, ch)` | |
+| `gradeInfo(g)`, `canPlay(g)` | |
+| `inGrade(g, ch)` | A chapter a player of the grade may be on: any whole chapter from 1 to the grade's `last`, so a class that is still on an earlier chapter can go back (1 to 27 for an 8th grader). Above the grade's last, 0, 2.5 or "x" is refused. Every write (a pick, add, update, a sound or music switch) keeps such a chapter |
+| `courseOf(ch)` | The entry of `grades()` whose chapters hold `ch`, also a grade still to come (chapter 15: grade 7, Latin IB); `null` for none. A game gives a player on an earlier chapter the content of that chapter's course: never take `p.chapter >= gradeInfo(p.grade).first` for granted |
 | `monthChapter(g, date?)` | Hillsdale's plan: grade 6 Aug-Oct 1, Nov 2, Dec 3, Jan 4, Feb 5, Mar 6, Apr 7, May-Jul 8; grade 8 Aug-Sep 18, Oct 19, Nov 21, Dec 22, Jan 23, Feb 24, Mar 25, Apr 26, May-Jul 27 |
 | `chapter(n)` | `{ title, short }` (Wheelock's title from `LATIN_WORDS.chapters`; `short` is its first part) |
-| `gradeLine(p, withCourse?)` | `"6th grade · Chapter 3"`, `"6th grade · Latin IA · Chapter 3"` |
-| `screens(host)` | `{ players(), add(), manage(), changeChapter(id) }`. The shell is the host; you do not call this yourself |
+| `gradeLine(p, withCourse?)` | `"6th grade · Chapter 3"`, `"6th grade · Latin IA · Chapter 3"`; the course is that of the player's chapter: `"8th grade · Latin IB · Chapter 15"` |
+| `screens(host)` | `{ players(), add(), manage(), changeChapter(id) }`. The shell is the host; you do not call this yourself. The chapter step shows the grade's own chapters (this month's marked), then a button "Earlier chapters" ("For a class that is still on an earlier chapter.", `aria-expanded`, `aria-controls`) over the chapters 1 to `first - 1`, grouped by course; the list is open when the chosen chapter is one of them. 6th grade has none, so its step has no button |
 
 The fallback also has `fallback: true`; 2.2's file will not. Uses `window.CD_COURSES` (grades, months,
 `playerColors`, `chapters`, `lines`) when it is there. It does not convert a Case Detective 2.1 save: 2.2

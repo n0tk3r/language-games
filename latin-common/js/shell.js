@@ -507,7 +507,9 @@
         doc.body.appendChild(scrim);
         doc.body.appendChild(box);
         var f = box.querySelector("[autofocus]") || row.querySelector(".btn.primary") || focusables()[0];
-        if (f) { try { f.focus(); } catch (e) { /* ignore */ } }
+        /* the dialog opens at its top (title, close button), even when the button that takes the focus is lower down */
+        if (f) { try { f.focus({ preventScroll: true }); } catch (e) { try { f.focus(); } catch (e2) { /* ignore */ } } }
+        box.scrollTop = 0;
         if (typeof o.onOpen === "function") { try { o.onOpen(box, close); } catch (e) { /* ignore */ } }
       });
     }

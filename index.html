@@ -376,8 +376,10 @@
      (latin-common/js/players-fallback.js, or Case Detective's players.js once it is on the site). */
   var GAMES = { "case-detective": "Case Detective", "climb-to-consul": "Climb to Consul", "row-the-endings": "Row the Endings" };
   var SCREENS = { players: 1, chapter: 1, manage: 1, add: 1 };
-  /* the chapters that have something to play (Climb to Consul and Row the Endings; Case Detective is chapter 2) */
-  var READY = { 6: { 1: 1, 2: 1, 3: 1 }, 8: { 18: 1, 19: 1, 20: 1, 21: 1, 22: 1 } };
+  /* the chapters that have something to play (Climb to Consul and Row the Endings; Case Detective is chapter 2):
+     Latin IA's 1 to 3 and Latin II's 18 to 22. An 8th grader may pick an earlier chapter, for a class still on one,
+     so the chapter step marks every ready chapter up to the grade's last. */
+  var READY = { 1: 1, 2: 1, 3: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1 };
   function $(id) { return document.getElementById(id); }
   var L = window.LatinPlayers || null, ui = null, view = "";
   var sec = $("whos-playing"), nowEl = $("pl-now"), pickEl = $("pl-pick"), box = $("pl-screens"), sayEl = $("pl-say");
@@ -430,7 +432,12 @@
       dropHash();
       showNow(true);
     },
-    filesIn: function (g) { return READY[g] || {}; },
+    filesIn: function (g) {
+      var gi = null, out = {};
+      try { gi = L.gradeInfo(g); } catch (e) { gi = null; }
+      Object.keys(READY).forEach(function (c) { if (gi && +c <= gi.last) { out[c] = 1; } });
+      return out;
+    },
     sourcesHref: "latin-common/sources.html"
   };
   function screens() {
@@ -461,7 +468,17 @@
   Array.prototype.forEach.call(actsEl.querySelectorAll("[data-pl]"), function (b) {
     b.addEventListener("click", function () { open(b.getAttribute("data-pl")); });
   });
-  function playable(p) { return p && (p.grade === 6 || p.grade === 8); }
+  /* the grade whose course holds the player's chapter: their own, or for a class still on an earlier chapter the
+     course of that chapter (an 8th grader on chapter 5 plays Latin IA, as a 6th grader on chapter 5 does);
+     0 for an earlier chapter of a course with no games yet (Latin IB, chapters 9 to 17) */
+  function courseGrade(p) {
+    if (!p) { return 0; }
+    var own = null, co = null;
+    if (L) { try { own = L.gradeInfo(p.grade); co = typeof L.courseOf === "function" ? L.courseOf(p.chapter) : null; } catch (e) { own = null; } }
+    if (!own || !(+p.chapter < own.first)) { return p.grade; }
+    return co ? co.grade : 0;
+  }
+  function playable(p) { var g = courseGrade(p); return !!p && (g === 6 || g === 8); }
   function plain(name) { return String(name == null ? "" : name).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ""); }
 
   /* Tonight: what the chosen player can do tonight, one line per game */
@@ -495,22 +512,26 @@
       span.appendChild(b); span.appendChild(document.createTextNode(what ? ": " + what : ""));
       a.appendChild(span); li.appendChild(a); list.appendChild(li);
     }
-    if (p.grade === 6 || p.grade === 8) {
-      var ready = p.grade === 6 ? 3 : 22, first = p.grade === 6 ? 1 : 18;
+    var cg = courseGrade(p);
+    if (cg === 6 || cg === 8) {
+      /* the chapter the games play: the player's, or the last ready one of its course before it */
+      var ready = cg === 6 ? 3 : 22, first = cg === 6 ? 1 : 18;
       var ch = Math.max(first, Math.min(p.chapter || first, ready));
       var charts = ((window.LATIN_CHARTS || {}).charts || []).filter(function (c) { return c.ch === ch; });
       item("climb-to-consul/index.html", "Climb to Consul", "tonight’s assembly, chapter " + ch + "’s new words and the words due");
       item("row-the-endings/index.html", "Row the Endings", charts.length ? "tonight’s voyage, " + charts[0].title + (charts.length > 1 ? " and more" : "") : "tonight’s voyage");
-      if (p.grade === 6) { item("case-detective/index.html", "Case Detective", "a case file on the jobs of the cases"); }
+      if (cg === 6) { item("case-detective/index.html", "Case Detective", "a case file on the jobs of the cases"); }
     }
     list.hidden = !list.children.length;
-    /* a grade whose games are not made yet: say so, and offer to change the grade */
-    var note = $("pl-note"), ready = playable(p);
+    /* a grade whose games are not made yet: say so, and offer to change the grade; an earlier chapter whose
+       games are not made yet (chapters 9 to 17): say so, and offer to change the chapter */
+    var note = $("pl-note"), ready = playable(p), ownOk = p.grade === 6 || p.grade === 8;
     note.hidden = ready;
-    note.textContent = ready ? "" : "The games for " + (line.split(" · ")[0] || "this grade") + " are on their way. For now they cover 6th and 8th grade.";
+    note.textContent = ready ? "" : ownOk ? "The games for chapter " + p.chapter + " are on their way. For now they cover chapters 1 to 3 and 18 to 22." :
+      "The games for " + (line.split(" · ")[0] || "this grade") + " are on their way. For now they cover 6th and 8th grade.";
     var chLab = $("pl-ch-lab");
-    chLab.textContent = ready ? "Change chapter" : "Change grade";
-    chLab.parentNode.setAttribute("data-pl", ready ? "chapter" : "manage");
+    chLab.textContent = ready || ownOk ? "Change chapter" : "Change grade";
+    chLab.parentNode.setAttribute("data-pl", ready || ownOk ? "chapter" : "manage");
     if (focus) { try { $("tonight-h").focus({ preventScroll: false }); } catch (e) { /* ignore */ } }
   }
 

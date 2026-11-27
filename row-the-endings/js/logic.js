@@ -50,11 +50,27 @@
     return gradeCharts(charts, grade, words).reduce(function (m, c) { return Math.max(m, c.ch); }, 0);
   }
   /* the chapter we row tonight: the player's chapter, or the last one with charts if the player is past it */
+  /* the grade whose course holds the player's chapter: their own, or, for a class that is still on an earlier
+     chapter, the course of that chapter (an 8th grader on chapter 5 rows Latin IA's charts, as a 6th grader on
+     chapter 5 does). Latin IB's chapters 9 to 17 give 7, a course with no charts yet, so nothing is in play; 0 for a
+     chapter no course holds */
+  function courseGrade(player, words) {
+    if (!player) { return 0; }
+    var g = +player.grade, ch = +player.chapter || 0, r = range(g, words), out = 0;
+    if (!r || !ch || ch >= r[0]) { return g; }
+    Object.keys(RANGES).forEach(function (k) { var x = range(+k, words); if (x && ch >= x[0] && ch <= x[1]) { out = +k; } });
+    return out;
+  }
+  /* the chapters with charts, from 1 to the grade's last (the files mark on the chapter step, earlier chapters too) */
+  function chartsUpTo(charts, grade, words) {
+    var r = range(+grade, words);
+    return chaptersWithCharts(r ? (charts || []).filter(function (c) { return c.ch <= r[1]; }) : []);
+  }
   function playChapter(charts, player, words) {
     if (!player) { return 0; }
-    var last = lastChartChapter(charts, player.grade, words);
+    var g = courseGrade(player, words), last = lastChartChapter(charts, g, words);
     if (!last) { return 0; }
-    var gc = gradeCharts(charts, player.grade, words), ch = Math.min(+player.chapter || 0, last);
+    var gc = gradeCharts(charts, g, words), ch = Math.min(+player.chapter || 0, last);
     /* a chapter of the grade with no chart of its own (a gap): the nearest earlier chapter that has one */
     while (ch > 0 && !gc.some(function (c) { return c.ch === ch; })) { ch--; }
     return ch;
@@ -63,7 +79,7 @@
   function inPlay(charts, player, words) {
     var cur = playChapter(charts, player, words);
     if (!cur) { return []; }
-    var gc = gradeCharts(charts, player.grade, words).filter(function (c) { return c.ch <= cur; });
+    var gc = gradeCharts(charts, courseGrade(player, words), words).filter(function (c) { return c.ch <= cur; });
     return gc.filter(function (c) { return c.ch === cur; }).concat(gc.filter(function (c) { return c.ch !== cur; }));
   }
   /* { 2: true, 3: true } for the players screens' "Ready" tags */
@@ -641,7 +657,7 @@
     return {
       usual: usualAll, races: count(x.races), won: count(x.won), heat: count(x.heat), lost: count(x.lost), best: best,
       run: count(x.run), bestRun: Math.max(count(x.bestRun), count(x.run)), dareOk: x.dareOk === true,
-      told: { first: t.first === true, mercy: t.mercy === true, rush: dayOf(t.rush), port: dayOf(t.port), rest: dayOf(t.rest), nudge: dayOf(t.nudge), alone: t.alone === true }
+      told: { first: t.first === true, mercy: t.mercy === true, rush: dayOf(t.rush), port: dayOf(t.port), rest: dayOf(t.rest), nudge: dayOf(t.nudge), alone: t.alone === true, type: t.type === true }
     };
   }
   /* a race rowed to the end (never one called off). o: { id, step, key, cost, u, from, pass, r, m, H, B, dare }.
@@ -675,7 +691,7 @@
 
   var RowLogic = {
     STEPS: STEPS, BEATS: BEATS, BEAT_MS: BEAT_MS, DEFAULTS: DEFAULTS,
-    range: range, gradeCharts: gradeCharts, lastChartChapter: lastChartChapter, playChapter: playChapter, inPlay: inPlay, chaptersWithCharts: chaptersWithCharts,
+    range: range, courseGrade: courseGrade, chartsUpTo: chartsUpTo, gradeCharts: gradeCharts, lastChartChapter: lastChartChapter, playChapter: playChapter, inPlay: inPlay, chaptersWithCharts: chaptersWithCharts,
     hasVoc: hasVoc, vocShown: vocShown, sameCols: sameCols, naming: naming, colKind: colKind, colLabel: colLabel, GENDER: GENDER,
     boxes: boxes, answers: answers, tileText: tileText, MAX_TILES: MAX_TILES, MACRON_POINT: MACRON_POINT,
     prefill: prefill, endingPool: endingPool, bank: bank, plan: plan, judgeTile: judgeTile,

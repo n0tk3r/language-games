@@ -121,7 +121,7 @@
     hello: "",
     onHome: function () { leave(); home(); },
     onSettings: openSettings,
-    filesIn: function (grade) { return L.chaptersWithCharts(L.gradeCharts(CH, grade, WD)); },
+    filesIn: function (grade) { return L.chartsUpTo(CH, grade, WD); },
     starsOf: function (p) {
       var x = store.load(p.id), n = 0;
       if (x && x.charts) { Object.keys(x.charts).forEach(function (k) { (x.charts[k].passed || []).forEach(function (v) { if (v) { n++; } }); }); }
@@ -215,12 +215,14 @@
     var gi = null;
     try { gi = window.LatinPlayers && LatinPlayers.gradeInfo ? LatinPlayers.gradeInfo(p.grade) : null; } catch (e) { gi = null; }
     if (!lst.length) {
+      /* an earlier chapter of a course with no charts yet (a class still on chapter 12) is named by its chapter */
+      var early = L.courseGrade(p, WD) !== +p.grade, what = early ? "chapter " + p.chapter : "the " + ord(p.grade) + " grade";
       shell.desk.innerHTML = '<div class="view rh rh-none"><div class="rh-scene">' + A.scene() + "</div>" +
-        '<section class="card"><h2>The charts for the ' + ord(p.grade) + " grade are on their way.</h2>" +
+        '<section class="card"><h2>The charts for ' + esc(what) + " are on their way.</h2>" +
         "<p>Row the Endings has Wheelock’s charts for the 6th grade (chapters 1 to 3) and the 8th grade (chapters 18 to 22) so far. Change the chapter or the player from the chip at the top.</p>" +
         '<div class="dock"><button type="button" class="btn primary" data-a="chapter" data-enter>Change chapter</button></div></section></div>';
       q('[data-a="chapter"]').addEventListener("click", function () { shell.changeChapter(); });
-      shell.say(["Ahoy, <b>" + esc(p.name) + "</b>!", "The " + ord(p.grade) + " grade’s charts are still being drawn.", "They are on their way."], ["wave", "think", "idle"]);
+      shell.say(["Ahoy, <b>" + esc(p.name) + "</b>!", (early ? "Chapter " + p.chapter + "’s" : "The " + ord(p.grade) + " grade’s") + " charts are still being drawn.", "They are on their way."], ["wave", "think", "idle"]);
       return;
     }
     var n = tonight(false);
@@ -300,12 +302,14 @@
     if (n.done) {
       /* tonight's regatta: every race won, or one lost */
       /* a dead heat is shared laurels, never a loss */
+      /* the race's sublines only when the voyage that button plans has a leg that races */
       var rs = regatta(n.played), sub = "A new one, from where you are now";
-      if (rs.n && !rs.lost) { sub = "Defend your laurels"; } else if (rs.lost === 1) { sub = "A rematch with the Corvus"; }
+      var nx = L.voyage(prog, list(), cur(), S.today()).some(function (l) { return !l.called && L.raceOn(set, l.step); });
+      if (nx && rs.n && !rs.lost) { sub = "Defend your laurels"; } else if (nx && rs.lost === 1) { sub = "A rematch with the Corvus"; }
       btn = '<p class="rh-done">' + A.icon("ship") + "<span>Home harbor! Tonight’s voyage is done.</span></p>" +
         '<button type="button" class="btn wood block" data-a="again">' + A.icon("oar") + "<span>One more voyage<small>" + sub + "</small></span></button>";
     } else if (at > 0) {
-      btn = '<button type="button" class="btn primary block" data-a="sail" data-enter>' + A.icon("oar") + "<span>Row on<small>Leg " + (at + 1) + " of " + legs.length + "</small></span></button>";
+      btn = '<button type="button" class="btn primary block" data-a="sail" data-enter>' + A.icon("oar") + "<span>Row on<small>" + (at < legs.length ? "Leg " + (at + 1) + " of " + legs.length : "Home harbor") + "</small></span></button>";
     } else {
       btn = '<button type="button" class="btn primary block" data-a="sail" data-enter>' + A.icon("ship") + "<span>Set sail<small>About " + minutes(legs) + " minutes</small></span></button>";
     }
@@ -422,7 +426,7 @@
   function startChart(chart, step, leg) {
     var voc = L.vocShown(chart, set.voc);
     /* the wrong tiles come from the charts in play first, then the rest of the grade, and only then other grades */
-    var plan = L.plan(chart, step, { voc: voc, typing: set.typing, seed: chart.id + ":" + step + ":" + Date.now(), charts: list(), wider: [L.gradeCharts(CH, P.grade, WD), CH] });
+    var plan = L.plan(chart, step, { voc: voc, typing: set.typing, seed: chart.id + ":" + step + ":" + Date.now(), charts: list(), wider: [L.gradeCharts(CH, L.courseGrade(P, WD), WD), CH] });
     G = {
       kind: "chart", chart: chart, step: step, leg: leg, plan: plan, voc: voc, i: -1, got: 0, missed: [], streak: 0, best: 0, strokes: 0,
       beat: L.beatFor(set.beat, step), t0: now(), busy: false, waited: 0, ck: null, typer: null, done: false, timers: [],
@@ -484,7 +488,8 @@
     if (G.leg && G.leg.why === "again") {
       /* "Once more: porta with magna." as before the race, then "A rematch with the Corvus!" on a page of its own
          (together they took a third line of the bubble on a small phone) */
-      lines = ["Once more: " + esc(chart.title) + "."].concat(G.race ? ["A rematch with the Corvus!"] : [], lines);
+      var raced0 = (V.played || []).some(function (x) { return x && x.id === chart.id && x.step === step && x.race && x.race.r !== "off"; });
+      lines = ["Once more: " + esc(chart.title) + "."].concat(G.race && raced0 ? ["A rematch with the Corvus!"] : [], lines);
     }
     shell.say(lines, ["point", "idle", "idle", "idle", "idle", "idle"]);
     startBeat();
@@ -507,18 +512,18 @@
     if (G.race) {
       if (!t.first) {
         /* the first race ever: the ship the child can see, what it rows to, and that thinking is safe */
-        t.first = true; save();
+        t.first = true; if (typing) { t.type = true; } save();
         return ["<b>Race!</b> That raven sail is the Corvus, from Ostia.",
-          typing ? "In the Storm it rows a stroke every two beats." : "It rows to the drum. Fill a box a beat to lead!",
+          typing ? "In the Storm it rows a stroke every two beats." : "It rows one stroke for every beat of the drum.",
           "Your first answer starts the race.", "Need time? After three beats the Corvus waits."];
       }
+      /* the first typed race (the Storm opens late, often after race 3): its stroke, before the leg's race line */
+      if (typing && !t.type) { t.type = true; save(); out.push("In the Storm the Corvus rows every other beat."); }
       /* a dare and a level race say so, even in the first three races (a child this quick needs the tip least) */
-      if (G.race.dare) { return ["The Corvus sails light: you dared them!"]; }
-      if (G.race.H <= 0) { return ["No cargo this time: a level race!"]; }
-      if (rr.races < 3) {
-        return (typing ? ["In the Storm the Corvus rows every other beat."] : []).concat(["Think, don’t guess: a wrong " + (typing ? "form" : "tile") + " costs four beats."]);
-      }
-      return ["The Corvus carries " + CARGO[rr.races % CARGO.length] + ". Race!"];
+      if (G.race.dare) { return out.concat(["The Corvus sails light: you dared them!"]); }
+      if (G.race.H <= 0) { return out.concat(["The Corvus has no cargo: a level race!"]); }
+      if (rr.races < 3) { return out.concat(["Think, don’t guess: a wrong " + (typing ? "form" : "tile") + " costs four beats."]); }
+      return out.concat(["The Corvus carries " + CARGO[rr.races % CARGO.length] + ". Race!"]);
     }
     if (G.beat !== "off") {
       /* the drum with "Sail alone": the first time ever, what the drum is for */
@@ -531,7 +536,7 @@
       out.push("No drum in this storm, so the Corvus waits in port.", "Tap the drum before your first " + (typing ? "form" : "box") + " for a race.");
     } else if (G.step < 3 && set.beat === "off" && t.rest !== day) {
       t.rest = day; save();
-      out.push("The drum rests tonight, so the Corvus rests in port.");
+      out.push("The drum rests, so the Corvus rests in port.");
     }
     return out;
   }
@@ -593,6 +598,10 @@
   var fitT = 0;
   window.addEventListener("resize", function () {
     if (G && G.race) { drawRival(G.race.p); chipPlace(); }
+    if (G && G.done && G.card) {
+      var rr = q(".rv-res .rr-race");
+      if (rr) { rr.classList.remove("short", "tight", "sr-line"); raceLineFit(q(".rv-side"), G.card.next2, G.card.best); }
+    }
     clearTimeout(fitT);
     fitT = setTimeout(function () { if (G && G.kind === "chart") { fitSea(); } }, 120);
   });
@@ -732,12 +741,19 @@
       c.style.cssText = "position:absolute;left:0;top:0;right:auto;bottom:auto;height:auto;visibility:hidden;margin:0;width:" + side.offsetWidth + "px";
       var missed = worst.map(function (b) { return la(b.f) + " <small>(" + esc(b.name) + ")</small>"; });
       var cards = [{
-        RL: { cls: "parch", card: "Prow to prow! Pass the chart for the laurels." + more, cut: more, dup: night },
+        RL: { cls: "parch", card: "Prow to prow! Now pass the chart!" + more, cut: more, dup: night },
         newly: false, pass: false, head: plan.of + " of " + plan.of + " boxes", line: "Not passed yet: at most one missed box passes.", next2: n2,
         misses: missed, best: plan.of, buttons: resButtons(false, G.step, "lost")
       }];
       /* the leg that may unlock Dare (RowLogic.recordRace: a passed level race won at the steady drum, the first
          time) gets a card with a button more: a passed chart with its one miss, the level race won */
+      if (!night && G.step < 3) {
+        cards.push({
+          RL: { cls: "brass", card: "Level race won! You out-rowed the drum.", cut: " You out-rowed the drum." },
+          newly: true, pass: true, head: plan.of + " of " + plan.of + " boxes", line: stepName(G.step) + " passed! Pennant raised.",
+          next2: stepName(G.step + 1) + " is open on the quay.", misses: missed.slice(-1), best: plan.of, buttons: resButtons(true, G.step, "won")
+        });
+      }
       var R = G.race;
       if (R && !R.off && R.H === 0 && !R.dare && R.st.B === L.BEAT_MS.steady && !(prog.race && prog.race.dareOk) && set.race !== "dare") {
         cards.push({
@@ -878,16 +894,18 @@
   function rivalBeat(rt, rests) {
     var R = G.race;
     if (!R || R.off || R.moored) { return; }
-    if (!R.started || G.busy || rests) { rivalPose("wait"); return; }
+    if (!R.started || G.busy || rests) { if (rests) { R.nb = 0; } rivalPose("wait"); return; }
     var lv = L.raceLive(R.st, rt, G.free);
     if (lv.moored) { drawRival(1); moor(); return; }
     /* typing in the Storm, one Corvus stroke takes two beats (RowLogic.strokeMs): its oars pull on every second beat
        that a box waits (the first, the third...), and on the beat between it holds them and glides. It is drawn
-       where the race clock says on every beat, so one pull moves it one stroke */
+       where the race clock says on every beat, so one pull moves it one stroke. After it has stood still (the drum's
+       rest, the mercy rule) the count starts again, so it moves off with a pull */
     R.nb = (R.nb || 0) + 1;
     var pull = R.st.mode !== "type" || R.nb % 2 === 1;
     drawRival(lv.p);
     if (lv.held) {
+      R.nb = 0;
       rivalPose("wait");
       /* the first time ever that the mercy rule holds it */
       var t = prog.race.told;
@@ -1282,7 +1300,7 @@
     if (R && R.started && !R.off) {
       end = L.raceEnd(R.st);
       recd = L.recordRace(prog, { id: chart.id, step: step, key: R.key, cost: end.cost, u: R.u, from: R.from, pass: pass, r: end.r, m: end.m, H: R.H, B: R.st.B, dare: R.dare });
-      info = { r: end.r, m: Math.round(end.m * 100) / 100, H: R.H, B: R.st.B, dare: R.dare, rec: recd.rec };
+      info = { r: end.r, m: Math.round(end.m * 100) / 100, kind: end.kind, by: end.by, H: R.H, B: R.st.B, dare: R.dare, rec: recd.rec };
     }
     if (V) {
       V.played = V.played || [];
@@ -1316,6 +1334,7 @@
     var side = q(".rv-side");
     side.innerHTML = cardHTML({ RL: RL, newly: newly, pass: pass, head: head, line: line, next2: next2, misses: misses, best: G.best, buttons: buttons });
     var res = q(".rv-res");
+    G.card = { next2: next2, best: G.best };
     raceLineFit(side, next2, G.best);
     qa("[data-a]", side).forEach(function (bt) {
       bt.addEventListener("click", function () {
@@ -1331,7 +1350,7 @@
           if (go) { try { go.focus({ preventScroll: true }); } catch (e) { go.focus(); } }
           bt.disabled = true;
           var dared = "Dared! On charts where you out-row the drum, the Corvus sails light.";
-          shell.toast(dared, { ms: 3200 }); shell.live(dared);
+          shell.toast(dared, { ms: 5000 }); shell.live(dared);
         }
         else { home(); }
       });
@@ -1349,9 +1368,14 @@
     if (pass) { say.push((got === of ? "Every box! " : "") + got + " of " + of + ". " + (newly ? "Pennant raised!" : "Well rowed!")); }
     else { say.push(got + " of " + of + ". The sea was rough!"); }
     if (RL) { say = say.concat(RL.say); }
-    if (recd && recd.first) { say.push(end.r === "lost" ? "Next time, a fairer race." : "Now they know your stroke."); }
-    if (recd && recd.dare && set.race !== "dare") { say.push("You beat the steady drum! Dare them to sail light?"); }
-    if (nudge) { say.push("At the slow drum the Corvus can’t keep up with you.", "Tap the drum before your first box to race at steady!"); }
+    if (recd && recd.first) {
+      /* after a loss, only when the next race's cargo is heavier (typing in the Storm the first usual is already the
+         most a box costs, so the next race is the same) */
+      if (end.r !== "lost") { say.push("Now they know your stroke."); }
+      else if (L.cargo(L.usual(prog.race, chart.id, R.key, R.st.B, R.st.mode).u, of, R.st.B, R.st.mode, false) > R.H) { say.push("The next race will be fairer."); }
+    }
+    if (recd && recd.dare && set.race !== "dare") { say.push("You out-rowed the drum! Dare the Corvus?"); }
+    if (nudge) { say.push("At the slow drum the Corvus can’t keep up.", "Tap the drum first to race at steady!"); }
     if (next2) { say.push(next2); }
     shell.say(say, [pass ? "!cheer" : "think", "point", "point", "point", "point", "point", "point"]);
   }
@@ -1377,7 +1401,8 @@
       (o.next2 ? '<p class="rr-m rr-n2">' + esc(o.next2) + "</p>" : "") +
       (o.misses.length ? '<p class="rr-miss"><b>Missed:</b> ' + o.misses.join(", ") + "</p>" : "") +
       (o.RL ? '<p class="rr-race ' + o.RL.cls + '">' + A.icon("raven") + "<span>" + raceLine(o.RL) +
-        (o.best >= 3 ? '<span class="rr-run">' + (/[.!?]$/.test(o.RL.card) ? " Best run " + o.best + "." : " · best run " + o.best) + "</span>" : "") + "</span></p>" :
+        (o.best >= 3 ? (/[.!?]$/.test(o.RL.card) ? ' <span class="rr-run">' + (o.RL.lost ? "Your best run " : "Best run ") + o.best + ".</span>" :
+          '<span class="rr-run"> · ' + (o.RL.lost ? "your best run " : "best run ") + o.best + "</span>") : "") + "</span></p>" :
         o.best >= 3 ? '<p class="rr-m">Best run in stroke: ' + o.best + ".</p>" : "") +
       '<div class="dock">' + o.buttons + "</div></div>";
   }
@@ -1416,13 +1441,14 @@
     if (!recd.rec) {
       /* a chart not passed: the race was practice. The Inspector leaves "The rematch is tonight." to his next line
          ("This chart comes back once more at the end of tonight.") */
-      var pr = r === "won" ? "First in! Pass the chart for the laurels." : r === "heat" ? "Prow to prow! Pass the chart for the laurels." : "The Corvus was first in.";
+      /* the card's line is short (one line of a docked card at 320 px); the Inspector says why */
+      var pr = r === "won" ? "First in!" : r === "heat" ? "Prow to prow!" : "The Corvus was first in.", why = r === "lost" ? "" : " Pass the chart for the laurels.";
       var more = again ? " The rematch is tonight." : free ? " Row it again!" : "";
-      return { card: pr + more, cut: more, dup: !!again, cls: "parch", say: [pr].concat(free && !again ? ["Row it again!"] : []), ribbon: ribbon };
+      return { card: pr + (why ? " Now pass the chart!" : "") + more, cut: more, dup: !!again, lost: r === "lost", cls: "parch", say: [pr + why].concat(free && !again ? ["Row it again!"] : []), ribbon: ribbon };
     }
     if (r === "heat") { return { card: "Prow to prow with the Corvus: shared laurels", cut: " with the Corvus", cls: "brass", say: ["Prow to prow with the Corvus: shared laurels!"], ribbon: ribbon }; }
     if (r === "lost") {
-      return { card: "The Corvus " + byText(end) + " · rematch next time", cut: " · rematch next time", cls: "parch", say: ["The Corvus " + byText(end, true) + ". Rematch next time!"], ribbon: ribbon };
+      return { card: "The Corvus " + byText(end) + " · rematch next time", cut: " · rematch next time", lost: true, cls: "parch", say: ["The Corvus " + byText(end, true).replace(/ strokes?$/, "") + ". Rematch next time!"], ribbon: ribbon };
     }
     if (R.dare) { return { card: "Dare won " + byText(end).replace(/ strokes?$/, "") + "!", cut: "", cls: "brass", say: ["Dare won " + byText(end, true) + "!"], ribbon: ribbon }; }
     if (R.H === 0) { return { card: "Level race won! You out-rowed the drum.", cut: " You out-rowed the drum.", cls: "brass", say: ["Level race won " + byText(end, true) + "!"], ribbon: ribbon }; }
@@ -1636,11 +1662,14 @@
       else if (rg.heat) { rgLine = "Regatta: laurels in " + (rg.won + rg.heat) + " of " + rg.n + " races!"; }
       else if (rg.won) { rgLine = "Regatta: " + rg.won + " of " + rg.n + " races to you!"; }
       else {
-        var close = rg.list.slice().sort(function (a, b) { return Math.abs(a.r.m) - Math.abs(b.r.m); })[0], cc = byId(close.p.id);
-        var a = Math.abs(close.r.m), by = close.r.r === "heat" ? "prow to prow" : a < L.RACE.PROW ? "by a prow" : "by " + Math.round(a) + (Math.round(a) === 1 ? " stroke" : " strokes");
-        /* "Closest" only when there was more than one; the Inspector says the two sentences on two pages */
-        rgSay = [(rg.n === 1 ? "A close race: " : "Closest race: ") + (cc ? cc.title : close.p.id) + ", " + by + ".", "The Corvus will be back tomorrow."];
-        rgLine = rgSay.join(" ");
+        /* the closest loss, worded as its result card worded it (kind and by; a voyage stored before: from m). No
+           chart title: most have a colon of their own */
+        var close = rg.list.slice().sort(function (a, b) { return Math.abs(a.r.m) - Math.abs(b.r.m); })[0], cr = close.r;
+        var a = Math.abs(cr.m), kind = cr.kind || (a < L.RACE.PROW ? "prow" : "strokes"), byN = cr.by || Math.max(1, Math.round(a));
+        var by = kind === "prow" ? "by a prow" : "by " + byN + (byN === 1 ? " stroke" : " strokes");
+        var first = rg.n === 1 ? "Tonight’s race: the Corvus, " + by + "." : "Tonight’s races: the Corvus, the closest " + by + ".";
+        rgLine = first + " It will be back tomorrow.";
+        rgSay = [first, "The Corvus will be back tomorrow."];
       }
     }
     /* a mark after each leg's score: a laurel leaf (won), a raven (the Corvus), "=" (a dead heat) */
@@ -1679,6 +1708,9 @@
   /* leave whatever leg is being rowed (nothing of an unfinished leg is kept) */
   function leave() {
     if (G) {
+      /* a leg of tonight's voyage left from its result card (the home button, a player change) counts as rowed, as
+         "Row on" counts it, so the voyage goes on from the next leg */
+      if (G.kind === "chart" && G.done && G.card && V && V.kind === "night" && V.played && V.played[V.at] && V.legs[V.at] === G.leg) { V.at++; save(); }
       G.done = true;
       stopBeat();
       (G.timers || []).forEach(function (t) { clearTimeout(t); });

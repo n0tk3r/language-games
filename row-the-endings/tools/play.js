@@ -1,5 +1,5 @@
 /* Row the Endings: a Playwright run of tonight's voyage, end to end, from file://.
- *   node tools/play.js [width height grade chapter]      (default 390 844 6 2)
+ *   node tools/play.js [width height grade chapter]      (default 390 844 6 2; an 8th grade on chapter 2 is a class still on an earlier chapter)
  *   ROW_BEAT=off|slow|steady   the drum, set in Settings before sailing (default: the setting as it is, slow)
  *   ROW_THINK=ms               a pause before each answer (default 0: a quick child)
  * Makes a player, rows every leg (a few wrong tiles or typed forms on purpose; a deliberate wrong tile waits
@@ -39,7 +39,11 @@ async function addPlayer(p, name, g, ch) {
   await p.click("form .btn.primary");
   await p.click(`.lpf-grade[data-g="${g}"]`);
   await p.waitForTimeout(150);
-  if (ch) { await p.click(`.lpf-ch[data-ch="${ch}"]`); }
+  if (ch) {
+    /* an earlier chapter (a class still on one): open "Earlier chapters" first */
+    if (!(await p.locator(`.lpf-ch[data-ch="${ch}"]`).isVisible()) && await p.locator(".lpf-ch-open").count()) { await p.click(".lpf-ch-open"); await p.waitForTimeout(150); }
+    await p.click(`.lpf-ch[data-ch="${ch}"]`);
+  }
   await p.click('[data-act="go"]');
   await p.waitForTimeout(500);
 }

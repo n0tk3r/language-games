@@ -137,6 +137,17 @@ const FUNCS = ["adverb", "conjunction", "preposition", "pronoun", "interjection"
 ok(L.playChapter(W, { grade: 6, chapter: 5 }) === 3, "grade 6 chapter 5 plays up to chapter 3");
 ok(L.behind(W, { grade: 6, chapter: 5 }) === true, "grade 6 chapter 5 is told the words are on their way");
 ok(L.inPlay(W, { grade: 7, chapter: 9 }).length === 0, "grade 7 has nothing yet");
+/* a class still on an earlier chapter: the words follow the chapter's course */
+ok(L.courseGrade(W, { grade: 8, chapter: 20 }) === 8, "grade 8 on its own chapter keeps its course");
+ok(L.courseGrade(W, { grade: 8, chapter: 2 }) === 6, "grade 8 on chapter 2 climbs Latin IA");
+ok(L.courseGrade(W, { grade: 8, chapter: 12 }) === 0, "grade 8 on chapter 12 has no course with words");
+ok(L.courseGrade(W, { grade: 6, chapter: 5 }) === 6, "grade 6 is always its own course");
+ok(JSON.stringify(L.inPlay(W, { grade: 8, chapter: 2 }).map((w) => w.id)) === JSON.stringify(L.inPlay(W, { grade: 6, chapter: 2 }).map((w) => w.id)), "grade 8 on chapter 2 climbs what grade 6 on chapter 2 climbs");
+ok(L.playChapter(W, { grade: 8, chapter: 5 }) === 3 && L.behind(W, { grade: 8, chapter: 5 }) === true, "grade 8 on chapter 5 climbs up to chapter 3, and is told chapter 5 is on its way");
+ok(!L.canPlay(W, { grade: 8, chapter: 12 }), "grade 8 on chapter 12 has nothing to climb yet");
+ok(L.inPlay(W, { grade: 8, chapter: 3 }).every((w) => w.ch <= 3), "grade 8 on chapter 3 never meets a Latin II word");
+ok(JSON.stringify(L.readyUpTo(W, 8)) === JSON.stringify([1, 2, 3, 18, 19, 20, 21, 22]), "the files marks for grade 8 hold 1 to 3 and 18 to 22");
+ok(JSON.stringify(L.readyUpTo(W, 6)) === JSON.stringify([1, 2, 3]), "the files marks for grade 6 stop at its last chapter");
 /* every ask is unique within its part of speech in the grade, so the typed Consul answer is one word */
 [6, 8].forEach((g) => {
   const seen = {};

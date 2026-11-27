@@ -150,8 +150,24 @@
   function readyChapters(W, g) { return gradeChapters(W, g).filter(function (c) { return isReady(W, c); }); }
   function lastReady(W, g) { var r = readyChapters(W, g); return r.length ? r[r.length - 1] : 0; }
   /* the chapter tonight's words come from: the player's chapter, or the last ready one before it */
+  /* the grade whose course holds the player's chapter: their own, or, for a class that is still on an earlier
+     chapter, the course of that chapter (an 8th grader on chapter 5 climbs Latin IA's words, as a 6th grader on
+     chapter 5 does); 0 for an earlier chapter of a course with no words here (Latin IB, chapters 9 to 17) */
+  function courseGrade(W, player) {
+    if (!player) { return 0; }
+    var g = +player.grade, ch = +player.chapter || 0, own = gradeChapters(W, g), out = 0;
+    if (!own.length || !ch || ch >= own[0]) { return g; }
+    Object.keys((W && W.grades) || {}).forEach(function (k) { if (gradeChapters(W, k).indexOf(ch) >= 0) { out = +k; } });
+    return out;
+  }
+  /* the ready chapters from 1 to the grade's last (the files mark on the chapter step, earlier chapters too) */
+  function readyUpTo(W, g) {
+    var own = gradeChapters(W, g), last = own.length ? own[own.length - 1] : 0, out = [];
+    Object.keys((W && W.grades) || {}).forEach(function (k) { readyChapters(W, k).forEach(function (c) { if (c <= last) { out.push(c); } }); });
+    return out.sort(function (a, b) { return a - b; });
+  }
   function playChapter(W, player) {
-    var chs = gradeChapters(W, player && player.grade), ready = readyChapters(W, player && player.grade);
+    var cg = courseGrade(W, player), chs = gradeChapters(W, cg), ready = readyChapters(W, cg);
     if (!ready.length) { return 0; }
     var ch = +player.chapter || chs[0];
     if (ch < chs[0]) { ch = chs[0]; }
@@ -162,7 +178,7 @@
   function inPlay(W, player) {
     var pc = playChapter(W, player);
     if (!pc) { return []; }
-    return gradeWords(W, player.grade).filter(function (w) { return drilled(w) && w.ch <= pc && isReady(W, w.ch); });
+    return gradeWords(W, courseGrade(W, player)).filter(function (w) { return drilled(w) && w.ch <= pc && isReady(W, w.ch); });
   }
   /* "repeats" entries teach a new meaning of a word already met: counted once */
   function countable(w) { return !w.repeats; }
@@ -339,7 +355,7 @@
   /* --------------------------------------------------------- wrong choices */
   /* the words a choice question may use against w, best first */
   function choicePool(W, w, player) {
-    var g = player ? player.grade : (W.chapters[String(w.ch)] || {}).grade;
+    var g = player ? courseGrade(W, player) : (W.chapters[String(w.ch)] || {}).grade;
     var pc = player ? playChapter(W, player) : w.ch;
     var all = gradeWords(W, g).filter(function (x) { return drilled(x) && x.id !== w.id && x.pos !== "form" && x.pos !== "phrase"; });
     var same = function (x) { return x.pos === w.pos; };
@@ -632,7 +648,7 @@
   function typedWord(W, w, typed, player) {
     var t = key(S.norm(S.longs(String(typed || ""))));
     if (!t) { return null; }
-    var g = player ? player.grade : (W.chapters[String(w.ch)] || {}).grade, found = null;
+    var g = player ? courseGrade(W, player) : (W.chapters[String(w.ch)] || {}).grade, found = null;
     gradeWords(W, g).forEach(function (x) {
       if (found || x.id === w.id || !drilled(x)) { return; }
       if (key(S.norm(x.hw)) === t || (x.alt || []).some(function (a) { return key(S.norm(a)) === t; })) { found = x; }
@@ -775,7 +791,7 @@
     });
     var play = {};
     inPlay(W, player).forEach(function (w) { play[w.id] = true; });
-    gradeWords(W, player.grade).forEach(function (w) {
+    gradeWords(W, courseGrade(W, player)).forEach(function (w) {
       if (on[w.id] || !drilled(w) || !countable(w) || w.pos === "phrase" || w.pos === "form" || !isReady(W, w.ch)) { return; }
       if (slate.some(function (x) { return related(x, w); }) || meanWords(w).some(function (x) { return said[x]; })) { return; }
       eraseEntry(w).parts.forEach(function (p) {
@@ -889,7 +905,7 @@
   /* --------------------------------------------------------- the Senate roll */
   /* filter: "chapter" (tonight's chapter), "play" (all in play), "grade" (the whole grade, unready chapters too) */
   function roll(W, player, prog, filter) {
-    var g = player.grade, pc = playChapter(W, player);
+    var g = courseGrade(W, player), pc = playChapter(W, player);
     return gradeChapters(W, g).filter(function (ch) {
       if (filter === "chapter") { return ch === pc; }
       if (filter === "play") { return ch <= pc && isReady(W, ch); }
@@ -910,7 +926,7 @@
     MACRONS: MACRONS, CASES: CASES, ERASE_ORDER: ERASE_ORDER, ERASE_NAMES: ERASE_NAMES,
     key: key, lev: lev, lookalike: lookalike, asText: asText, ordinal: ordinal, splitTop: splitTop,
     senses: senses, normSense: normSense, english: english, related: related, ask: ask, senseBase: senseBase, NEAR: NEAR, VARIANTS: VARIANTS, pairEntry: pairEntry, unmet: unmet,
-    gradeChapters: gradeChapters, readyChapters: readyChapters, lastReady: lastReady, playChapter: playChapter, isReady: isReady,
+    gradeChapters: gradeChapters, readyChapters: readyChapters, courseGrade: courseGrade, readyUpTo: readyUpTo, lastReady: lastReady, playChapter: playChapter, isReady: isReady,
     gradeWords: gradeWords, inPlay: inPlay, countable: countable, canPlay: canPlay, behind: behind,
     fresh: fresh, settings: settings, load: load, night: night, officeOf: officeOf, isDue: isDue, hill: hill,
     kindFor: kindFor, apply: apply, plan: plan, interleave: interleave, buildRound: buildRound, requeue: requeue,

@@ -13,8 +13,14 @@
  * API (see ../README.md for the details):
  *   KEY, NAME_MAX, list(), get(id), current(), choose(id), add({name, grade, chapter}), update(id, fields),
  *   remove(id), settings(), set("sound"|"music", bool), onchange(fn) -> unsubscribe, cleanName(s),
- *   grades(), gradeInfo(g), canPlay(g), inGrade(g, ch), monthChapter(g, date?), chapter(n), gradeLine(p, withCourse?),
+ *   grades(), gradeInfo(g), canPlay(g), inGrade(g, ch), courseOf(ch), monthChapter(g, date?), chapter(n),
+ *   gradeLine(p, withCourse?),
  *   screens(host) -> { players(), add(), manage(), changeChapter(id) }
+ *
+ * A class that is still on an earlier chapter (as Case Detective 2.2's SHARED.md, point 15): a player's chapter may
+ * be any chapter from 1 to the grade's last (an 8th grader: 1 to 27), and every read and write keeps it. A new
+ * player and a change of grade start on this month's chapter, one of the grade's own (first to last). The chapter
+ * step shows the grade's own chapters, then "Earlier chapters", grouped by course, one press away.
  *
  * Classic script, no dependencies. Uses window.CD_COURSES when it is there, its own course data otherwise,
  * and the chapter titles of window.LATIN_WORDS. Never throws on a missing or locked localStorage: the list
@@ -104,7 +110,18 @@
   }
   function grades() { return gradeTable().map(copyGrade); }
   function canPlay(g) { var i = gradeInfo(g); return !!(i && !i.soon); }
-  function inGrade(g, ch) { var i = gradeInfo(g); ch = +ch; return !!(i && ch >= i.first && ch <= i.last && Math.floor(ch) === ch); }
+  /* a chapter a player of the grade may be on: 1 to the grade's last (its own, first to last, and the earlier ones) */
+  function inGrade(g, ch) { var i = gradeInfo(g); ch = +ch; return !!(i && ch >= 1 && ch <= i.last && Math.floor(ch) === ch); }
+  /* one of the grade's own chapters (first to last): where a new player or a change of grade starts */
+  function ownChapter(g, ch) { var i = gradeInfo(g); ch = +ch; return !!(i && ch >= i.first && ch <= i.last && Math.floor(ch) === ch); }
+  /* the grade whose chapters hold ch (a copy, as grades() gives it), also a grade still to come; null for none */
+  function courseOf(ch) {
+    ch = +ch;
+    if (!(ch >= 1) || Math.floor(ch) !== ch) { return null; }
+    var t = gradeTable();
+    for (var i = 0; i < t.length; i++) { if (ch >= t[i].first && ch <= t[i].last) { return copyGrade(t[i]); } }
+    return null;
+  }
   function monthChapter(g, date) {
     var i = gradeInfo(g);
     if (!i) { return 1; }
@@ -132,7 +149,8 @@
   function ordinal(g) { g = +g; var s = g % 100 >= 11 && g % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][g % 10] || "th"; return g + s; }
   function gradeLine(p, withCourse) {
     if (!p) { return ""; }
-    var i = gradeInfo(p.grade), parts = [ordinal(p.grade) + " grade"];
+    /* the course of the player's chapter: "8th grade · Latin IB · Chapter 15" for a class still on chapter 15 */
+    var i = courseOf(p.chapter) || gradeInfo(p.grade), parts = [ordinal(p.grade) + " grade"];
     if (withCourse && i && i.course) { parts.push(i.course); }
     parts.push("Chapter " + p.chapter);
     return parts.join(" · ");
@@ -248,8 +266,10 @@
     if (!p) { return null; }
     if (f.name != null) { var nm = cleanName(f.name); if (nm) { p.name = nm; } }
     if (f.grade != null && gradeInfo(f.grade) && (canPlay(f.grade) || +f.grade === p.grade)) {
+      /* a new grade keeps the chapter only if it is one of the new grade's own; the same grade keeps any it may have */
+      var moved = +f.grade !== p.grade;
       p.grade = +f.grade;
-      if (f.chapter == null && !inGrade(p.grade, p.chapter)) { p.chapter = monthChapter(p.grade); }
+      if (moved ? !ownChapter(p.grade, p.chapter) : !inGrade(p.grade, p.chapter)) { p.chapter = monthChapter(p.grade); }
     }
     if (f.chapter != null && inGrade(p.grade, f.chapter)) { p.chapter = +f.chapter; }
     write(s);
@@ -398,6 +418,7 @@
       show(el, "setup");
       say(opts.line || "askGrade", "think", draft.name);
     }
+    var earlyN = 0;
     function chapterStep(draft, opts) {
       opts = opts || {};
       var gi = gradeInfo(draft.grade);
@@ -406,28 +427,72 @@
       if (typeof host.filesIn === "function") { try { ready = host.filesIn(draft.grade) || null; } catch (e) { ready = null; } }
       var html = '<div class="lpf lpf-setup"><div class="card lpf-panel">' + (opts.title ? '<h2 class="lpf-h" tabindex="-1">' + opts.title + "</h2>" : stepHead(3, 3, "Which chapter?")) +
         '<p class="lpf-sub">' + esc(ordinal(draft.grade) + " grade · " + gi.course) + '</p><div class="lpf-chs" role="radiogroup" aria-label="Chapter">';
-      for (var c = gi.first; c <= gi.last; c++) {
+      function chBtn(c) {
         var info = chapter(c), tags = "";
         if (c === month) { tags += '<span class="lpf-tag month">This month</span>'; }
         if (ready) { tags += ready[c] ? '<span class="lpf-tag ready">' + icon("check") + "Ready</span>" : '<span class="lpf-tag later">On its way</span>'; }
-        html += '<button type="button" class="lpf-ch" role="radio" data-ch="' + c + '" aria-checked="' + (c === sel ? "true" : "false") + '" tabindex="' + (c === sel ? "0" : "-1") + '"' + (c === sel ? " data-focus" : "") + ">" +
+        return '<button type="button" class="lpf-ch" role="radio" data-ch="' + c + '" aria-checked="' + (c === sel ? "true" : "false") + '" tabindex="-1"' + (c === sel ? " data-focus" : "") + ">" +
           '<span class="lpf-chn">Chapter ' + c + "</span>" + (info.short ? '<span class="lpf-cht">' + info.short.replace(/<(?!\/?i>)[^>]*>/g, "") + "</span>" : "") + (tags ? '<span class="lpf-tags">' + tags + "</span>" : "") + "</button>";
       }
-      html += '</div><div class="lpf-row">' + (opts.back !== false ? '<button type="button" class="btn wood" data-act="back">' + icon("back") + "Back</button>" : "") +
+      for (var c = gi.first; c <= gi.last; c++) { html += chBtn(c); }
+      html += "</div>";
+      /* the earlier chapters, for a class that is still on one: grouped by course, open when one of them is chosen */
+      var groups = [], gk = null, eid = "lpf-early-" + (++earlyN);
+      for (c = 1; c < gi.first; c++) {
+        var co = courseOf(c), key = co ? co.grade : 0;
+        if (!groups.length || key !== gk) { groups.push({ co: co, from: c, to: c, chs: [] }); gk = key; }
+        groups[groups.length - 1].to = c; groups[groups.length - 1].chs.push(c);
+      }
+      var early = groups.length > 0, openE = early && sel < gi.first;
+      if (early) {
+        html += '<div class="lpf-early"><button type="button" class="lpf-ch-open" aria-expanded="' + openE + '" aria-controls="' + eid + '">' +
+          '<span class="lpf-cho-t">Earlier chapters</span><small>For a class that is still on an earlier chapter.</small>' +
+          '<small class="lpf-cho-sel"' + (openE || sel >= gi.first ? " hidden" : "") + ">Chapter " + sel + " chosen</small></button>" +
+          '<div class="lpf-early-list" id="' + eid + '"' + (openE ? "" : " hidden") + ">";
+        groups.forEach(function (gr) {
+          var head = (gr.co && gr.co.course ? gr.co.course + " · " : "") + "chapters " + gr.from + " to " + gr.to;
+          html += '<h3 class="lpf-eh">' + esc(head) + '</h3><div class="lpf-chs" role="radiogroup" aria-label="' + esc(head) + '">' + gr.chs.map(chBtn).join("") + "</div>";
+        });
+        html += "</div></div>";
+      }
+      html += '<div class="lpf-row">' + (opts.back !== false ? '<button type="button" class="btn wood" data-act="back">' + icon("back") + "Back</button>" : "") +
         '<button type="button" class="btn primary" data-act="go">' + esc(opts.go || "Start playing") + icon("next") + "</button></div></div></div>";
-      var el = make(html), btns = el.querySelectorAll("[data-ch]");
+      var el = make(html), btns = el.querySelectorAll("[data-ch]"), opener = el.querySelector(".lpf-ch-open"), elist = el.querySelector(".lpf-early-list");
+      /* the chapters that can be reached now (the earlier ones only while their list is open) */
+      function shown() { return Array.prototype.filter.call(btns, function (x) { return !(elist && elist.hidden && elist.contains(x)); }); }
+      /* one chapter takes the Tab: the chosen one if it shows, else the first that shows */
+      function rove() {
+        var vis = shown(), on0 = vis.filter(function (x) { return +x.getAttribute("data-ch") === sel; })[0] || vis[0];
+        Array.prototype.forEach.call(btns, function (x) { x.tabIndex = x === on0 ? 0 : -1; });
+      }
       function pick(b, focus) {
-        Array.prototype.forEach.call(btns, function (x) { var on1 = x === b; x.setAttribute("aria-checked", on1 ? "true" : "false"); x.tabIndex = on1 ? 0 : -1; });
+        Array.prototype.forEach.call(btns, function (x) { x.setAttribute("aria-checked", x === b ? "true" : "false"); });
         sel = +b.getAttribute("data-ch");
+        rove();
         if (focus) { b.focus(); }
       }
-      Array.prototype.forEach.call(btns, function (b, i) {
+      Array.prototype.forEach.call(btns, function (b) {
         b.addEventListener("click", function () { pick(b); });
         b.addEventListener("keydown", function (e) {
           var d = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
-          if (d) { e.preventDefault(); pick(btns[(i + d + btns.length) % btns.length], true); }
+          if (!d) { return; }
+          var vis = shown(), i = vis.indexOf(b);
+          e.preventDefault(); pick(vis[(i + d + vis.length) % vis.length], true);
         });
       });
+      if (opener && elist) {
+        opener.addEventListener("click", function () {
+          var open1 = elist.hidden;
+          elist.hidden = !open1;
+          opener.setAttribute("aria-expanded", open1 ? "true" : "false");
+          var note = opener.querySelector(".lpf-cho-sel");
+          if (note) { note.textContent = "Chapter " + sel + " chosen"; note.hidden = open1 || sel >= gi.first; }
+          rove();
+          /* the focus stays on the button; the first earlier chapter comes into view */
+          if (open1) { var f1 = elist.querySelector("[data-ch]"); if (f1 && f1.scrollIntoView) { try { f1.scrollIntoView({ block: "nearest" }); } catch (e) { /* ignore */ } } }
+        });
+      }
+      rove();
       on(el, '[data-act="back"]', function () { if (opts.onBack) { opts.onBack(); } else { gradeStep(draft, function () { nameStep(draft, list().length ? players : null); }, function () { chapterStep(draft); }); } });
       on(el, '[data-act="go"]', function () { draft.chapter = sel; (opts.onGo || finishAdd)(draft); });
       show(el, "setup");
@@ -546,7 +611,7 @@
     KEY: KEY, NAME_MAX: NAME_MAX, fallback: true,
     list: list, get: get, current: current, choose: choose, add: add, update: update, remove: remove,
     settings: settings, set: set, onchange: onchange, cleanName: cleanName,
-    grades: grades, gradeInfo: gradeInfo, canPlay: canPlay, inGrade: inGrade, monthChapter: monthChapter, chapter: chapter, gradeLine: gradeLine,
+    grades: grades, gradeInfo: gradeInfo, canPlay: canPlay, inGrade: inGrade, courseOf: courseOf, monthChapter: monthChapter, chapter: chapter, gradeLine: gradeLine,
     screens: screens
   };
 })(typeof window !== "undefined" ? window : this);
