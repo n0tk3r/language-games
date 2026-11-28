@@ -104,8 +104,8 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   min-height: 100vh; min-height: 100dvh;
   --insp: min(clamp(96px, 20vh, 150px), 38vw); --insp-w: var(--insp); --insp-variant: bust;
 }
-.app[data-view="home"] { --insp: clamp(140px, 25vh, 250px); --insp-w: calc(var(--insp) * .747); --insp-variant: full; }
-.app[data-view="home"] .stage { min-height: calc(var(--insp) + 30px); }
+.app[data-view="home"], .app[data-view="players"] { --insp: clamp(140px, 25vh, 250px); --insp-w: calc(var(--insp) * .747); --insp-variant: full; }
+.app[data-view="home"] .stage, .app[data-view="players"] .stage { min-height: calc(var(--insp) + 30px); }
 
 /* top bar */
 .topbar {
@@ -123,6 +123,11 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .tb-btn:active { transform: translateY(1px); }
 /* the way back to all the games: a link (it leaves the game), in the look of the buttons beside it */
 .tb-games { text-decoration: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+/* the player on the case, on the casebook: the badge, and from 900 px the name (js/game.js, syncChip). On the
+   games site a link to the home page, where the players are chosen; elsewhere a button for the game's own. */
+.tb-btn.tb-chip { padding: 0 6px; border-radius: 22px; box-shadow: inset 0 0 0 1.5px rgba(226, 169, 60, .6); text-decoration: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.tb-chip .pl-badge.sm { width: 32px; height: 32px; font-size: 17px; }
+.tb-cname { display: none; min-width: 0; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff; font: 800 16px/1.2 var(--f-ui); unicode-bidi: isolate; }
 .tb-lab { display: none; }
 .tb-sound .ic-off { display: none; }
 .tb-sound[aria-pressed="false"] .ic-on { display: none; }
@@ -142,7 +147,8 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .logo .ic { width: 26px; height: 26px; color: var(--brass); }
 .logo > span { display: flex; flex-direction: column; }
 .logo small { margin-top: 3px; color: var(--cream-2); font: 700 11.5px/1 var(--f-ui); letter-spacing: .2px; }
-.app:not([data-view="home"]) .logo { display: none; }
+/* (the logo stands on the screens of the players and on the home screen; in a case the bar names the file) */
+.app:not([data-view="home"]):not([data-view="players"]):not([data-view="setup"]) .logo { display: none; }
 .tb-mid { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
 .tb-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 16px/1.2 var(--f-serif); color: var(--cream); }
 .tb-train { display: inline-flex; align-items: center; gap: 6px; flex: none; overflow: visible; }
@@ -277,9 +283,12 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .rank-count { display: flex; align-items: baseline; font: 800 23px/1 var(--f-ui); color: var(--brass-lt); }
 .rank-count span { font-size: 15px; color: var(--cream-2); }
 /* every star there is to win: three to a rank */
-.rank-row { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 5px; }
-.rk-g { display: flex; flex: 1 1 0; justify-content: center; gap: 1px; padding: 3px 2px; border-radius: 9px; background: rgba(0, 0, 0, .26); }
-.rk-g svg { width: 19px; height: 19px; fill: rgba(255, 246, 220, .08); stroke: #b9a67c; stroke-width: 1.5; }
+/* (A row that does not wrap never pushes the page wide: its groups share the width by their stars (--n,
+   rankRowHtml) and its stars may shrink, all alike. Twelve stars have their full size from 320 px on; the
+   fifteen of a casebook of five files have it from 351 px on, and are 16 px wide at 320.) */
+.rank-row { grid-column: 1 / -1; display: flex; justify-content: space-between; gap: 5px; min-width: 0; }
+.rk-g { display: flex; flex: var(--n, 1) 1 0; min-width: 0; justify-content: center; gap: 1px; padding: 3px 2px; border-radius: 9px; background: rgba(0, 0, 0, .26); }
+.rk-g svg { flex: 0 1 auto; min-width: 0; width: 19px; height: 19px; fill: rgba(255, 246, 220, .08); stroke: #b9a67c; stroke-width: 1.5; }
 .rk-g svg.on { fill: #f4b730; stroke: #6b430c; stroke-width: 1.2; animation: star-pop .42s cubic-bezier(.2, 1.7, .4, 1) backwards; animation-delay: calc(var(--i, 0) * 45ms + .2s); }
 
 .files { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px 10px; margin: 14px 0 0; padding: 0; list-style: none; }
@@ -293,6 +302,8 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .folder:active { transform: translateY(2px); }
 .folder::before { content: ""; position: absolute; right: 12px; top: -8px; width: 44%; height: 8px; border: 2px solid #6b4a22; border-bottom: 0; border-radius: 4px 4px 0 0; background: #fffdf4; }
 .f-tab { position: absolute; left: -2px; top: -18px; height: 18px; padding: 0 11px; border: 2px solid #6b4a22; border-bottom: 0; border-radius: 8px 11px 0 0; background: #f8e2ae; color: #5a3a12; font: 800 12px/16px var(--f-ui); letter-spacing: .8px; text-transform: uppercase; white-space: nowrap; }
+/* the chapter of a file, in its tab where the folder is wide enough to hold it beside the ribbon */
+.f-ch { display: none; }
 .f-title { font: 800 18px/1.1 var(--f-serif); }
 .f-blurb { display: none; font-size: 14px; line-height: 1.28; color: #4a3626; }
 .f-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; margin-top: auto; padding-top: 5px; }
@@ -307,6 +318,52 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .f-flag { position: absolute; z-index: 1; right: 9px; top: -14px; padding: 3px 8px 6px; background: var(--red); color: #fff; font: 800 12px/1.2 var(--f-ui); letter-spacing: .6px; text-transform: uppercase; white-space: nowrap; box-shadow: 0 2px 3px rgba(20, 10, 4, .4); -webkit-clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 5px), 0 100%); clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 5px), 0 100%); }
 .f-ribbon { position: absolute; right: -5px; top: -21px; width: 30px; height: 30px; }
 .home-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; margin: -4px -6px -6px; }
+/* The links at the foot of a player's home: the way to the other games (only on the games site) and the
+   reset stay in .home-foot; the sources page joins them in one row (.home-end), in the middle. */
+.home-end { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; margin: -4px -6px -6px; }
+.home-end .home-foot { display: contents; }
+.home-end .home-src { order: 1; }
+.home-end [data-action="reset"] { order: 2; }
+
+/* The stars of a save of 2.1, before the casebook: was it you? (js/game.js, claim) */
+.claim { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 16px 16px; border-radius: 16px; background: var(--parch); color: var(--ink); box-shadow: 0 3px 0 #4a2f14, 0 8px 14px rgba(20, 10, 4, .35); text-align: center; }
+.cl-h { font: 800 23px/1.15 var(--f-serif); color: var(--ink); }
+.cl-h:focus { outline: none; box-shadow: none; }
+.cl-n { display: inline-flex; align-items: center; gap: 6px; color: #5a3a12; font: 800 30px/1 var(--f-ui); }
+.cl-n .ic { width: 34px; height: 34px; fill: #f4b730; stroke: #7a4e10; stroke-width: 1.3; }
+.cl-t { max-width: 32em; font-size: 17px; font-weight: 700; line-height: 1.4; }
+.cl-note { max-width: 32em; color: #5a3a12; font-size: 15px; font-weight: 700; line-height: 1.35; }
+.cl-btns { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; margin-top: 4px; }
+.cl-btns .btn { flex: 1 1 190px; }
+.cl-btns .btn.cl-no { background: #fff; color: var(--ink); border-color: var(--ink-2); }
+
+/* The casebook of a player, on the home screen: whose it is and the class line at the top, then the files
+   chapter by chapter, then the chapters that open later. */
+.cb-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 14px; margin: -8px 0 -6px; }
+.cb-who { display: flex; align-items: center; gap: 9px; flex: 1 1 100%; min-width: 0; }
+.cb-name { flex: 0 1 auto; min-width: 0; font: 800 20px/1.15 var(--f-serif); color: #fff; overflow-wrap: anywhere; }
+.cb-switch { flex: none; margin: 0 -10px 0 auto; }
+.cb-class { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; color: var(--cream-2); font-size: 15px; font-weight: 700; line-height: 1.25; }
+.cb-line { padding: 4px 0; }
+.cb-change { margin-left: 2px; padding: 0 10px; }
+.cb-fail { padding: 8px 12px; border-left: 6px solid var(--brass); border-radius: 10px; background: rgba(24, 12, 5, .4); color: var(--cream); font-weight: 700; line-height: 1.35; }
+.cb-ch, .cb-locked { position: relative; display: flex; flex-direction: column; min-width: 0; }
+.ch-h { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font: 800 13px/1.35 var(--f-ui); letter-spacing: .8px; text-transform: uppercase; color: var(--brass-lt); }
+.ch-h .ch-t { font: 700 16px/1.25 var(--f-serif); letter-spacing: 0; text-transform: none; color: var(--cream); }
+.ch-here { padding: 1px 8px; border-radius: 8px; background: var(--red); color: #fff; font: 800 12px/1.45 var(--f-ui); letter-spacing: .6px; white-space: nowrap; }
+/* (one group, of the class's own chapter: the heading is for a screen reader) */
+.cb-ch.solo > .ch-h { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+.ch-note { font-size: 15px; line-height: 1.35; color: var(--cream-2); }
+.cb-ch .ch-note { margin-top: 4px; }
+.cb-ch:not(.solo) > .files { margin-top: 26px; }
+/* the chapters that open later: a line each, not a button */
+/* (not .locked: that is the class of a question's answers once they are locked) */
+.lk-list { display: grid; gap: 4px; margin: 4px 0 0; padding: 0; list-style: none; }
+.lk { position: relative; padding-left: 30px; color: var(--cream-2); font-size: 15px; line-height: 1.35; }
+.lk-ic { position: absolute; left: 0; top: 0; width: 22px; height: 22px; color: var(--brass-lt); opacity: .85; }
+.lk b { color: var(--cream); }
+.rank-row.many { flex-wrap: wrap; }
+.rank-row.many .rk-g { flex: 1 1 auto; }
 
 /* --------------------------------------------------------------- briefing */
 .bf-cover {
@@ -395,6 +452,10 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .rc-list li { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 3px 8px 3px 4px; border-radius: 18px 9px 9px 18px; background: rgba(255, 255, 255, .55); }
 .rc-list .c-pic { width: 30px; height: 30px; }
 .rc-list .chip { flex: none; min-width: 100px; justify-content: center; font-size: 14px; }
+/* a recap with a long job name ("Ablative of place from which"): its chips share one width and their names
+   wrap between words, so the question beside each keeps its room and the page its width */
+.rc-list.long .chip { width: 44%; min-width: 0; max-width: 176px; padding: 3px 5px; font-size: 13px; line-height: 1.12; text-align: center; }
+.rc-list.long li > span:last-child { flex: 1 1 0; min-width: 0; }
 .rc-list span { font-weight: 700; line-height: 1.2; }
 .rc-ends { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .end-card { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 8px 9px 9px; border-radius: 10px; background: rgba(255, 255, 255, .6); border-top: 7px solid var(--c); }
@@ -403,6 +464,17 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .end-ex { font-size: 15px; line-height: 1.25; }
 .end-ex i { display: block; font-size: 20px; font-style: normal; font-weight: 700; }
 .end-hook { font-size: 14px; line-height: 1.25; color: var(--ink-2); }
+/* more than two fingerprints (the “Every noun” file: one for each declension met): short rows, one under the
+   other; the case and number they share stand once beside the heading, the hook they share once under them */
+.rc-hc { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 10px; }
+.rc-hc .chip { font: 800 13px/1.3 var(--f-ui); padding: 2px 8px; }
+.rc-ends.rows { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.rows .end-card { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 8px; padding: 3px 10px 4px 9px; border-top: 0; border-left: 7px solid var(--c); border-radius: 9px; }
+.rows .end-big { flex: none; min-width: 42px; font-size: 24px; line-height: 1.2; }
+.rows .end-ex { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
+.rows .end-ex i { display: inline-block; min-width: 3.7em; font-size: 19px; }
+.rows .end-hook { flex: 1 1 100%; }
+.rc-all { margin-top: 6px; font-size: 15px; font-weight: 700; line-height: 1.25; color: var(--ink-2); }
 .sus-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .sus { display: flex; flex-direction: column; gap: 2px; padding: 7px 7px 8px; border-radius: 10px; background: rgba(255, 255, 255, .6); }
 .sus .o-pic { width: 42px; height: 42px; margin: 0 0 3px; }
@@ -495,6 +567,12 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .w-lab { visibility: hidden; height: 0; overflow: hidden; padding: 0 7px; white-space: nowrap; text-align: center; color: var(--ci); font: 700 12.5px/1.2 var(--f-ui); }
 .w-lab b { display: block; font-size: 13px; font-weight: 900; }
 .w-lab span { display: block; }
+/* a job with a long name has its short name in the label too ("Abl. agent"): it takes the long one's place
+   where the screen is too short for the sentence (.lab-ab, set by game.js); the long one stays for a screen reader */
+.w-lab b .wl-n { display: inline; }
+.w-lab b .wl-a { display: none; }
+.lab-ab .w-lab b .wl-n { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.lab-ab .w-lab b .wl-a { display: inline; }
 .wu.show .w-lab {
   visibility: visible; height: auto; overflow: visible; align-self: stretch; margin-top: -1px; padding: 3px 7px 4px; border-top: 3px solid var(--c); border-radius: 0 0 9px 9px; background: var(--ct);
   animation: lab-in .32s ease backwards; animation-delay: calc(var(--i, 0) * 55ms);
@@ -559,9 +637,13 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .n3 .o-sub { font-size: clamp(13px, 3.9vw, 15px); }
 .opt.latin { justify-content: center; text-align: center; }
 .opt.latin .o-lab { font: 700 25px/1.1 var(--f-serif); white-space: nowrap; overflow-wrap: normal; }
+/* three Latin forms in one row (the “Every noun” file, a noun with only three forms): the word stands in the
+   middle of its tall card, as the four forms of two rows do, and the stamp lands under it */
+.answers.n3.latin .o-txt { flex: 0 1 auto; }
 /* The net under the answer cards (fitAnswers in game.js): a label that would not fit its card sends four
    cards back to two columns (.cols2), three cards in a row give up the air at their sides (.slim), then
-   the type steps down (.fs, never under 17 px), the number keys give up their badges (.nokey), and at
+   the type steps down (.fs, never under 17 px), the number keys give up their badges (.nokey); names in
+   English give up the air at the sides of their four cards too (.slim) and may go down to 14 px; and at
    the very last the word may break (.brk). While it measures (.probe) a long word must not break by itself. */
 .answers.n4.cols2 { grid-template-columns: 1fr 1fr; }
 .answers.fs .o-lab { font-size: var(--lab-fs, 17px) !important; }
@@ -585,6 +667,13 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .answers.mk-top.n3 .opt.colored .o-mark { top: 12px !important; }
 .answers.nokey .o-key { display: none !important; }
 .answers.n3.slim .opt { padding-left: 4px !important; padding-right: 4px !important; }
+.answers.n4.slim .opt { padding-left: 7px !important; padding-right: 6px !important; }
+.answers.n4.slim .opt.colored { padding-left: 15px !important; }
+/* (buildAnswers, fitPlay) A card with the long name of a job carries the short one too: it shows only
+   where a phone is too short for the question ("opt-ab"); a screen reader keeps the long one. */
+.o-lab .ol-a { display: none; }
+.v-play.opt-ab .o-lab .ol-n { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.v-play.opt-ab .o-lab .ol-a { display: inline; }
 .answers.st-sm .o-stamp { padding: 2px 5px 1px; font-size: 11.5px; letter-spacing: .3px; }
 .answers.locked .opt { cursor: default; }
 .answers.locked .opt:not(.right):not(.wrong) { opacity: .58; }
@@ -756,9 +845,17 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .app.compact .sheet.has-wn .sh-not, .app.compact .sheet.has-wn .sh-is { display: none; }
 .app.compact .sheet.has-wn .sh-ask, .app.compact .sheet.has-wn .sh-ans { display: flex; }
 .app.compact .sheet.has-wn .sh-wn { display: block; }
-.sh-ask > b { font: 800 18px/1.15 var(--f-serif); }
+.sh-ask > b, .sh-x > b { font: 800 18px/1.15 var(--f-serif); }
 .sh-ask .chip { padding: 2px 8px; font-size: 14px; }
-.sh-ask .chip + b { margin-left: -5px; }
+/* the question mark never stands alone on a line: it keeps to the side of its chip, and a name that is
+   longer than the line wraps inside the chip */
+.sh-x { display: flex; align-items: center; gap: 3px; min-width: 0; max-width: 100%; }
+.sh-x .chip { min-width: 0; }
+/* (buildSheet, trimAnswered) that chip carries the short name of a job beside its long one: the short
+   one shows only where a phone is too short for the note ("ask-ab"); a screen reader keeps the long one */
+.sh-ask .ol-a { display: none; }
+.sheet.ask-ab .sh-ask .ol-n { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.sheet.ask-ab .sh-ask .ol-a { display: inline; }
 .sh-wn { position: relative; max-width: 37em; margin-top: 7px; padding: 6px 10px 7px; border-radius: 12px; background: #f1dfb9; box-shadow: inset 0 0 0 1.5px rgba(122, 78, 16, .28); font-size: 16px; line-height: 1.36; }
 .sh-wn::before { content: ""; position: absolute; left: 20px; top: -6px; width: 11px; height: 11px; background: #f1dfb9; box-shadow: inset 1.5px 1.5px 0 rgba(122, 78, 16, .28); transform: rotate(45deg); }
 .sh-ans { margin-top: 8px; }
@@ -780,8 +877,15 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 .app.compact .dense .dock.stick { padding-top: 4px; padding-bottom: calc(7px + env(safe-area-inset-bottom)); }
 .app.compact .dense2 .sh-wn, .app.compact .dense2 .sh-why { line-height: 21px; }
 .app.compact .dense2 .scroll { padding-top: 4px; padding-bottom: 4px; }
+/* and at the very last the answer cards that stay on the desk above the note close ranks too ("dense3"):
+   the "Ruled out" stamps go (such a card is still struck through, dashed and pale; a card with a face
+   keeps its stamp, which takes no room there), and each row is as tall as its own words need */
+.app.compact .dense3.is-choice .answers { grid-auto-rows: auto; row-gap: 6px; }
+.app.compact .dense3 .answers .opt.out:not(.has-pic) .o-stamp { display: none; }
 /* a second look with a clue out, on a screen with no room to spare: the question alone stays in the bubble */
 .app.terse .b-text .b-lead { display: none; }
+/* (and the gap under that line goes with it) */
+.app.terse .b-text .b-lead + p { margin-top: 0; }
 
 /* ---------------------------------------------------------------- results */
 .verdict {
@@ -950,6 +1054,57 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 /* the line about the keys is for a device that has them */
 @media (hover: none) and (pointer: coarse) { .nb-tips .kb-tip { display: none; } }
 .nb-tips kbd { display: inline-block; min-width: 24px; padding: 0 6px; border: 1.5px solid var(--ink-2); border-bottom-width: 3px; border-radius: 6px; background: #fff; font: 800 14px/1.5 var(--f-ui); text-align: center; }
+/* A casebook of more than one chapter: a tab for each chart, the chapter above its title. A chart of
+   another unit may have a note of its own in place of the sneaky ending's line. */
+.dc-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 10px; }
+.dc-tab { display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 44px; padding: 3px 12px 5px; border: 2px solid var(--ink-2); border-radius: 12px; background: #fff; color: var(--ink); font: 800 15px/1.2 var(--f-ui); text-align: left; cursor: pointer; }
+.dc-tab small { font: 800 12.5px/1.25 var(--f-ui); letter-spacing: .6px; text-transform: uppercase; color: var(--ink-2); }
+.dc-tab[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: #fff; }
+.dc-tab[aria-pressed="true"] small { color: var(--cream-2); }
+.dc-note { margin-top: 4px; line-height: 1.38; }
+.nb-case.no-pic { padding-left: 11px; }
+/* the word list of a casebook: the class's chapter first, then the ones before it */
+.wl-ch + .wl-ch { margin-top: 16px; padding-top: 12px; border-top: 1.5px solid #e2cf9f; }
+.wl-chh { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; margin: 0 0 6px; font: 800 18px/1.25 var(--f-serif); color: var(--red-dk); }
+.wl-cht { font: 700 16px/1.3 var(--f-ui); color: var(--ink-2); }
+.wl-cht i { font-size: 1.08em; }
+/* All nouns: every noun of the book so far, chapter by chapter, the latest first. A chapter's list opens at
+   its heading, a noun's whole table under its line. The table of a long noun steps its type down to stay
+   inside the Notebook (--an-fs, set by fitNounTable in game.js); a noun of two words may take two lines,
+   and at the very last a word may break (.brk). In a round of the noun drill the noun on the desk is
+   marked (.now). */
+.an-chs { display: grid; gap: 6px; align-items: start; }
+.an-ch { min-width: 0; }
+.an-chh { margin: 0; }
+.an-chb { display: flex; align-items: center; flex-wrap: wrap; gap: 0 10px; width: 100%; min-height: 44px; padding: 4px 8px 5px 12px; border: 2px solid var(--ink-2); border-radius: 12px; background: #fff; color: var(--ink); font: 700 15.5px/1.3 var(--f-ui); text-align: left; cursor: pointer; }
+/* (a chapter's heading: its number, how many nouns and the arrow in one row, its short title under them) */
+.an-chb b { order: 1; flex: none; font: 800 18px/1.25 var(--f-serif); color: var(--red-dk); }
+.an-n { order: 2; flex: none; margin-left: auto; font: 800 13px/1.3 var(--f-ui); letter-spacing: .3px; color: var(--ink-2); white-space: nowrap; }
+.an-arrow { flex: none; width: 18px; height: 18px; color: var(--ink-2); transition: transform .15s ease; }
+.an-chb .an-arrow { order: 3; }
+.an-cht { order: 4; flex: 1 1 100%; min-width: 0; color: var(--ink-2); }
+.an-chb[aria-expanded="true"] { border-color: var(--ink); }
+.an-chb[aria-expanded="true"] .an-arrow, .an-noun[aria-expanded="true"] .an-arrow { transform: rotate(90deg); }
+.an-list { margin: 2px 0 8px; padding: 0 2px; list-style: none; }
+.an-item + .an-item { border-top: 1.5px solid #e2cf9f; }
+.an-noun { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 6px 4px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: inherit; line-height: 1.3; text-align: left; cursor: pointer; }
+.an-e { flex: 1 1 0; min-width: 0; }
+.an-e i { font-weight: 600; }
+.an-now { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 8px; background: var(--ink); color: #fff; font: 800 12px/1.5 var(--f-ui); letter-spacing: .4px; white-space: nowrap; vertical-align: 1px; }
+.an-item.now > .an-noun { background: rgba(255, 255, 255, .7); box-shadow: inset 4px 0 0 var(--brass-dk); padding-left: 10px; }
+.an-panel { padding: 2px 0 10px; }
+/* a long noun's table: the short names of the cases (the full names stay for a screen reader), then smaller type */
+.d-ca { display: none; }
+.an-panel.ab .d-cn { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.an-panel.ab .d-ca { display: inline; }
+.an-panel .decl td { font-size: var(--an-fs, 20px); }
+.an-panel .d-n { white-space: normal; }
+.an-panel.brk .d-n { overflow-wrap: anywhere; }
+.an-line { margin: 4px 2px 0; font-size: 16px; line-height: 1.35; color: var(--ink-2); }
+/* the way to the sources page, under the field notes */
+.nb-src { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; margin-top: 6px; }
+.nb-src .tlink { padding: 0; color: var(--red-dk); font-size: 16px; }
+.nb-src span { color: var(--ink-2); font-size: 15px; line-height: 1.35; }
 
 /* reset dialog */
 .confirm {
@@ -995,9 +1150,11 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 /* ----------------------------------------------------------- small phones */
 @media (max-width: 345px) {
   :root { --pad: 9px; }
+  /* (the casebook's "Switch player" reaches into the desk's padding by as much as there is: its text stays at the edge) */
+  .cb-switch { margin-right: -9px; }
   .logo { padding-left: 2px; gap: 6px; font-size: 19px; }
   .logo .ic { width: 24px; height: 24px; }
-  .app:not([data-view="home"]) .tb-music { display: none; }
+  .app:not([data-view="home"]):not([data-view="players"]):not([data-view="setup"]) .tb-music { display: none; }
   .tb-btn { padding: 0 8px; }
   .pips { gap: 3px; }
   .pip { width: var(--pip, 11px); height: var(--pip, 11px); }
@@ -1017,9 +1174,9 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .logo { position: relative; padding-bottom: 13px; }
   .logo small { position: absolute; left: 6px; bottom: 0; margin: 0; }
 }
-/* Beside the way back to all the games (on the casebook) the logo makes room: below 640 px it gives up
-   its glass (the house stands where it stood); on a narrow phone its title is a size smaller and its
-   small line takes two lines; on the narrowest phones the bar closes up a little. */
+/* Beside the way back to all the games (on the casebook and the players' screens) the logo makes room:
+   below 640 px it gives up its glass (the house stands where it stood); on a narrow phone its title is a
+   size smaller and its small line takes two lines; on the narrowest phones the bar closes up a little. */
 @media (max-width: 639.98px) {
   .tb-games:not([hidden]) ~ .logo { padding-left: 0; }
   .tb-games:not([hidden]) ~ .logo .ic { display: none; }
@@ -1034,6 +1191,18 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .app[data-view="home"] .topbar { gap: 4px; }
   .tb-games:not([hidden]) ~ .logo { font-size: 16px; }
 }
+/* With the player chip as well (the casebook, js/game.js marks the app has-chip), a phone held upright has no
+   room for the logo's title in one line beside the six buttons of the bar (with the music button): its title
+   may take two lines, and its small line gives way (the casebook's head says the grade and the chapter right
+   below it). The narrowest phones close the bar up a little more, and the title is a size smaller there. */
+@media (max-width: 419.98px) {
+  .has-chip .logo > span { white-space: normal; font-size: 19px; line-height: 1.02; }
+  .has-chip .logo small { display: none; }
+}
+@media (max-width: 359.98px) {
+  .has-chip .topbar { gap: 3px; }
+  .has-chip .logo > span { font-size: 16px; }
+}
 @media (max-width: 345px) {
   .logo small { left: 2px; }
   .nb-decl .decl thead th { padding-left: 4px; padding-right: 2px; font-size: 12.5px; letter-spacing: .3px; }
@@ -1041,6 +1210,9 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .nb-decl .decl tbody th { border-left-width: 6px; font-size: 13.5px; }
   .dc-table.test .decl td { padding-left: 1px; padding-right: 1px; }
   .d-box { padding-left: 2px; padding-right: 2px; border-width: 1.5px; }
+  .an-panel .decl thead th { padding-left: 4px; padding-right: 2px; font-size: 12.5px; letter-spacing: .3px; }
+  .an-panel .decl td, .an-panel .decl tbody th { padding-left: 5px; padding-right: 3px; }
+  .an-panel .decl tbody th { border-left-width: 6px; font-size: 13.5px; }
 }
 @media (max-width: 379.98px) {
   .train-dock .skip .ic { display: none; }
@@ -1090,7 +1262,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 }
 @media (max-height: 590px) {
   .app { --insp: min(clamp(80px, 18vh, 132px), 38vw); }
-  .app[data-view="home"] { --insp: clamp(120px, 25vh, 250px); }
+  .app[data-view="home"], .app[data-view="players"] { --insp: clamp(120px, 25vh, 250px); }
   .view { gap: 9px; }
 }
 @media (min-height: 700px) {
@@ -1143,6 +1315,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .btn:hover, .clue-btn:hover:not(:disabled), .choice:hover, .b-next:hover, .cn-tab:hover { -webkit-filter: brightness(1.07); filter: brightness(1.07); }
   .tb-btn:hover, .nb-close:hover { background: rgba(255, 255, 255, .2); }
   .tlink:hover { color: #fff; }
+  .nb-src .tlink:hover { color: var(--red); }
   .w:hover { background: rgba(226, 169, 60, .25); }
   .w.t:hover { background: #ffd35c; }
   .w.gap:hover { background: rgba(255, 224, 138, .6); }
@@ -1153,7 +1326,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 @media (min-width: 600px) {
   :root { --pad: 22px; }
   .app { --insp: clamp(120px, 17vh, 210px); }
-  .app[data-view="home"] { --insp: clamp(200px, 30vh, 340px); }
+  .app[data-view="home"], .app[data-view="players"] { --insp: clamp(200px, 30vh, 340px); }
   .stage, .desk { width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; }
   .stage { padding-top: 16px; column-gap: 18px; }
   .desk { padding-top: 22px; border-radius: 26px 26px 0 0; }
@@ -1200,7 +1373,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .method.full .m-x { font-size: 16px; }
   .sheet { padding: 14px 18px 16px; border-radius: 16px; }
   .sh-ic { width: 44px; height: 44px; }
-  .sh-line > b { font-size: 23px; }
+  .sh-line > b, .sh-x > b { font-size: 23px; }
   .sh-not > b { font-size: 19px; }
   .sh-job { font-size: 17px; }
   .sh-why { font-size: 18px; }
@@ -1210,6 +1383,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .f-title { font-size: 23px; }
   .f-blurb { display: block; }
   .f-tab { font-size: 12px; height: 20px; top: -20px; line-height: 18px; }
+  .f-ch { display: inline; }
   .f-flag { top: -16px; padding: 4px 10px 8px; font-size: 12px; }
   .f-stamp { width: 70px; font-size: 12px; }
   .stars svg { width: 26px; height: 26px; }
@@ -1244,6 +1418,14 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .nb-pages { padding: 20px 24px 28px; }
   .dc-chips { display: flex; flex-wrap: wrap; align-items: center; }
   .nb-case .c-pic { width: 44px; height: 44px; }
+  /* the casebook (the players and the steps: css3-players.css) */
+  .cb-name { font-size: 22px; }
+  .ch-h .ch-t { font-size: 17px; }
+}
+/* the player chip says the name where the bar has room for it */
+@media (min-width: 900px) {
+  .tb-btn.tb-chip { padding: 0 14px 0 6px; }
+  .tb-cname { display: block; }
 }
 
 /* (also the largest tablets held upright, 900 to 1199 px wide and from 1200 px high, an iPad Pro 12.9 at
@@ -1252,7 +1434,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 @media (min-width: 600px) and (max-width: 899.98px) and (min-height: 900px), (min-width: 900px) and (max-width: 1199.98px) and (min-height: 1200px) {
   /* a tablet held upright: the whole Inspector stands at the window, and the desk pieces grow */
   .app { --insp: clamp(190px, calc(100vh - 770px + (100vw - 600px) * .5), 430px); --insp-w: calc(var(--insp) * .747); --insp-variant: full; }
-  .app[data-view="home"] { --insp: clamp(200px, calc(100vh - 792px), 460px); }
+  .app[data-view="home"], .app[data-view="players"] { --insp: clamp(200px, calc(100vh - 792px), 460px); }
   .stage { padding-top: 24px; column-gap: 22px; }
   .window { left: 8px; width: calc(var(--insp-w) + 44px); border-radius: 50% 50% 0 0 / 110px 110px 0 0; }
   .bubble { padding: 20px 22px 16px; }
@@ -1282,7 +1464,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .cn-text { font-size: 20px; }
   .clue-note::before { left: 130px; }
   .sh-why { font-size: 20px; }
-  .sh-line > b { font-size: 26px; }
+  .sh-line > b, .sh-x > b { font-size: 26px; }
   .sheet { padding: 18px 22px 20px; }
   .folder { min-height: 158px; }
   .files { gap: 34px 16px; margin-top: 24px; }
@@ -1348,11 +1530,11 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
     box-shadow: 0 3px 8px rgba(0, 0, 0, .4);
   }
   .app { display: block; padding: 0 var(--gut) 20px; --insp: min(60vh, 500px, calc(var(--left) * 1.26)); --insp-w: calc(var(--insp) * .747); --insp-variant: full; }
-  .app[data-view="home"] { --insp: min(60vh, 500px, calc(var(--left) * 1.26)); }
-  .app[data-view="home"] .stage { min-height: 0; }
+  .app[data-view="home"], .app[data-view="players"] { --insp: min(60vh, 500px, calc(var(--left) * 1.26)); }
+  .app[data-view="home"] .stage, .app[data-view="players"] .stage { min-height: 0; }
   .topbar { margin: 0 calc(var(--gut) * -1); padding: 0 var(--gut); gap: 10px; }
   .app:not([data-view="home"]) .logo { display: flex; }
-  .app:not([data-view="home"]) .logo span { display: none; }
+  .app:not([data-view="home"]):not([data-view="players"]):not([data-view="setup"]) .logo span { display: none; }
   .stage, .desk { width: auto; max-width: 840px; margin-left: calc(var(--left) + 26px); margin-right: 0; }
   .stage { display: block; position: static; padding: 26px 0 0; }
   .window {
@@ -1384,7 +1566,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .recap.wait { display: block; visibility: hidden; }
   .files { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 14px; margin-top: 24px; }
   .folder { min-height: 112px; }
-  .v-home .dock .btn.primary { flex: 0 1 420px; margin: 0 auto; }
+  .v-home .dock .btn.primary, .v-players .dock .btn.primary { flex: 0 1 420px; margin: 0 auto; }
   .res-actions { flex-direction: row; flex-wrap: wrap; }
   .res-actions > .btn.primary { flex: 1 1 100%; }
   .res-more { flex: 1 1 100%; }
@@ -1398,10 +1580,49 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .nb-sec.span, .nb-how, .nb-words { grid-column: 1 / -1; }
   .nb-how .nb-method { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .wl-groups { grid-template-columns: 1fr 1.3fr .9fr; gap: 0 24px; }
+  /* All nouns: the chapters in two columns (a chapter's list opens in its own column) */
+  .an-chs { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 28px; }
+  /* the casebook's head in one row: whose it is on the left, the class on the right; the chapters that
+     open later in a line beside their label */
+  .v-home { gap: 10px; }
+  .v-home .dock { margin-top: 0; }
+  .cb-head { justify-content: flex-start; column-gap: 0; margin: -10px 0 -8px; }
+  .cb-who, .cb-class { display: contents; }
+  .cb-head .pl-badge { margin-right: 9px; }
+  .cb-name { margin-right: 14px; }
+  .cb-line { order: 1; }
+  .cb-change { order: 2; }
+  .cb-switch { order: 3; margin: 0 -10px 0 auto; }
+  .cb-locked { flex-direction: row; align-items: baseline; column-gap: 10px; }
+  .cb-locked > .ch-h { flex: none; letter-spacing: .4px; }
+  .cb-locked .lk-list { flex: 1; margin: 0; }
+  .lk { padding-left: 28px; font-size: 14px; }
+}
+@media (min-width: 900px) and (max-width: 1219.98px) {
+  /* a narrower desk: the head keeps to one row */
+  .cb-name { font-size: 19px; }
+  .cb-class { font-size: 14px; }
+  .cb-head .tlink { padding: 0 8px; font-size: 15px; }
+  .rank:not(.many) { column-gap: 12px; }
+  .rank:not(.many) .rk-g svg { width: 20px; height: 20px; }
+  /* (a chapter of five files, the four case files and "Every noun": three and two, so that it takes the two
+     rows that four files take here, and the home screen still fits a tablet on its side) */
+  .files.n5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .files.n5 .f-title { font-size: 20px; }
+}
+/* on a laptop the rank, its stars and their count stand in one row (a casebook of up to 15 stars) */
+@media (min-width: 1000px) and (min-height: 480px) {
+  .rank:not(.many) { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .rank:not(.many) .rank-row { grid-column: 3; grid-row: 1; gap: 4px; }
+  .rank:not(.many) .rk-g { flex: none; }
+  .rank:not(.many) .rank-count { grid-column: 4; grid-row: 1; }
 }
 @media (min-width: 1220px) {
   .files { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-  .folder { min-height: 190px; }
+  /* (a chapter of five files, the four case files and "Every noun", keeps one row) */
+  .files.n5 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .folder { min-height: 176px; }
+  .f-ch { display: none; }
 }
 /* Four Latin forms in one row: only where the longest of them (puellārum and its like) fits its card
    with room to spare beside the number key. That takes a desk of 760 px, which every window from
@@ -1461,6 +1682,8 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .act-slot { min-height: 48px; }
   .clue-btn { min-height: 46px; }
   .folder { min-height: 104px; }
+  .f-blurb { display: none; }
+  .rank { padding-top: 8px; padding-bottom: 9px; }
   .is-sentence.has-clue .method { display: none; }
   /* the recap's place is kept from the first line here, so the cover has one (short) form for all lines */
   .v-brief .bf-blurb, .v-brief .bf-meta { display: none; }
@@ -1493,7 +1716,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
    lies just above it. (He is sized and placed in that column by lowFit in game.js.) */
 @media (min-width: 640px) and (max-height: 520px), (min-width: 900px) and (max-height: 619.98px) {
   :root { --bar: 48px; --gut: max(12px, env(safe-area-inset-left), env(safe-area-inset-right)); --left: clamp(230px, 34vw, 330px); }
-  .app, .app[data-view="home"] { --insp: clamp(84px, calc(100vh - 250px), 250px); --insp-w: var(--insp); --insp-variant: bust; }
+  .app, .app[data-view="home"], .app[data-view="players"] { --insp: clamp(84px, calc(100vh - 250px), 250px); --insp-w: var(--insp); --insp-variant: bust; }
   .app { padding-bottom: 6px; }
   .floor { display: none; }
   .window { top: calc(var(--bar) + 8px); bottom: -14px; width: calc(var(--left) - 20px); margin-left: calc((var(--left) - 20px) / -2); border-radius: 50% 50% 0 0 / 96px 96px 0 0; }
@@ -1507,7 +1730,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .desk { margin-top: 6px; margin-left: calc(var(--left) + 14px); padding: 10px 12px 10px; border-radius: 20px; }
   .view { animation-name: view-fade; }
   /* the way on waits under him, on the sill of his window, so the desk has all of its height */
-  .dock.stick, .v-home .dock, .res-actions::before, .play-dock:not(.stick)::before {
+  .dock.stick, .v-home .dock, .v-players .dock, .res-actions::before, .play-dock:not(.stick)::before {
     position: fixed; z-index: 7; left: var(--gut); bottom: 0; width: var(--left); margin: 0; padding: 6px 8px calc(7px + env(safe-area-inset-bottom)); gap: 8px;
     border-radius: 14px 14px 0 0; background: linear-gradient(180deg, #74462c 0%, #5a3320 45%, #452518 100%); box-shadow: inset 0 2px 0 rgba(255, 220, 160, .5), 0 -3px 8px rgba(3, 7, 18, .4);
   }
@@ -1518,8 +1741,8 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   .play-dock { min-height: 0; }
   .gloss-hint { text-align: center; }
   .gloss-hint.used { display: none; }
-  .dock.stick .btn, .v-home .dock .btn, .choice { min-height: 46px; font-size: 17px; }
-  .dock.stick .btn.primary, .v-home .dock .btn.primary { flex: 1 1 auto; margin: 0; }
+  .dock.stick .btn, .v-home .dock .btn, .v-players .dock .btn, .choice { min-height: 46px; font-size: 17px; }
+  .dock.stick .btn.primary, .v-home .dock .btn.primary, .v-players .dock .btn.primary { flex: 1 1 auto; margin: 0; }
   .dock.stick .btn.ghost { flex: none; padding-left: 11px; padding-right: 11px; }
   .v-train .dock.train-dock { margin-top: 0; }
   .sk-t { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -1548,7 +1771,7 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
 @media (min-width: 900px) and (min-height: 480px) and (max-height: 619.98px) {
   /* a small laptop window: there is room for the whole Inspector, standing on the sill */
   :root { --left: clamp(300px, 32vw, 400px); }
-  .app, .app[data-view="home"] { --insp: clamp(200px, calc(100vh - 220px), 400px); --insp-w: calc(var(--insp) * .747); --insp-variant: full; }
+  .app, .app[data-view="home"], .app[data-view="players"] { --insp: clamp(200px, calc(100vh - 220px), 400px); --insp-w: calc(var(--insp) * .747); --insp-variant: full; }
   .app[data-insp="full"] .insp { bottom: var(--low-b, 0px); }
   .insp-glow { width: 120%; margin-left: -60%; height: 105%; }
   .folder { min-height: 104px; }
@@ -1681,4 +1904,118 @@ i { font-family: var(--f-serif); font-style: italic; font-size: 1.08em; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition: none !important; scroll-behavior: auto !important; }
   .b-next::after, .clue-btn.nudge::after { display: none; }
   .folder.next::after { animation: none; opacity: .7; }
+}
+/* ---------------------------------------------------------------- players */
+/* The screens of js/players.js, which the games of the site share: the start screen (who is on the case),
+   the parents' page and the steps of a new player. They share the desk of the home screen: cards in the
+   paper of the folders, the way on in the dock. In game.css this part comes last; build-css.sh also makes
+   css/players.css of it, for the other games: the same rules under the root class .lp of the screens, with
+   the base rules they need. */
+.pl-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; margin: -4px -6px -6px; }
+/* (the headings set their margins and width limit too: on a host page its own h1 and h2 rules, such as the
+   home page's h1 with a max-width of 16em or a `.card h2, .card h3` rule, must not reach them) */
+.pl-h, .st-h { max-width: none; margin: 0; font: 800 23px/1.15 var(--f-serif); color: var(--brass-lt); }
+/* (a heading takes the focus when a new screen comes with the keyboard: it is no control, so no ring) */
+.pl-h:focus, .st-h:focus { outline: none; box-shadow: none; }
+.st-h label { cursor: pointer; }
+.pl-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.pl-list > li { display: flex; min-width: 0; }
+.pl-card {
+  position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 66px; padding: 9px 12px 9px 10px;
+  border: 2px solid #6b4a22; border-radius: 14px; background: linear-gradient(180deg, #f8e2ae 0%, #ecc983 100%); color: var(--ink);
+  text-align: left; cursor: pointer; box-shadow: 0 3px 0 #4a2f14, 0 8px 14px rgba(20, 10, 4, .35);
+}
+.pl-card:active { transform: translateY(2px); }
+.pl-card.last { box-shadow: 0 3px 0 #4a2f14, 0 0 0 3px rgba(255, 227, 154, .9), 0 8px 14px rgba(20, 10, 4, .35); }
+.pl-card.pl-add { border-style: dashed; border-color: rgba(248, 236, 208, .6); background: rgba(255, 246, 220, .08); color: var(--cream); box-shadow: none; }
+.pl-badge {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 46px; height: 46px; border-radius: 50%;
+  background: var(--pc, var(--slate)); color: #fff; font: 800 23px/1 var(--f-serif); box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .35), 0 2px 0 rgba(43, 29, 20, .45);
+}
+.pl-badge.sm { width: 34px; height: 34px; font-size: 18px; }
+.pl-badge.add { background: none; border: 2px dashed currentColor; box-shadow: none; font: 800 26px/1 var(--f-ui); }
+.pl-txt { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.pl-name { font: 800 21px/1.15 var(--f-serif); overflow-wrap: anywhere; }
+.pl-meta { margin-top: 1px; font-size: 15px; font-weight: 700; line-height: 1.25; color: #5a3a12; }
+.pl-add .pl-meta { color: var(--cream-2); }
+.pl-stars { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 4px 9px 4px 6px; border-radius: 10px; background: rgba(90, 58, 18, .15); color: #5a3a12; font: 800 17px/1 var(--f-ui); }
+.pl-stars .ic { width: 20px; height: 20px; fill: #f4b730; stroke: #7a4e10; stroke-width: 1.3; }
+/* the parents' page: each player with three buttons */
+.mg-list { gap: 8px; }
+.mg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; padding: 10px 12px; border-radius: 14px; background: var(--parch); color: var(--ink); box-shadow: 0 3px 0 #4a2f14; }
+.mg-row .pl-txt { flex: 1 1 150px; }
+.mg-acts { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; }
+.mg-acts .btn { flex: 1 1 auto; background: #fff; color: var(--ink); border-color: var(--ink-2); }
+
+/* the steps: a name, a class, a chapter */
+.st-step { font: 800 13px/1.2 var(--f-ui); letter-spacing: .8px; text-transform: uppercase; color: var(--cream-2); }
+.st-sub { margin-top: -6px; font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--cream-2); }
+.st-input {
+  display: block; width: 100%; min-height: 54px; margin: 0; padding: 8px 14px; border: 2px solid #6b4a22; border-radius: 12px;
+  background: #fffaf0; color: var(--ink); font: 700 22px/1.2 var(--f-serif); box-shadow: inset 0 2px 4px rgba(43, 29, 20, .25);
+}
+.st-note { font-size: 15px; line-height: 1.4; color: var(--cream-2); }
+.st-note .ic { display: inline-block; width: 20px; height: 20px; vertical-align: -4px; color: var(--brass-lt); }
+.st-err { font-weight: 800; line-height: 1.3; color: var(--brass-lt); }
+.gr-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.gr-list > li { display: flex; min-width: 0; }
+.gr-card {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 10px; width: 100%; min-height: 62px; padding: 8px 12px 9px 14px;
+  border: 2px solid #6b4a22; border-radius: 3px 12px 12px 12px; background: linear-gradient(180deg, #f8e2ae 0%, #ecc983 100%); color: var(--ink);
+  text-align: left; cursor: pointer; box-shadow: 0 3px 0 #4a2f14, 0 8px 14px rgba(20, 10, 4, .35);
+}
+.gr-card:active:not(:disabled) { transform: translateY(2px); }
+.gr-card.cur { box-shadow: 0 3px 0 #4a2f14, 0 0 0 3px rgba(255, 227, 154, .9), 0 8px 14px rgba(20, 10, 4, .35); }
+.gr-name { grid-column: 1; font: 800 21px/1.15 var(--f-serif); }
+.gr-course { grid-column: 1; font-size: 15px; font-weight: 700; line-height: 1.25; color: #5a3a12; }
+.gr-tag { grid-column: 2; grid-row: 1 / span 2; padding: 3px 8px; border-radius: 8px; background: var(--red); color: #fff; font: 800 12px/1.3 var(--f-ui); letter-spacing: .6px; text-transform: uppercase; white-space: nowrap; }
+.gr-card.soon { border-style: dashed; border-color: rgba(248, 236, 208, .5); background: rgba(255, 246, 220, .06); color: var(--cream); box-shadow: none; cursor: default; }
+.gr-card.soon .gr-course { color: var(--cream-2); }
+.gr-tag.soon { background: rgba(255, 246, 220, .16); color: var(--cream); }
+/* the chapters of the class: one press picks one (a round mark like a radio button shows which) */
+.ch-list { display: grid; gap: 7px; }
+.ch-chip {
+  position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; width: 100%; min-height: 50px; padding: 6px 10px 6px 42px;
+  border: 2px solid rgba(248, 236, 208, .45); border-radius: 12px; background: rgba(255, 246, 220, .08); color: var(--cream); text-align: left; cursor: pointer;
+}
+.ch-chip::before { content: ""; position: absolute; left: 12px; top: 50%; width: 20px; height: 20px; margin-top: -10px; border: 2px solid currentColor; border-radius: 50%; }
+.ch-chip:active { transform: translateY(1px); }
+.ch-chip.on { border-color: #6b4a22; background: linear-gradient(180deg, #f8e2ae 0%, #ecc983 100%); color: var(--ink); box-shadow: 0 3px 0 #4a2f14, 0 0 0 3px rgba(255, 227, 154, .9); }
+.ch-chip.on::before { border-color: var(--red-dk); background: radial-gradient(circle, var(--red) 0, var(--red) 4.5px, rgba(179, 32, 42, 0) 5.5px); }
+.ch-n { flex: none; font: 800 17px/1.2 var(--f-ui); white-space: nowrap; }
+/* (the name keeps 7em beside the number; where the tags have no room left beside it, they go under it: so the chip
+   is never wider than its list, which would widen the list's one column and the page with it on a 320 px phone) */
+.ch-chip .ch-t { flex: 1 1 7em; min-width: 0; font-size: 15px; font-weight: 600; line-height: 1.25; }
+.ch-tags { display: flex; align-items: center; gap: 6px; flex: none; }
+.ch-month { padding: 2px 7px; border-radius: 7px; background: var(--brass); color: var(--brass-ink); font: 800 12px/1.3 var(--f-ui); letter-spacing: .5px; text-transform: uppercase; white-space: nowrap; }
+.ch-files { display: flex; }
+.ch-files .ic, .st-note .ch-key { width: 22px; height: 22px; color: var(--brass-lt); }
+.ch-chip.on .ch-files .ic { color: #6b4a22; }
+/* a class that is still on an earlier chapter: the chapters of the courses before the grade's, a press away
+   under a dashed card (like "Add a player"): "Earlier chapters", its line, and closed, the earlier chapter that
+   is chosen ("Chapter 5 chosen", under the line). Its arrow points down while they are hidden and up while
+   they show. */
+.ch-more { display: grid; gap: 10px; }
+.ch-open {
+  display: flex; align-items: center; gap: 4px 10px; width: 100%; min-height: 54px; padding: 7px 12px 8px 14px;
+  border: 2px dashed rgba(248, 236, 208, .6); border-radius: 12px; background: rgba(255, 246, 220, .06); color: var(--cream); text-align: left; cursor: pointer;
+}
+.ch-open:active { transform: translateY(1px); }
+.ch-open-t { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ch-open-b { font: 800 17px/1.2 var(--f-ui); }
+.ch-open-q { margin-top: 1px; font-size: 15px; font-weight: 700; line-height: 1.25; color: var(--cream-2); }
+.ch-open-on { align-self: flex-start; margin-top: 5px; padding: 2px 7px; border-radius: 7px; background: var(--brass); color: var(--brass-ink); font: 800 12px/1.3 var(--f-ui); letter-spacing: .5px; text-transform: uppercase; white-space: nowrap; }
+.ch-open[aria-expanded="true"] .ch-open-on { display: none; }
+.ch-open .ch-chev { flex: none; width: 22px; height: 22px; transform: rotate(90deg); }
+.ch-open[aria-expanded="true"] .ch-chev { transform: rotate(-90deg); }
+.ch-early { display: grid; gap: 8px; }
+.ch-course { max-width: none; margin: 4px 0 0; font: 800 15px/1.25 var(--f-ui); color: var(--brass-lt); }
+
+/* tablets and wider: two cards to a row */
+@media (min-width: 600px) {
+  .pl-h, .st-h { font-size: 27px; }
+  .pl-list, .gr-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .pl-list.mg-list { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .mg-acts { flex: 0 1 auto; }
+  .ch-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; }
 }

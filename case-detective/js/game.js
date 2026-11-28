@@ -1,17 +1,34 @@
 /*!
  * Case Detective: the game.
- * Plain script. Needs data.js (CD_DATA), detective.js (Detective) and sfx.js (Sfx) loaded first.
- * All Latin and all of the Inspector's lines come from CD_DATA; only short English labels live here.
+ * Plain script. Needs data.js (CD_DATA), detective.js (Detective) and sfx.js (Sfx) loaded first, and
+ * courses.js (CD_COURSES: the grades, the chapters, which chapters have case files) and players.js
+ * (LatinPlayers: the players of the site, and the screens that choose and set up a player).
+ * The case files of chapter 2 are CD_DATA itself. Every other chapter is a data file in js/units/ that sets
+ * CD_UNITS["<chapter>"]; it is loaded when a player's casebook opens that chapter.
+ * All Latin and all of the Inspector's lines come from the data files; only short English labels live here.
  */
 (function () {
   "use strict";
 
-  var D = window.CD_DATA;
-  if (!D || !window.Detective) { return; }
+  var D = window.CD_DATA, LP = window.LatinPlayers;
+  if (!D || !window.Detective || !LP) { return; }
   var Sfx = window.Sfx || { play: function () {}, isMuted: function () { return true; }, setMuted: function () {} };
   var L = D.inspector.lines;
-  var FILES = D.files;
+  var C = coursesOf(window.CD_COURSES);
+  var CL = C.lines || {};
+  var FILES = D.files;     /* the files of the player's casebook, in book order (chapter, then file) */
   var CASE_KEYS = ["nom", "gen", "dat", "acc", "abl", "voc"];
+  var ROW_KEYS = ["nom", "gen", "dat", "acc", "abl", "voc"];   /* a chart's rows: the book's order */
+
+  /* the courses from courses.js; without that file the game is the one chapter it was in 2.1 */
+  function coursesOf(c) {
+    if (c && c.grades && c.grades.length && c.units && c.units.length && c.chapters) { return c; }
+    return {
+      grades: [{ grade: 6, course: "Latin IA", first: 1, last: 8, months: [4, 5, 6, 7, 8, 8, 8, 1, 1, 1, 2, 3] }],
+      chapters: {}, units: [{ chapter: 2, grade: 6 }], jobColors: {}, playerColors: ["#b4441c", "#8f5d00", "#5f6b14", "#2f6f45", "#1f5f8b", "#7a4b2a"],
+      lines: { playersFirst: [D.inspector.lines.homeFirst[0]], playersBack: ["Who is on the case?"] }
+    };
+  }
 
   /* ------------------------------------------------------------ helpers */
   function $(id) { return document.getElementById(id); }
@@ -58,43 +75,252 @@
   var mqReduce = mq("(prefers-reduced-motion: reduce)");
   function reduced() { return !!mqReduce.matches; }
   function fileById(id) { for (var i = 0; i < FILES.length; i++) { if (FILES[i].id === id) { return FILES[i]; } } return null; }
-  function caseInfo(k) { return k === "verb" ? D.verb : D.cases[k]; }
   function selEsc(s) { return String(s).replace(/["\\]/g, "\\$&"); }
+  function own(o, k) { return !!o && Object.prototype.hasOwnProperty.call(o, k); }
+  function arr(a) { return Array.isArray(a) ? a : []; }
+  function ordinal(n) { return n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] || "th")); }
+  /* (a count that starts his sentence is spelled out up to twenty: "Fifteen case files are waiting on my desk.") */
+  var NUMBER_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
+    "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen", "Twenty"];
+  function countWord(n) { return NUMBER_WORDS[n] || String(n); }
+  /* the possessive of a name: Sam’s */
+  function whose(name) { return name + "\u2019s"; }
 
-  /* ------------------------------------------------------------ storage */
-  var save = { stars: {}, solo: {}, seen: {}, sound: true, music: true, piece: 1 };
-  function loadSave() {
+  /* ------------------------------------------------------- the key registry
+     Every answer key, word role and lesson goes through one registry: the six cases (CD_DATA.cases), the
+     verb, then the jobs the open units add (appositive, ablative of agent, ...), with their colors from
+     courses.js. A job takes the class c-<key> like a case does; its colors are written into a small style
+     sheet when the casebook opens (jobStyles). */
+  var JOBS = {};
+  var JOB_KEY_RE = /^[a-z][a-z0-9]{0,15}$/;
+  var HEX_RE = /^#[0-9a-f]{6}$/i;
+  function keyInfo(k) { return k === "verb" ? D.verb : (own(D.cases, k) ? D.cases[k] : (own(JOBS, k) ? JOBS[k] : null)); }
+  /* a case or a job: a key with a color of its own (the verb keeps its tag gray) */
+  function colorKey(k) { return own(D.cases, k) || own(JOBS, k) ? k : null; }
+  /* the case a key stands for, or that a job belongs to (the ablative of agent is an ablative) */
+  function caseOfKey(k) { return own(D.cases, k) ? k : (own(JOBS, k) && JOBS[k].of ? JOBS[k].of : null); }
+  function jobColors(key, of) {
+    var jc = C.jobColors || {}, fb = C.jobFallback || {}, c = own(jc, key) ? jc[key] : null;
+    if (c && HEX_RE.test(c.color) && HEX_RE.test(c.ink) && HEX_RE.test(c.tint)) { return { c: c.color, ci: c.ink, ct: c.tint }; }
+    if (of && fb.ofCase !== false) { return { c: "var(--" + of + ")", ci: "var(--" + of + "-i)", ct: "var(--" + of + "-t)" }; }
+    var n = fb.none && HEX_RE.test(fb.none.color) && HEX_RE.test(fb.none.ink) && HEX_RE.test(fb.none.tint) ? fb.none : { color: "#5c4636", ink: "#5c4636", tint: "#e9dfcc" };
+    return { c: n.color, ci: n.ink, ct: n.tint };
+  }
+  var jobSheet = null;
+  function jobStyles() {
+    var css = "";
+    for (var k in JOBS) {
+      if (!own(JOBS, k)) { continue; }
+      var c = jobColors(k, JOBS[k].of);
+      css += ".c-" + k + " { --c: " + c.c + "; --ci: " + c.ci + "; --ct: " + c.ct + "; }\n";
+    }
     try {
-      var raw = window.localStorage.getItem(D.storageKey);
-      if (!raw) { return; }
-      var o = JSON.parse(raw);
-      if (!o || typeof o !== "object") { return; }
-      FILES.forEach(function (f) {
-        var s = o.stars && typeof o.stars === "object" ? +o.stars[f.id] : 0;
-        if (s >= 1 && s <= 3) { save.stars[f.id] = Math.floor(s); }
-        if (o.solo && typeof o.solo === "object" && o.solo[f.id] === true && save.stars[f.id] === 3) { save.solo[f.id] = true; }
-      });
-      if (o.seen && typeof o.seen === "object") { for (var k in o.seen) { if (o.seen[k] === true) { save.seen[k] = true; } } }
-      if (typeof o.sound === "boolean") { save.sound = o.sound; }
-      if (typeof o.music === "boolean") { save.music = o.music; }
-      else if (o.sound === false) { save.music = false; }          /* a save from before the music, with the sound off: stay quiet */
-      if (typeof o.piece === "number" && o.piece >= 1 && o.piece <= 24) { save.piece = Math.floor(o.piece); }
-    } catch (e) { /* no storage: the game still works, it just forgets */ }
+      if (!jobSheet) { jobSheet = document.createElement("style"); jobSheet.id = "cdJobColors"; document.head.appendChild(jobSheet); }
+      jobSheet.textContent = css;
+    } catch (e) { /* the jobs keep the plain look */ }
   }
-  function persist() {
-    try { window.localStorage.setItem(D.storageKey, JSON.stringify(save)); } catch (e) { /* ignore */ }
+
+  /* ------------------------------------------------------------ storage
+     The players belong to the site: js/players.js (LatinPlayers) keeps them for every game, with the sound
+     and music switches of the device, in localStorage under "latinGames.v1". This game keeps the rest under
+     its own key: caseDetective.v1 = { v: 2, progress: { <player id>: { stars, solo, seen } }, piece }.
+     A player's stars, ribbons and seen-flags are kept for every file id, also for files that are not on show
+     (another chapter, or a unit that is not loaded); the progress of an id that is no longer on the list of
+     players is dropped. A save of version 2.1 (the flat shape: stars, solo, seen, sound, music, piece) has
+     no player. Where the players are chosen on the games' home page, the Inspector asks each player once
+     whether its stars are theirs (claim, below). Until someone takes them they stay under this key, as
+     old: { stars, solo, seen }, with asked: [the ids of the players who said no]. Where the game keeps its
+     own screens for the players, and with ?grade= in the address, the save becomes a player "Player 1",
+     6th grade, chapter 2, as before. Names stay in this browser: nothing here is ever sent anywhere. */
+  var player = null;   /* the player on the case, as the casebook was opened: { id, name, color, grade, chapter } */
+  var prog = {};       /* player id -> { stars, solo, seen } */
+  var stale = false;   /* the player's grade or chapter changed in another tab: the casebook opens again at home */
+  /* the progress of the player on the case (that player's own objects), and the settings of the device */
+  var save = { stars: {}, solo: {}, seen: {}, sound: true, music: true, piece: 1 };
+  var ID_RE = /^[A-Za-z0-9_:.\-]{1,60}$/;
+  function cleanProgress(o) {
+    var p = { stars: {}, solo: {}, seen: {} }, k, s;
+    if (!o || typeof o !== "object") { return p; }
+    if (o.stars && typeof o.stars === "object") {
+      for (k in o.stars) { if (own(o.stars, k) && ID_RE.test(k)) { s = +o.stars[k]; if (s >= 1 && s <= 3) { p.stars[k] = Math.floor(s); } } }
+    }
+    if (o.solo && typeof o.solo === "object") {
+      for (k in o.solo) { if (own(o.solo, k) && ID_RE.test(k) && o.solo[k] === true && p.stars[k] === 3) { p.solo[k] = true; } }
+    }
+    if (o.seen && typeof o.seen === "object") {
+      for (k in o.seen) { if (own(o.seen, k) && ID_RE.test(k) && o.seen[k] === true) { p.seen[k] = true; } }
+    }
+    return p;
   }
+  var inGrade = LP.inGrade, canPlay = LP.canPlay, monthChapter = LP.monthChapter;
+  function progressOf(id) { if (!own(prog, id)) { prog[id] = { stars: {}, solo: {}, seen: {} }; } return prog[id]; }
+  function listedIds() { var ids = {}; LP.list().forEach(function (p) { ids[p.id] = true; }); return ids; }
+  function readSave() {
+    var o = null;
+    try { var raw = window.localStorage.getItem(D.storageKey); if (raw) { o = JSON.parse(raw); } } catch (e) { o = null; }
+    return o && typeof o === "object" && !Array.isArray(o) ? o : null;
+  }
+  function progressIn(o) { return o && o.v === 2 && o.progress && typeof o.progress === "object" && !Array.isArray(o.progress) ? o.progress : null; }
+  function starsIn(pr) { var t = 0, k; if (pr) { for (k in pr.stars) { if (own(pr.stars, k)) { t += pr.stars[k]; } } } return t; }
+  /* the stars of 2.1 that nobody took yet (kept in a save of version 2), and who said they are not theirs */
+  var old = null, asked = [];
+  function oldIn(o) { var p = progressIn(o) && o.old && typeof o.old === "object" ? cleanProgress(o.old) : null; return p && starsIn(p) ? p : null; }
+  function askedIn(o) { return o && Array.isArray(o.asked) ? o.asked.filter(function (id) { return typeof id === "string" && ID_RE.test(id); }) : []; }
+  function usePiece(n) { if (typeof n === "number" && n >= 1 && n <= 24) { save.piece = Math.floor(n); } }
+  function loadSave() {
+    var o = readSave(), pr = progressIn(o), ids = listedIds(), drop = false, k, was;
+    if (pr) {
+      for (k in pr) { if (own(pr, k)) { if (own(ids, k)) { prog[k] = cleanProgress(pr[k]); } else { drop = true; } } }
+      usePiece(o.piece);
+      was = oldIn(o);
+      /* (stars of 2.1 that nobody took: asked about on the games site, a player "Player 1" elsewhere) */
+      if (was && !askOld) { migrate(was); }
+      else if (was) { old = was; asked = askedIn(o); }
+      else if (own(o, "old") || own(o, "asked")) { drop = true; }
+    } else if (o && o.v !== 2 && (own(o, "stars") || own(o, "solo") || own(o, "seen") || own(o, "music") || own(o, "piece"))) {
+      if (askOld) { keepOld(o); } else { migrate(o); }
+    } else if (o && o.v !== 2 && typeof o.sound === "boolean") {
+      oldSwitch(o);
+    }
+    var st = LP.settings();
+    save.sound = st.sound;
+    save.music = st.music;
+    if (drop) { persist(); }
+  }
+  /* A save of version 2.1 where the players are chosen on the games' home page: its stars wait under this key
+     until a player says they are theirs (with none, there is nothing to ask about). Its switches become the
+     device's only while no game has saved the list of players yet, as in oldSwitch. */
+  function keepOld(o) {
+    var was = cleanProgress(o);
+    usePiece(o.piece);
+    if (LP.isNew()) {
+      if (typeof o.sound === "boolean") { LP.set("sound", o.sound); }
+      if (typeof o.music === "boolean") { LP.set("music", o.music); }
+      else if (o.sound === false) { LP.set("music", false); }
+    }
+    old = starsIn(was) ? was : null;
+    asked = [];
+    persist(old ? { old: old, asked: asked } : null);
+  }
+  /* a save of version 2.1: one player, who played chapter 2 ("Player 2" if another game already has a
+     "Player 1"). Its sound and music switches become the device's. */
+  function migrate(o) {
+    var names = {}, n = 1;
+    LP.list().forEach(function (p) { names[p.name] = true; });
+    while (names["Player " + n]) { n++; }
+    var p = LP.add({ name: "Player " + n, grade: 6, chapter: 2 });
+    if (!p) { return; }
+    prog[p.id] = cleanProgress(o);
+    usePiece(o.piece);
+    /* the settings of the old save come along, as they were the last ones chosen in this game */
+    if (typeof o.sound === "boolean") { LP.set("sound", o.sound); }
+    if (typeof o.music === "boolean") { LP.set("music", o.music); }
+    else if (o.sound === false) { LP.set("music", false); }   /* a save from before the music, with the sound off: stay quiet */
+    LP.choose(p.id);
+    old = null;
+    asked = [];
+    persist(null);
+  }
+  /* A key with nothing but the sound switch in it: Sfx wrote it (it remembers its switch under this key, as in
+     2.1) before any file was saved. There is no player in it to keep. Its switch is 2.1's choice only while no
+     game has saved the shared list yet; after that the device's switch stands. */
+  function oldSwitch(o) {
+    if (LP.isNew()) {
+      LP.set("sound", o.sound);
+      if (o.sound === false) { LP.set("music", false); }   /* (as in migrate: the sound off, nothing about music) */
+    }
+    tidySave();
+  }
+  /* The sound switch belongs to the site now (LatinPlayers): what Sfx writes under this key is taken out again
+     at once, so that the key holds only { v: 2, progress, piece }, and a key holding nothing but the switch
+     never looks like a save of 2.1 at the next visit. */
+  function tidySave() {
+    var o = readSave();
+    if (!o || !own(o, "sound")) { return; }
+    try {
+      if (o.v === 2) { delete o.sound; window.localStorage.setItem(D.storageKey, JSON.stringify(o)); }
+      else if (Object.keys(o).length === 1) { window.localStorage.removeItem(D.storageKey); }
+    } catch (e) { /* ignore */ }
+  }
+  /* what another page has of a player's progress, added to this page's own objects: progress only grows (the
+     most stars of a file, its no-clue ribbon, what was seen), but for "Reset progress" */
+  function addProgress(p, o) {
+    var k;
+    for (k in o.stars) { if (own(o.stars, k) && (p.stars[k] || 0) < o.stars[k]) { p.stars[k] = o.stars[k]; } }
+    for (k in o.solo) { if (own(o.solo, k) && p.stars[k] === 3) { p.solo[k] = true; } }
+    for (k in o.seen) { if (own(o.seen, k)) { p.seen[k] = true; } }
+  }
+  /* Written whole, for every player on the list: the player on the case as this page has it, with what the
+     stored save has more of (on the games site every tab follows the player chosen last, so another tab may
+     have won stars for the same player since: they stay), every other player as the stored save has it
+     (another tab may have played them since), or else as this page has it. "Reset progress" writes the player
+     on the case as this page has it alone (fresh). The stars of 2.1 that nobody took yet stay as stored
+     (another tab may have given them away since), unless this page settles them: pending { old, asked }, or
+     null once they are taken. */
+  function persist(pending, fresh) {
+    var cur = readSave(), out = { v: 2, progress: {}, piece: save.piece }, stored = progressIn(cur) || {}, ids = listedIds();
+    LP.list().forEach(function (p) {
+      var id = p.id;
+      if (own(stored, id)) {
+        if (!(player && player.id === id)) { prog[id] = cleanProgress(stored[id]); }
+        else if (!fresh) { addProgress(progressOf(id), cleanProgress(stored[id])); }
+      }
+      if (own(prog, id)) { out.progress[id] = prog[id]; }
+    });
+    if (pending === undefined) {
+      var was = progressIn(cur) ? oldIn(cur) : old;
+      pending = was ? { old: was, asked: progressIn(cur) ? askedIn(cur) : asked } : null;
+    }
+    old = pending && pending.old ? pending.old : null;
+    asked = old ? pending.asked.filter(function (id) { return own(ids, id); }) : [];
+    if (old) { out.old = old; out.asked = asked; }
+    try { window.localStorage.setItem(D.storageKey, JSON.stringify(out)); } catch (e) { /* ignore */ }
+  }
+  /* the progress of the players who are no longer on the list goes */
+  function prune() {
+    var ids = listedIds(), gone = false, k;
+    for (k in prog) { if (own(prog, k) && !own(ids, k)) { delete prog[k]; gone = true; } }
+    if (gone) { persist(); }
+  }
+  function usePlayer(p) {
+    player = p || null;
+    if (!p) { stale = false; }
+    var pr = p ? progressOf(p.id) : null;
+    save.stars = pr ? pr.stars : {};
+    save.solo = pr ? pr.solo : {};
+    save.seen = pr ? pr.seen : {};
+  }
+  function starsWon(id) { var pr = own(prog, id) ? prog[id] : null, t = 0; if (pr) { for (var k in pr.stars) { if (own(pr.stars, k)) { t += pr.stars[k]; } } } return t; }
+
   function starsCopy() {
     var o = {};
     FILES.forEach(function (f) { if (save.stars[f.id]) { o[f.id] = save.stars[f.id]; } });
     return o;
   }
+  /* the stars of the casebook on show (its count on home: "5/15"), and the most it holds */
   function totalStars() { var t = 0; FILES.forEach(function (f) { t += save.stars[f.id] || 0; }); return t; }
   function maxStars() { return FILES.length * 3; }
+  /* The rank counts every star the player has won in Case Detective: every file id, in any chapter or course
+     (save.stars keeps them all, also those the casebook does not show now). Its marks are fixed: the five of
+     data.js (0 to 12, written for the four files of chapter 2), then the ranks above them of courses.js
+     (ranksAbove), so that a year's casebook still has promotions to earn. So a player never stands lower than
+     before: not when the class moves on, nor on an earlier chapter, nor in another grade. */
+  var RANKS = ranksOf();
+  function ranksOf() {
+    var out = arr(D.ranks).map(function (r) { return { min: r.min, title: r.title }; }), top = out.length ? out[out.length - 1].min : 0;
+    arr(C.ranksAbove).forEach(function (r) {
+      var min = r ? Math.floor(+r.min) : NaN;
+      if (r && typeof r.title === "string" && r.title && min > top) { out.push({ min: min, title: r.title }); top = min; }
+    });
+    return out;
+  }
+  function allStars() { var t = 0, k; for (k in save.stars) { if (own(save.stars, k)) { t += save.stars[k] || 0; } } return t; }
+  /* "a Detective", "an Inspector" */
+  function aRank(title) { return /^[AEIOU]/.test(title) ? "an" : "a"; }
   function rankFor(total) {
     var idx = 0;
-    D.ranks.forEach(function (r, i) { if (total >= r.min) { idx = i; } });
-    return { index: idx, title: D.ranks[idx].title, next: D.ranks[idx + 1] || null };
+    RANKS.forEach(function (r, i) { if (total >= r.min) { idx = i; } });
+    return { index: idx, title: RANKS[idx].title, next: RANKS[idx + 1] || null };
   }
   function starsFor(share) {
     var rules = D.starRules.slice().sort(function (a, b) { return b.min - a.min; });
@@ -116,17 +342,247 @@
   }
   function ribbonsLeft() { var n = 0; FILES.forEach(function (f) { if (!save.solo[f.id]) { n++; } }); return n; }
 
+  /* ------------------------------------------------------- units and the casebook
+     A unit is the case files of one chapter: chapter 2 is CD_DATA, every other one a data file
+     (js/units/chNN.js) that courses.js names. A player's casebook follows the course of the class's chapter
+     (LatinPlayers.courseOf), which is the grade's own course or, for a class still on an earlier chapter, an earlier one:
+     every unit of that course whose chapter is at or below the class's chapter (or, if there is none, the
+     course's first unit, ahead of the class); the course's units above it are listed at the end, locked. So
+     an 8th grader on chapter 5 has the files of Latin IA up to chapter 5, as a 6th grader on chapter 5 has.
+     A unit's file is loaded when a casebook opens it: a page never asks for files it does not show. */
+  var UNITS = {};          /* chapter -> the unit as the game uses it */
+  var FILE_CH = {};        /* file id -> the chapter of its unit */
+  var CHARTS = [];         /* the charts of the casebook, merged by id (later chapters win) */
+  var BOOK = { units: [], locked: [], ahead: 0, failed: [], nouns: 0, course: null };
+  function chapterInfo(n) { var c = C.chapters && C.chapters[String(n)]; return c && typeof c === "object" ? c : { title: "", short: "" }; }
+  /* the units of courses.js whose chapter is first to last, in book order */
+  function unitsIn(first, last) {
+    return arr(C.units).filter(function (u) { var c = u ? +u.chapter : 0; return c >= first && c <= last && Math.floor(c) === c; }).sort(function (a, b) { return a.chapter - b.chapter; });
+  }
+  /* an entry of grades[] as a span of chapters: { grade, course, first, last } (null: none) */
+  function spanOf(gi) {
+    return gi && +gi.first >= 1 && +gi.last >= +gi.first ? { grade: +gi.grade, course: String(gi.course || ""), first: +gi.first, last: +gi.last } : null;
+  }
+  function gradeChapters(g) {
+    var gi = null;
+    arr(C.grades).forEach(function (x) { if (x && +x.grade === +g) { gi = x; } });
+    return spanOf(gi);
+  }
+  /* the course of the class's chapter (its grade's own when the chapter is in no course) */
+  function courseOfClass(p) { return spanOf(typeof LP.courseOf === "function" ? LP.courseOf(+p.chapter) : null) || gradeChapters(p.grade); }
+  function casebookPlan(p) {
+    var co = courseOfClass(p), all = co ? unitsIn(co.first, co.last) : [], open = all.filter(function (u) { return u.chapter <= p.chapter; }), ahead = 0;
+    if (!open.length && all.length) { open = [all[0]]; ahead = all[0].chapter; }
+    return { open: open, locked: all.filter(function (u) { return open.indexOf(u) < 0; }), ahead: ahead, course: co };
+  }
+  function cleanText(s) { return typeof s === "string" ? s : ""; }
+  function validForms(f) {
+    if (!f || typeof f !== "object" || !f.nom) { return false; }
+    return ROW_KEYS.every(function (k) { return !own(f, k) || (Array.isArray(f[k]) && f[k].length === 2 && typeof f[k][0] === "string" && typeof f[k][1] === "string"); });
+  }
+  function dotGender(g) { g = String(g || ""); return /^[mfn]$/.test(g) ? g + "." : g; }
+  /* a chart of the general shape: { id, title, note, models: [{ word, meaning, gender, forms }], adjective? } */
+  function chartFrom(c, chapter) {
+    if (!c || typeof c.id !== "string" || !ID_RE.test(c.id) || !Array.isArray(c.models)) { return null; }
+    var models = c.models.filter(function (m) { return m && typeof m.word === "string" && validForms(m.forms); }).map(function (m) {
+      return { word: m.word, meaning: cleanText(m.meaning), gender: dotGender(m.gender), forms: m.forms };
+    });
+    if (!models.length) { return null; }
+    var a = c.adjective && typeof c.adjective.word === "string" && validForms(c.adjective.forms) ? { word: c.adjective.word, meaning: cleanText(c.adjective.meaning), gender: dotGender(c.adjective.gender || models[0].gender), forms: c.adjective.forms, masc: "" } : null;
+    /* (a chart may name the chapter where the book brings in its model nouns: a review chart of an older
+       declension; without one it is the chapter of its unit) */
+    var at = +c.chapter;
+    return { id: c.id, chapter: at >= 1 && at <= 99 && Math.floor(at) === at ? at : chapter, title: cleanText(c.title) || "Chart", note: cleanText(c.note), models: models, adjective: a, sneaky: "", group: "" };
+  }
+  /* the chart of chapter 2 (CD_DATA.declension, the older shape), turned into the general one */
+  function chartOfDeclension() {
+    var dc = D.declension, rows = dc.rows;
+    function formsOf(stem) { var f = {}; rows.forEach(function (r) { f[r.k] = [stem + "|" + r.sg, stem + "|" + r.pl]; }); return f; }
+    var masc = dc.adjective.stem + "us";
+    ((D.wordList && D.wordList.groups) || []).forEach(function (g) {
+      (g.items || []).forEach(function (it) { var f = String(it.la).split(/,\s*/); if (f.length > 1 && f.indexOf(dc.adjective.word) > 0) { masc = f[0]; } });
+    });
+    return {
+      id: "d1", chapter: 2, title: "The first declension", note: "", sneaky: dc.sneaky, group: "any noun of the first declension",
+      models: dc.models.map(function (m) { return { word: m.word, meaning: m.meaning, gender: dotGender(m.gender), forms: formsOf(m.stem) }; }),
+      adjective: { word: dc.adjective.word, meaning: dc.adjective.meaning, gender: dotGender(dc.models[0].gender), forms: formsOf(dc.adjective.stem), masc: masc }
+    };
+  }
+  function cleanJob(key, j) {
+    if (!JOB_KEY_RE.test(key) || own(D.cases, key) || key === "verb" || !j || typeof j.name !== "string" || !j.name) { return null; }
+    return { key: key, name: j.name, abbr: cleanText(j.abbr), question: cleanText(j.question), job: cleanText(j.job), tag: cleanText(j.tag), hook: cleanText(j.hook), of: own(D.cases, j.of) ? j.of : null };
+  }
+  function cleanFile(f) {
+    if (!f || typeof f.id !== "string" || !ID_RE.test(f.id) || !Array.isArray(f.questions) || !f.questions.length || !Array.isArray(f.briefing) || !f.briefing.length) { return false; }
+    return f.questions.every(function (q) { return q && typeof q.id === "string" && Array.isArray(q.options) && q.options.length >= 2 && typeof q.answer === "string"; }) &&
+      f.briefing.every(function (b) { return b && typeof b.say === "string"; });
+  }
+  /* the unit of a chapter as the game uses it (null: its data is missing or cannot be read) */
+  function unitOf(entry) {
+    var ch = +entry.chapter;
+    if (UNITS[ch]) { return UNITS[ch]; }
+    var u = null, k;
+    if (ch === 2 && !entry.src) {
+      u = { chapter: 2, grade: +entry.grade, title: chapterInfo(2).short || "", jobs: {}, method: D.method, charts: [chartOfDeclension()], wordList: D.wordList, files: D.files.slice(), builtIn: true };
+    } else {
+      var raw = window.CD_UNITS && own(window.CD_UNITS, String(ch)) ? window.CD_UNITS[String(ch)] : null;
+      if (!raw || typeof raw !== "object" || !Array.isArray(raw.files)) { return null; }
+      u = { chapter: ch, grade: +entry.grade, title: cleanText(raw.title) || chapterInfo(ch).short || "", jobs: {}, method: null, charts: [], wordList: null, files: [], builtIn: false };
+      if (raw.jobs && typeof raw.jobs === "object") { for (k in raw.jobs) { if (own(raw.jobs, k)) { var j = cleanJob(k, raw.jobs[k]); if (j) { u.jobs[k] = j; } } } }
+      if (Array.isArray(raw.method) && raw.method.length && raw.method.every(function (m) { return m && typeof m.title === "string" && typeof m.text === "string"; })) { u.method = raw.method; }
+      arr(raw.charts).forEach(function (c) { var x = chartFrom(c, ch); if (x) { u.charts.push(x); } });
+      if (raw.wordList && Array.isArray(raw.wordList.groups)) { u.wordList = raw.wordList; }
+      u.files = raw.files.filter(cleanFile);
+    }
+    if (!u.files.length) { return null; }
+    UNITS[ch] = u;
+    return u;
+  }
+  /* unit files are loaded by script tags (that works from file:// as well); a file that fails is not asked for
+     again until the page is loaded anew */
+  var unitLoad = {};   /* src -> { state: "loading" | "done", waiting: [callbacks] } */
+  function loadScript(src, cb) {
+    var st = unitLoad[src];
+    if (st && st.state === "done") { cb(); return; }
+    if (st) { st.waiting.push(cb); return; }
+    st = unitLoad[src] = { state: "loading", waiting: [cb] };
+    var s = document.createElement("script"), safety = 0;
+    function end() {
+      if (st.state === "done") { return; }
+      st.state = "done";
+      clearTimeout(safety);
+      var list = st.waiting;
+      st.waiting = [];
+      list.forEach(function (f) { try { f(); } catch (e) { /* ignore */ } });
+    }
+    s.onload = end;
+    s.onerror = end;
+    safety = setTimeout(end, 20000);
+    s.src = src;
+    document.head.appendChild(s);
+  }
+  function loadUnits(entries, done) {
+    var waiting = 1;
+    function one() { waiting--; if (waiting === 0) { done(); } }
+    entries.forEach(function (e) {
+      if (!e.src || UNITS[+e.chapter] || (window.CD_UNITS && own(window.CD_UNITS, String(e.chapter)))) { return; }
+      waiting++;
+      loadScript(String(e.src), one);
+    });
+    one();
+  }
+  function fileUnit(f) { return f && own(FILE_CH, f.id) ? UNITS[FILE_CH[f.id]] || null : null; }
+  function fileChapter(f) { return f && own(FILE_CH, f.id) ? FILE_CH[f.id] : 2; }
+  /* "File 2", or "Ch. 3 · File 2" where the casebook holds more than one chapter */
+  function fileName(f, always) { return (always || BOOK.units.length > 1 ? "Ch. " + fileChapter(f) + " · " : "") + "File " + f.n; }
+  /* ------------------------------------------------------- the "Every noun" drill
+     Every chapter of the casebook's course, from the course's first chapter to the class's own, ends with a
+     file "Every noun": ten questions a round on the forms of the nouns of the book up to that chapter, drawn anew
+     for every round (js/noundrill.js, CD_NOUN_DRILL, over the noun table js/nouns.js, CD_NOUNS). A chapter
+     whose case files are not written yet has this file alone: a unit of its own, which is not kept in UNITS.
+     The two scripts are asked for when a casebook opens, with the unit files. Without them the game is the
+     one it was: the case files alone, and no list of nouns in the Notebook. */
+  function drill() {
+    var nd = window.CD_NOUN_DRILL;
+    return nd && window.CD_NOUNS && typeof nd.file === "function" && typeof nd.draw === "function" ? nd : null;
+  }
+  function loadDrill(done) {
+    var waiting = 2;
+    function one() { waiting--; if (waiting === 0) { done(); } }
+    loadScript("js/nouns.js", one);
+    loadScript("js/noundrill.js", one);
+  }
+  /* a round of a drill file: ten questions, drawn anew (null: the drill has none to give) */
+  function drillRound(file) {
+    var nd = drill(), qs = null;
+    if (!nd || !file || !file.nounDrill) { return null; }
+    try { qs = nd.draw(file.nounDrill.chapter, file.nounDrill.count); } catch (e) { qs = null; }
+    return Array.isArray(qs) && qs.length && cleanFile({ id: file.id, questions: qs, briefing: file.briefing }) ? qs : null;
+  }
+  /* the drill file of a chapter, with a first set of questions, so that it is a whole file like any other */
+  function drillFile(nd, chapter, grade, n) {
+    var f = null;
+    try { f = nd.file(chapter, grade, n); } catch (e) { f = null; }
+    if (!f || !f.nounDrill || typeof f.id !== "string") { return null; }
+    f.questions = drillRound(f) || [];
+    return cleanFile(f) ? f : null;
+  }
+  /* The units of a casebook with the drill files in them, for the chapters of its course (plan.course). A
+     chapter whose case files could not be opened gets none: the home says that its files are missing.
+     Returns the last chapter whose nouns are in (0: no drill), for the list of nouns in the Notebook. The
+     files are those of the course's grade (an 8th grader on chapter 5 has the same file as a 6th grader:
+     its briefing names the grades before the course's, never the player's). */
+  function addDrill(units, plan, failed, p) {
+    var nd = drill(), gc = plan.course || gradeChapters(p.grade);
+    if (!nd || !gc) { return 0; }
+    var last = Math.min(Math.max(+p.chapter || 0, plan.ahead || 0), gc.last), c, any = false;
+    for (c = gc.first; c <= last; c++) {
+      if (failed.indexOf(c) >= 0) { continue; }
+      var u = null, i;
+      for (i = 0; i < units.length; i++) { if (units[i].chapter === c) { u = units[i]; } }
+      /* (a unit is built once and kept: its drill file is added once) */
+      if (u && u.files.some(function (x) { return !!x.nounDrill; })) { any = true; continue; }
+      var f = drillFile(nd, c, gc.grade, (u ? u.files.length : 0) + 1);
+      if (!f) { continue; }   /* chapter 1 has no noun to drill */
+      any = true;
+      if (u) { u.files = u.files.concat([f]); }
+      else { units.push({ chapter: c, grade: gc.grade, title: chapterInfo(c).short || "", jobs: {}, method: null, charts: [], wordList: null, files: [f], builtIn: false, drill: true }); }
+    }
+    units.sort(function (a, b) { return a.chapter - b.chapter; });
+    return any ? last : 0;
+  }
+  /* the casebook of the player on the case: its files, its jobs, its charts, its Notebook */
+  function useCasebook(units, plan, failed, nouns) {
+    var ids = {};
+    BOOK = { units: units, locked: plan.locked, ahead: plan.ahead, failed: failed, nouns: nouns || 0, course: plan.course || null };
+    FILES = []; FILE_CH = {}; JOBS = {};
+    units.forEach(function (u) {
+      u.files.forEach(function (f) { if (!ids[f.id]) { ids[f.id] = true; FILES.push(f); FILE_CH[f.id] = u.chapter; } });
+      for (var k in u.jobs) { if (own(u.jobs, k)) { JOBS[k] = u.jobs[k]; } }
+    });
+    jobStyles();
+    var byId = {};
+    CHARTS = [];
+    units.forEach(function (u) { u.charts.forEach(function (c) { if (!own(byId, c.id)) { CHARTS.push(c.id); } byId[c.id] = c; }); });
+    CHARTS = CHARTS.map(function (id) { return byId[id]; });
+    LATIN = null;
+    buildNotebook();
+  }
+  function openCasebook(p, done) {
+    var plan = casebookPlan(p), waiting = 2;
+    function ready() {
+      waiting--;
+      if (waiting) { return; }
+      var units = [], failed = [];
+      plan.open.forEach(function (e) { var u = unitOf(e); if (u) { units.push(u); } else { failed.push(+e.chapter); } });
+      var nouns = addDrill(units, plan, failed, p);
+      useCasebook(units, plan, failed, nouns);
+      done();
+    }
+    loadUnits(plan.open, ready);
+    loadDrill(ready);
+  }
+
 
   /* ---------------------------------------------------------------- DOM */
   var app = $("app"), desk = $("desk"), stage = $("stage"), tbMid = $("tbMid");
   var homeBtn = $("homeBtn"), soundBtn = $("soundBtn"), musicBtn = $("musicBtn"), nbBtn = $("nbBtn"), streakEl = $("streak"), streakN = $("streakN");
-  var gamesLink = $("gamesLink");
+  var gamesLink = $("gamesLink"), chip = $("playerChip");
   var inspFig = $("inspFig"), bubble = $("bubble"), bText = $("bText"), bName = $("bName"), bNext = $("bNext");
   var live = $("live"), fx = $("fx");
   var nb = $("notebook"), nbScrim = $("nbScrim"), nbClose = $("nbClose"), nbPages = $("nbPages");
   var cf = $("confirm"), cfScrim = $("cfScrim"), cfNo = $("cfNo"), cfYes = $("cfYes");
   var skA = document.querySelector(".sk-a"), skB = document.querySelector(".sk-b");
+  var logoSub = document.querySelector("#logo small"), cfTitle = $("cfTitle"), cfText = $("cfText");
   bName.textContent = D.inspector.name;
+  /* the confirm dialog says what Reset progress asks; removing a player borrows it with its own words */
+  var CF_RESET = { title: cfTitle ? cfTitle.textContent : "", text: cfText ? cfText.textContent : "", no: cfNo.textContent, yes: cfYes.textContent };
+  /* the line under the title: the player's grade and chapter (it must fit at 320 px beside the buttons) */
+  function syncLogo() {
+    /* (the two halves of the line are spans: on a narrow phone beside the way back to all the games they take a line each) */
+    if (logoSub) { logoSub.innerHTML = player ? esc(ordinal(player.grade) + " grade") + '<span class="lg-dot"> · </span><span class="lg-ch">Chapter ' + esc(player.chapter) + "</span>" : "Wheelock\u2019s Latin"; }
+    syncChip();
+  }
 
   /* the case colors come from data.js; the stylesheet carries the same values as a fallback.
      The verb is not a case: its tag keeps the stylesheet's warm gray (the gray in data.js leans violet,
@@ -135,7 +591,7 @@
     CASE_KEYS.forEach(function (k) { if (D.cases[k] && /^#[0-9a-f]{3,8}$/i.test(D.cases[k].color)) { document.documentElement.style.setProperty("--" + k, D.cases[k].color); } });
   } catch (e) { /* keep the fallback */ }
 
-  var view = "home";
+  var view = "players";
   var R = null;        /* the round being played */
   var B = null;        /* the briefing on screen */
   var T = null;        /* the training case on screen */
@@ -194,7 +650,7 @@
     app.classList.remove("low-side");
     var base = inspFig.clientHeight, br = bubble.getBoundingClientRect();
     var note = view === "play" ? desk.querySelector(".clue-note") : null;
-    var bar = desk.querySelector(".dock.stick, .v-home .dock, .res-actions > .btn.primary, .play-dock .clue-btn");
+    var bar = desk.querySelector(".dock.stick, .v-home .dock, .v-players .dock, .res-actions > .btn.primary, .play-dock .clue-btn");
     /* (layout heights, not drawn ones: the clue is still growing into place when this runs) */
     var nh = note ? note.offsetHeight : 0, sh = 0, side = false;
     if (bar && bar.getClientRects().length && getComputedStyle(bar).position === "fixed") { sh = Math.ceil(window.innerHeight - bar.getBoundingClientRect().top) + (bar.tagName === "BUTTON" ? 7 : 0); }
@@ -262,8 +718,9 @@
     inspVariant = ""; inspSize = 0;
     fitInspector();
   }
-  function mood(m) { insp.setMood(m); }
-  function act(m, ms) { insp.play(m, ms); }
+  /* (while he plays the violin, a new mood puts it away at once: see the violin, below) */
+  function mood(m) { if (idle.on) { violinOff(true); } insp.setMood(m); }
+  function act(m, ms) { if (idle.on) { violinOff(); } insp.play(m, ms); }
   function talk(on) { insp.talk(on); }
   function lookAt(x, y) { if (x === null) { insp.lookAt(null); } else { insp.lookAt(x, y); } }
 
@@ -496,13 +953,32 @@
      copy on disk. A host that serves this game's folder alone (a preview) has nothing above it: there the
      link goes to the games site instead, in a new tab. */
   var GAMES_SITE = "https://n0tk3r.github.io/language-games/";
+  /* "file", or the host name ("" when the page cannot tell) */
+  function siteHost() {
+    try { return location.protocol === "file:" ? "file" : String(location.hostname || "").toLowerCase(); } catch (e) { return ""; }
+  }
+  /* the hosts that have the games' home page above this folder: the games site, a copy on disk, a copy served
+     on this computer (the players are chosen there: see "the games' home page" below) */
+  function onGamesSite(h) { return h === "file" || h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1" || /(^|\.)github\.io$/.test(h); }
   function gamesHome() {
-    var h;
-    try { h = location.protocol === "file:" ? "file" : String(location.hostname || "").toLowerCase(); } catch (e) { return; }
-    if (!gamesLink || h === "file" || h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1" || /(^|\.)github\.io$/.test(h)) { return; }
+    var h = siteHost();
+    if (!gamesLink || !h || onGamesSite(h)) { return; }
     gamesLink.setAttribute("href", GAMES_SITE);
     gamesLink.setAttribute("target", "_blank");
     gamesLink.setAttribute("rel", "noopener");
+  }
+  /* The player chip: on the casebook, the badge and the name of the player on the case (on a phone the badge
+     alone), named for a screen reader with the grade and the chapter. On the games site it leads to the home
+     page, where the players are chosen; where the game keeps its own screens for the players it is a button
+     that opens them (made so at the start). */
+  function syncChip() {
+    if (!chip) { return; }
+    var p = player, show = !!p && (view === "home" || view === "claim");
+    if (chip.hidden === show) { chip.hidden = !show; app.classList.toggle("has-chip", show); }
+    if (!p) { return; }
+    var html = LP.badge(p, "sm") + '<span class="tb-cname">' + esc(p.name) + "</span>";
+    if (chip.innerHTML !== html) { chip.innerHTML = html; }
+    chip.setAttribute("aria-label", "Playing as " + p.name + ", " + LP.gradeLine(p).replace(/ · /g, ", ") + ". Change player or chapter");
   }
   function setMid(html) { tbMid.innerHTML = html || ""; fitPips(); }
   /* Every pip of the round has its place between the buttons of the top bar. A small phone has no room
@@ -575,8 +1051,11 @@
   }
 
   /* ----------------------------------------------------------- views */
-  var CAM = { home: 0, briefing: 1, training: 2, play: 2, results: 3 };
+  var CAM = { players: 0, setup: 0, home: 0, claim: 0, briefing: 1, training: 2, play: 2, results: 3 };
+  /* (the question about the stars of 2.1 comes before the casebook, and has its look: its top bar, his size) */
+  var LOOK = { claim: "home" };
   function setView(name, node, opts) {
+    violinOff();
     clearViewTimers();
     stopTyping();
     hideGloss();
@@ -595,10 +1074,12 @@
     nbBtn.classList.remove("point");
     lookAt(null);
     view = name;
-    app.setAttribute("data-view", name);
-    homeBtn.hidden = name === "home";
+    app.setAttribute("data-view", LOOK[name] || name);
+    homeBtn.hidden = name === "home" || name === "players" || name === "setup" || name === "claim";
     /* the way back to all the games stands where "Case files" is hidden: never two ways back at once */
     if (gamesLink) { gamesLink.hidden = !homeBtn.hidden; }
+    nbBtn.hidden = !player || name === "players" || name === "setup";
+    syncChip();
     desk.textContent = "";
     desk.appendChild(node);
     if (!(opts && opts.keepScroll)) { try { window.scrollTo(0, 0); } catch (e) { /* ignore */ } }
@@ -607,6 +1088,7 @@
     parallax();
     if (name !== "play") { setStreak(0); }
     if (kb) { try { desk.focus({ preventScroll: true }); } catch (e2) { /* ignore */ } }
+    idleArm();
   }
   function primaryBtn() {
     var list = document.querySelectorAll("[data-primary]");
@@ -690,23 +1172,34 @@
     return h + "</span>";
   }
   function pic(id, cls) { return '<svg class="' + cls + '" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><use href="#' + id + '"></use></svg>'; }
-  /* an answer is shown in its case color only when it names the case itself */
+  /* an answer is shown in its case color (or its job's) only when it names the case (or the job) itself */
   function caseOfOption(o) {
-    var c = D.cases[o.k];
+    var k = colorKey(o.k), c = k ? keyInfo(k) : null;
     if (!c) { return null; }
-    if (String(o.label).indexOf(c.name) === 0 || o.sub === c.name) { return o.k; }
+    if (String(o.label).indexOf(c.name) === 0 || o.sub === c.name) { return k; }
     return null;
   }
-  function optionChip(o, extra) {
-    var ck = D.cases[o.k] ? o.k : null;
-    return '<span class="chip' + (o.latin ? " latin" : "") + (ck && !o.latin ? " c-" + ck : "") + (extra ? " " + extra : "") + '"' + (o.latin ? ' lang="la"' : "") + ">" + esc(o.label) + "</span>";
+  /* The short name of an answer's job ("Abl. agent"), where the answer carries the job's long name and
+     that name has more than one word ("Ablative of personal agent"); "" otherwise. Such an answer is
+     written with both names, and the stylesheet shows one of them: the long one, unless a phone is too
+     short for the screen (fitPlay: "opt-ab" on the cards; trimAnswered: "ask-ab" in the case note). A
+     screen reader always gets the long one. */
+  function shortOf(o) {
+    var ki = o && !o.latin ? keyInfo(o.k) : null;
+    return ki && ki.abbr && ki.abbr !== ki.name && o.label === ki.name && /\s/.test(String(ki.name)) ? String(ki.abbr) : "";
+  }
+  function twoNames(o, ab) { return '<span class="ol-n">' + esc(o.label) + '</span><span class="ol-a" aria-hidden="true">' + esc(ab) + "</span>"; }
+  /* both: the chip may carry the short name of its job too (the "Why not ...?" line of the case note) */
+  function optionChip(o, extra, both) {
+    var ck = colorKey(o.k), ab = both ? shortOf(o) : "";
+    return '<span class="chip' + (o.latin ? " latin" : "") + (ck && !o.latin ? " c-" + ck : "") + (extra ? " " + extra : "") + '"' + (o.latin ? ' lang="la"' : "") + ">" + (ab ? twoNames(o, ab) : esc(o.label)) + "</span>";
   }
   /* the words that tie an answer to its case: printed beside the right answer in the verdict */
   function jobOf(o) {
-    var cs = D.cases[o.k];
+    var k = colorKey(o.k), cs = k ? keyInfo(k) : null;
     if (o.sub) { return o.sub; }
     if (!cs) { return ""; }
-    return String(o.label).indexOf(cs.name) === 0 ? cs.question : cs.name;
+    return String(o.label).indexOf(cs.name) === 0 ? (cs.question || cs.name) : cs.name;
   }
   /* gap: the mystery word is the answer itself and must not be given away, so its place is only named */
   function sentenceString(words, gap) { return words.map(function (w) { return (gap && w.t ? "(missing word)" : w.w) + (w.after || ""); }).join(" "); }
@@ -719,11 +1212,16 @@
   }
   function wordLabel(w) {
     if (!w.r) { return null; }
-    var c = caseInfo(w.r);
+    var c = keyInfo(w.r);
     if (!c) { return null; }
     var tag = w.tag || c.tag, s = el("span", "w-lab");
     s.setAttribute("lang", "en");
-    s.innerHTML = "<b>" + esc(c.name) + "</b>" + (tag && String(tag).toLowerCase() !== String(c.name).toLowerCase() ? "<span>" + esc(tag) + "</span>" : "");
+    /* A job with a long name ("Ablative of personal agent") has its short name ("Abl. agent") in the label
+       too. It takes the long one's place where a screen is too short for the sentence (fitPlay,
+       trimAnswered: "lab-ab"); a screen reader always gets the long one. */
+    var two = !!c.abbr && c.abbr !== c.name && /\s/.test(String(c.name));
+    s.innerHTML = "<b>" + (two ? '<span class="wl-n">' + esc(c.name) + '</span><span class="wl-a" aria-hidden="true">' + esc(c.abbr) + "</span>" : esc(c.name)) + "</b>" +
+      (tag && String(tag).toLowerCase() !== String(c.name).toLowerCase() ? "<span>" + esc(tag) + "</span>" : "");
     return s;
   }
   /* The sentence under investigation. Every word is a button (tap it for its meaning). The mystery
@@ -741,7 +1239,7 @@
     wrap.appendChild(tag);
     words.forEach(function (w, i) {
       var hole = !!(gap && w.t);
-      var u = el("span", "wu" + (w.r && caseInfo(w.r) ? " c-" + w.r : ""));
+      var u = el("span", "wu" + (w.r && keyInfo(w.r) ? " c-" + w.r : ""));
       u.style.setProperty("--i", i);
       var b = el("button", "w" + (w.t ? " t" : "") + (hole ? " gap" : ""), hole
         ? '<span class="w-t"> <span class="w-q" aria-hidden="true">?</span></span><span class="sr" lang="en">the missing word</span>' + (w.after ? esc(w.after) : "")
@@ -997,9 +1495,25 @@
   function scenesOn() { var S = window.Scenes; return !!(S && typeof S.create === "function" && typeof S.canDraw === "function"); }
   /* (No picture for a sentence with an ablative in it: scenes.js cannot show "without", "by", "with" or
      "from", and would draw the thing itself as if it were there. Hints from the data would lift that.) */
+  /* The pictures know the words of chapter 2 only. A sentence with any other word, or with a job that is
+     not one of the six cases, simply has no picture: no error, and no empty frame. */
+  var SCENE_WORDS = null;
+  function sceneKnows(words) {
+    if (!SCENE_WORDS) {
+      SCENE_WORDS = {};
+      var add = function (list) { arr(list).forEach(function (w) { if (w && typeof w.lemma === "string") { SCENE_WORDS[w.lemma] = true; } }); };
+      D.files.forEach(function (f) {
+        arr(f.questions).forEach(function (q) { if (q) { add(q.words); } });
+        arr(f.briefing).forEach(function (bl) { if (bl && bl.lesson) { add(bl.lesson.words); } });
+        if (f.training) { add(f.training.words); }
+      });
+    }
+    return words.every(function (w) { return !!w && (!w.r || w.r === "verb" || own(D.cases, w.r)) && typeof w.lemma === "string" && own(SCENE_WORDS, w.lemma); });
+  }
   function canScene(words, hints) {
     try {
       if (!scenesOn() || !(words && words.length)) { return false; }
+      if (!sceneKnows(words)) { return false; }
       if (!hints && words.some(function (w) { return !!w && w.r === "abl"; })) { return false; }
       return !!window.Scenes.canDraw(words, hints || null);
     } catch (e) { return false; }
@@ -1203,10 +1717,15 @@
     var faces = opts.length === 3 && opts.every(function (o) { return !!portraitFor(o); });
     opts.forEach(function (o, i) {
       var ck = caseOfOption(o), p = faces ? portraitFor(o) : "";
+      /* A card that carries the long name of a job ("Ablative of personal agent") has the job's short name
+         too ("Abl. agent"). The short one takes its place on a phone that is too short for the question
+         (fitPlay: "opt-ab"); a screen reader always gets the long one. */
+      var ab = shortOf(o);
       var b = el("button", "opt" + (o.latin ? " latin" : "") + (ck ? " colored c-" + ck : "") + (p ? " has-pic" : ""));
       b.type = "button";
       b.setAttribute("data-k", o.k);
-      b.innerHTML = '<span class="o-key" aria-hidden="true">' + (i + 1) + "</span>" + p + '<span class="o-txt"><span class="o-lab"' + (o.latin ? ' lang="la"' : "") + ">" + esc(o.label) + "</span>" +
+      b.innerHTML = '<span class="o-key" aria-hidden="true">' + (i + 1) + "</span>" + p + '<span class="o-txt"><span class="o-lab"' + (o.latin ? ' lang="la"' : "") + ">" +
+        (ab ? twoNames(o, ab) : esc(o.label)) + "</span>" +
         (o.sub ? '<span class="o-sub">' + esc(o.sub) + "</span>" : "") + '<span class="o-stamp" aria-hidden="true">' + esc(L.eliminated) + '</span></span><span class="o-mark" aria-hidden="true"></span>';
       box.appendChild(b);
     });
@@ -1216,15 +1735,23 @@
      where the longest of them fits; this is the measured net under it, for the fonts, zoom levels and
      window sizes nobody planned for. A label that is wider than its box sends the four cards back to
      two columns (three cards in a row give up the air at their sides); if it still does not fit, the
-     type of the labels steps down (never under 17 px), then the number keys give up their badges; and
-     should even that fail, the word is allowed to break rather than to hide its ending.
+     type of the labels steps down (never under 17 px), then the number keys give up their badges. The
+     name of a job in English ("Ablative of accompaniment" on the narrowest phone) is no Latin form to be
+     read letter by letter: its four cards give up the air at their sides as well, and its type may go
+     down to 14 px, the size the names on three cards in a row have there. And should even that fail,
+     the word is allowed to break rather than to hide its ending.
      Run after the cards are built, and again when the window, the fonts or a card change. */
-  var LAB_MIN = 17;
+  var LAB_MIN = 17, LAB_LOW = 14;
+  /* the part of a card's text that is on the screen: of a job's two names, the one that shows (buildAnswers) */
+  function labShown(lab) {
+    var a = lab.querySelector(".ol-a");
+    return a ? (a.offsetWidth ? a : (lab.querySelector(".ol-n") || lab)) : lab;
+  }
   /* true when the text of a label is wider than the room it has (less `spare` px of air) */
   function labOver(lab, spare) {
     var room = lab.getBoundingClientRect().width, need = lab.scrollWidth > lab.clientWidth ? lab.scrollWidth : 0, rg;
     if (!room) { return false; }
-    try { rg = document.createRange(); rg.selectNodeContents(lab); need = Math.max(need, rg.getBoundingClientRect().width); } catch (e) { /* keep the box's own figure */ }
+    try { rg = document.createRange(); rg.selectNodeContents(labShown(lab)); need = Math.max(need, rg.getBoundingClientRect().width); } catch (e) { /* keep the box's own figure */ }
     return need + spare > room + 0.5;
   }
   function labelOver(box, spare) {
@@ -1243,7 +1770,7 @@
       if (getComputedStyle(m).position !== "absolute") { if (lab && labOver(lab, 0)) { return true; } continue; }
       var texts = rg ? list[i].querySelectorAll(".o-lab, .o-sub") : [];
       for (j = 0; j < texts.length; j++) {
-        rg.selectNodeContents(texts[j]);
+        rg.selectNodeContents(labShown(texts[j]));
         var rs = rg.getClientRects();
         for (k = 0; k < rs.length; k++) {
           if (rs[k].left < mr.right - 1 && mr.left < rs[k].right - 1 && rs[k].top < mr.bottom - 1 && mr.top < rs[k].bottom - 1) { return true; }
@@ -1261,7 +1788,7 @@
     for (i = 0; i < keys.length; i++) {
       var kr = keys[i].getBoundingClientRect(), texts = kr.width ? keys[i].parentNode.querySelectorAll(".o-lab, .o-sub") : [];
       for (j = 0; j < texts.length; j++) {
-        rg.selectNodeContents(texts[j]);
+        rg.selectNodeContents(labShown(texts[j]));
         var rs = rg.getClientRects();
         for (k = 0; k < rs.length; k++) {
           if (rs[k].left < kr.right - 0.5 && kr.left < rs[k].right - 0.5 && rs[k].top < kr.bottom - 0.5 && kr.top < rs[k].bottom - 0.5) { return true; }
@@ -1301,6 +1828,15 @@
         }
         /* before a word may break, the number keys give up their badges (the keys still work) */
         if (labelOver(box, 0)) { box.classList.add("nokey"); }
+        /* and names in English give up the air at the sides of their four cards, then some of their type */
+        if (!box.classList.contains("latin") && labelOver(box, 0)) {
+          box.classList.add("slim");
+          while (fs > LAB_LOW && labelOver(box, 0)) {
+            fs--;
+            box.style.setProperty("--lab-fs", fs + "px");
+            box.classList.add("fs");
+          }
+        }
         if (labelOver(box, 0)) { box.classList.add("brk"); }
       }
       /* the marks: where they are by the stylesheet, unless one would lie on a word or squeeze one; then
@@ -1370,94 +1906,139 @@
 
   /* ------------------------------------------------------- the Notebook */
   var nbOpen = false, cfOpen = false, lastFocus = null;
-  /* The declension chart: one build for the Notebook and for the briefing that opens with it (request 6).
-     It is the chart of the school's book: the model noun (the first of D.declension.models), with the
-     book's adjective beside it where that is asked for. Any other noun of the list takes the same endings.
+  /* The charts: one build for the Notebook and for the briefing that opens with one (request 6). A chart
+     is the book's own: its model nouns (the first one is the noun the book prints), and the book's
+     adjective beside the noun where that is asked for. Every form is written "base|ending"; the ending is
+     printed in bold. Chapter 2's chart (CD_DATA.declension) has been turned into this shape at load.
      o.model: the noun (default: the model noun); o.adj: noun and adjective in every cell; o.sneaky: mark
-     the cells with the sneaky ending (the Notebook explains them; the first briefing does not);
-     o.helps: "(one)" and "(many)" beside the column heads; o.test: every form under a box that a press
-     opens (an object: the cells that are open already, "gen.sg": true).
+     the cells with the chart's sneaky ending (chapter 2: -ae; the Notebook explains them, the first
+     briefing does not); o.helps: "(one)" and "(many)" beside the column heads; o.test: every form under a
+     box that a press opens (an object: the cells that are open already, "gen.sg": true).
      A screen reader gets every form as one text ("porta magna"): the letters with the bold ending are
      for the eye only. */
-  function declRow(k) {
-    var out = null;
-    D.declension.rows.forEach(function (r) { if (r.k === k) { out = r; } });
-    return out;
-  }
-  function declForm(stem, end) { return esc(stem) + "<b>" + esc(end) + "</b>"; }
-  function declTable(o) {
+  function splitForm(s) { s = String(s); var i = s.indexOf("|"); return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + 1)]; }
+  function formText(s) { return String(s).replace("|", ""); }
+  function chartRows(chart) { var f = chart.models[0].forms; return ROW_KEYS.filter(function (k) { return own(f, k) && own(D.cases, k); }); }
+  function declForm(parts) { return esc(parts[0]) + "<b>" + esc(parts[1]) + "</b>"; }
+  function chartTable(chart, o) {
     o = o || {};
-    var dc = D.declension, m = o.model || dc.models[0], adj = o.adj ? dc.adjective : null, n = 0;
+    var m = o.model || chart.models[0], adj = o.adj ? chart.adjective : null, n = 0;
     var h = '<table class="decl' + (adj ? " with-adj" : "") + (o.test ? " is-test" : "") + '"><thead><tr><th scope="col">Case</th><th scope="col">Singular' + (o.helps ? " <small>(one)</small>" : "") +
       '</th><th scope="col">Plural' + (o.helps ? " <small>(many)</small>" : "") + "</th></tr></thead><tbody>";
-    dc.rows.forEach(function (row) {
-      var c = D.cases[row.k];
-      if (!c) { return; }
-      function cell(end, num) {
-        var sn = !!o.sneaky && end === dc.sneaky;
+    chartRows(chart).forEach(function (k) {
+      var c = D.cases[k];
+      function cell(num) {
+        var at = num === "sg" ? 0 : 1, f = splitForm(own(m.forms, k) ? m.forms[k][at] : ""), af = adj && own(adj.forms, k) ? splitForm(adj.forms[k][at]) : null;
+        /* a form the noun does not have (a noun used only in the plural has no singular): the cell is
+           empty, and a screen reader hears that there is none */
+        if (!f[0] && !f[1]) { return '<td class="d-none"><span class="sr">no form</span></td>'; }
+        var sn = !!o.sneaky && !!chart.sneaky && f[1] === chart.sneaky;
         if (sn) { n++; }
-        var eye = '<span class="d-f" aria-hidden="true"><span class="d-n">' + declForm(m.stem, end) + "</span>" + (adj ? ' <span class="d-a">' + declForm(adj.stem, end) + "</span>" : "") + "</span>";
-        var said = esc(m.stem + end + (adj ? " " + adj.stem + end : "")) + (sn ? '<span lang="en"> (the sneaky ending)</span>' : "");
+        var eye = '<span class="d-f" aria-hidden="true"><span class="d-n">' + declForm(f) + "</span>" + (af ? ' <span class="d-a">' + declForm(af) + "</span>" : "") + "</span>";
+        var said = esc(f[0] + f[1] + (af ? " " + af[0] + af[1] : "")) + (sn ? '<span lang="en"> (the sneaky ending)</span>' : "");
         if (o.test) {
           /* Test yourself: the form is in its box, unseen, so the box has the form's own size. The box
              stays a button when it is open: the focus keeps its place, and what the button says changes
              from "covered" to the form. */
-          var id = row.k + "." + num, open = o.test[id] === true, what = esc(c.name + " " + (num === "sg" ? "singular" : "plural"));
+          var id = k + "." + num, open = o.test[id] === true, what = esc(c.name + " " + (num === "sg" ? "singular" : "plural"));
           return "<td" + (sn ? ' class="sn"' : "") + ' lang="la"><button type="button" class="d-box' + (open ? " open" : "") + '" data-box="' + id + '"' + (open ? ' aria-disabled="true"' : "") + ">" +
             '<span class="sr" lang="en"' + (open ? " hidden" : "") + ">" + what + ', covered. Show the form.</span><span class="d-q" aria-hidden="true">?</span>' + eye +
             '<span class="sr"' + (open ? "" : " hidden") + '><span lang="en">' + what + ": </span>" + said + "</span></button></td>";
         }
         return "<td" + (sn ? ' class="sn"' : "") + ' lang="la">' + eye + '<span class="sr">' + said + "</span></td>";
       }
-      h += '<tr class="c-' + c.key + '"><th scope="row">' + esc(c.name) + "</th>" + cell(row.sg, "sg") + cell(row.pl, "pl") + "</tr>";
+      /* (o.abbr: the short name of the case is in the cell too, unseen until a table needs the room: All nouns) */
+      h += '<tr class="c-' + c.key + '"><th scope="row">' + (o.abbr && c.abbr ? '<span class="d-cn">' + esc(c.name) + '</span><span class="d-ca" aria-hidden="true">' + esc(c.abbr) + "</span>" : esc(c.name)) + "</th>" + cell("sg") + cell("pl") + "</tr>";
     });
     return { html: h + "</tbody></table>", sneaky: n };
   }
-  /* The chart in the Notebook can be asked things: another noun of the list (the chips), the book's
-     adjective beside the noun (a switch), and every form under a box, to say it from memory first
-     ("Test yourself", a second switch). Nothing of it is saved: every time the Notebook opens it shows
-     the model noun alone, uncovered. */
-  var nbDecl = { model: 0, adj: false, test: false, open: {}, shown: -1 };
+  /* the ending of one cell of a chart's model noun (chapter 2: declRow(k).sg) */
+  function chartEnd(chart, k, at) { var m = chart.models[0]; return own(m.forms, k) ? splitForm(m.forms[k][at])[1] : ""; }
+  /* The chart in the Notebook can be asked things: another chart of the casebook (the tabs), another noun
+     of the chart (the chips), the book's adjective beside the noun (a switch), and every form under a
+     box, to say it from memory first ("Test yourself", a second switch). Nothing of it is saved: every
+     time the Notebook opens it shows the chart of the class's chapter, its model noun alone, uncovered. */
+  var nbDecl = { chart: 0, model: 0, adj: false, test: false, open: {}, shown: "", chips: "" };
   var DC_TEST = "Say each form out loud, then tap a box to check.";
-  var DC_MODEL = "The model noun in Wheelock’s Latin, chapter 2.", DC_JOB = "The ending changes with the job.";
+  var DC_JOB = "The ending changes with the job.";
+  var GENDER = { "m.": "masculine", "f.": "feminine", "n.": "neuter" };
   function capital(s) { s = String(s); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function modelLine(chart) { return "The model noun in Wheelock’s Latin, chapter " + chart.chapter + "."; }
   /* the dictionary entry of a noun, in the form of the word list: porta, portae, f., gate */
-  function declEntry(m) {
-    var g = declRow("gen");
-    return '<i lang="la">' + esc(m.word) + (g ? ", " + esc(m.stem + g.sg) : "") + "</i>, " + esc(m.gender) + ", " + esc(m.meaning);
+  function declEntry(chart, m) {
+    var g = own(m.forms, "gen") ? formText(m.forms.gen[0]) : "";
+    return '<i lang="la">' + esc(m.word) + (g ? ", " + esc(g) : "") + "</i>" + (m.gender ? ", " + esc(m.gender) : "") + (m.meaning ? ", " + esc(m.meaning) : "");
   }
-  /* the masculine of the chart's adjective, as the word list has it (magnus, magna, magnum) */
-  function adjMasc() {
-    var a = D.declension.adjective, out = a.stem + "us";
-    ((D.wordList && D.wordList.groups) || []).forEach(function (g) {
-      (g.items || []).forEach(function (it) { var f = String(it.la).split(/,\s*/); if (f.length > 1 && f.indexOf(a.word) > 0) { out = f[0]; } });
-    });
-    return out;
-  }
+  function curChart() { return CHARTS[nbDecl.chart] || CHARTS[0] || null; }
   function declShow() {
-    var box = $("dcTable"), dc = D.declension, i;
-    if (!box) { return; }
-    var m = dc.models[nbDecl.model] || dc.models[0], g = declRow("gen"), agrees = m.gender === dc.models[0].gender;
+    var box = $("dcTable"), chart = curChart(), i;
+    if (!box || !chart) { return; }
+    var m = chart.models[nbDecl.model] || chart.models[0], m0 = chart.models[0], adj = chart.adjective, agrees = !!adj && m.gender === adj.gender;
+    var tabs = nbPages.querySelectorAll(".dc-tab");
+    for (i = 0; i < tabs.length; i++) { tabs[i].setAttribute("aria-pressed", CHARTS[+tabs[i].getAttribute("data-chart")] === chart ? "true" : "false"); }
+    var title = $("dcTitle");
+    if (title && title.textContent !== chart.title) { title.textContent = chart.title; }
+    /* the chips: one for each noun of this chart (a chart of one noun has none) */
+    var chipBox = $("dcChips");
+    if (chipBox && nbDecl.chips !== chart.id) {
+      nbDecl.chips = chart.id;
+      var ch = '<span class="dc-lab" id="dcChipsLab">Try another noun:</span>';
+      chart.models.forEach(function (x, n) { ch += '<button type="button" class="dc-chip" data-noun="' + n + '" aria-pressed="false" lang="la">' + esc(x.word) + "</button>"; });
+      chipBox.innerHTML = ch;
+      chipBox.hidden = chart.models.length < 2;
+      var sizer = $("dcAboutSize");
+      if (sizer) { sizer.textContent = modelLine(chart) + " " + DC_JOB; }
+    }
     /* (the entry line is read out when the noun changes, not every time the Notebook opens) */
-    if (nbDecl.shown !== nbDecl.model) { $("dcEntry").innerHTML = declEntry(m); nbDecl.shown = nbDecl.model; }
-    $("dcAbout").textContent = (m === dc.models[0] ? DC_MODEL + " " : "") + DC_JOB;
+    var key = chart.id + ":" + nbDecl.model;
+    if (nbDecl.shown !== key) { $("dcEntry").innerHTML = declEntry(chart, m); nbDecl.shown = key; }
+    $("dcAbout").textContent = (m === m0 ? modelLine(chart) + " " : "") + DC_JOB;
     var chips = nbPages.querySelectorAll(".dc-chip");
-    for (i = 0; i < chips.length; i++) { chips[i].setAttribute("aria-pressed", dc.models[i] === m ? "true" : "false"); }
-    /* the adjective is the feminine one: a masculine noun gets a line that says so in place of the switch */
-    var sw = $("dcAdj"), masc = $("dcMasc"), isMasc = !agrees && m.gender === "m.";
+    for (i = 0; i < chips.length; i++) { chips[i].setAttribute("aria-pressed", chart.models[+chips[i].getAttribute("data-noun")] === m ? "true" : "false"); }
+    /* the adjective agrees with the nouns of its own gender: a noun of another gender gets a line that
+       says so in place of the switch */
+    var sw = $("dcAdj"), masc = $("dcMasc"), other = !!adj && !agrees;
     sw.hidden = !agrees;
     sw.setAttribute("aria-pressed", nbDecl.adj ? "true" : "false");
-    masc.hidden = !isMasc;
-    masc.innerHTML = isMasc ? '<i lang="la">' + esc(capital(m.word)) + "</i> is masculine (" + esc(m.gender) + '), so it does not take <i lang="la">' + esc(dc.adjective.word) +
-      '</i>. It takes <i lang="la">' + esc(adjMasc()) + "</i>, and you learn those endings in chapter 3." : "";
+    var aw = $("dcAdjWord");
+    if (aw && adj && aw.textContent !== adj.word) { aw.textContent = adj.word; }
+    masc.hidden = !other;
+    if (other && adj.masc && m.gender === "m.") {
+      masc.innerHTML = '<i lang="la">' + esc(capital(m.word)) + "</i> is masculine (" + esc(m.gender) + '), so it does not take <i lang="la">' + esc(adj.word) +
+        '</i>. It takes <i lang="la">' + esc(adj.masc) + "</i>, and you learn those endings in chapter 3.";
+    } else if (other) {
+      /* (what the switch would put beside the noun are the adjective's forms of its own gender: "the
+         masculine forms of magnus") */
+      var ag = GENDER[adj.gender] || "";
+      masc.innerHTML = '<i lang="la">' + esc(capital(m.word)) + "</i> is " + esc(GENDER[m.gender] || "of another gender") + (m.gender ? " (" + esc(m.gender) + ")" : "") + ", so it does not take the " + (ag ? esc(ag) + " " : "") +
+        'forms of <i lang="la">' + esc(adj.word) + "</i>.";
+    } else { masc.innerHTML = ""; }
     var tsw = $("dcTest"), say = $("dcSay");
     if (tsw) { tsw.setAttribute("aria-pressed", nbDecl.test ? "true" : "false"); }
     if (say) { say.hidden = !nbDecl.test; }
     box.classList[nbDecl.test ? "add" : "remove"]("test");
-    box.innerHTML = declTable({ model: m, adj: nbDecl.adj && agrees, sneaky: true, helps: true, test: nbDecl.test ? nbDecl.open : null }).html;
-    $("dcBase").innerHTML = g ? 'To decline any noun of the first declension, drop <b class="nw">-' + esc(g.sg) + '</b> from its genitive: <i lang="la">' + esc(m.stem + g.sg) +
-      '</i> gives the base <i lang="la" class="nw">' + esc(m.stem) + "-</i>. Then add the endings." : "";
+    box.innerHTML = chartTable(chart, { model: m, adj: nbDecl.adj && agrees, sneaky: true, helps: true, test: nbDecl.test ? nbDecl.open : null }).html;
+    var gen = own(m.forms, "gen") ? splitForm(m.forms.gen[0]) : null;
+    $("dcBase").innerHTML = gen && gen[1] ? "To decline " + (chart.group ? esc(chart.group) : 'a noun like <i lang="la">' + esc(m.word) + "</i>") + ', drop <b class="nw">-' + esc(gen[1]) + '</b> from its genitive: <i lang="la">' + esc(gen[0] + gen[1]) +
+      '</i> gives the base <i lang="la" class="nw">' + esc(gen[0]) + "-</i>. Then add the endings." : "";
+    var foot = $("dcFoot"), fk = chart.id;
+    if (foot && foot.getAttribute("data-for") !== fk) { foot.setAttribute("data-for", fk); foot.innerHTML = chartFoot(chart); }
     declFit();
+  }
+  /* Under the chart: what its sneaky ending is (chapter 2), or the chart's own note. The chart marks every
+     cell with the sneaky ending; he speaks of three suspects, because the fourth cell (the vocative
+     plural) is the nominative's twin. The caption says so. */
+  function chartFoot(chart) {
+    if (chart.sneaky) {
+      var cells = 0, twin = false;
+      chartRows(chart).forEach(function (k) {
+        if (chartEnd(chart, k, 0) === chart.sneaky) { cells++; }
+        if (chartEnd(chart, k, 1) === chart.sneaky) { cells++; if (k === "voc") { twin = true; } }
+      });
+      return '<p class="decl-key"><b lang="la">-' + esc(chart.sneaky) + "</b><span>The sneaky ending. It turns up " + cells + " times" +
+        (twin && cells === 4 ? ": the three suspects, and the vocative plural, which always looks like the nominative." : ", so the rest of the sentence has to tell you which job it has.") + "</span></p>";
+    }
+    return chart.note ? '<p class="dc-note">' + rich(chart.note) + "</p>" : "";
   }
   /* Noun and adjective stand side by side where every cell holds both on one line. Where one cell
      cannot, the adjective stands under its noun, in all cells alike. */
@@ -1470,9 +2051,18 @@
     for (i = 0; i < fs.length && !over; i++) { if (fs[i].getClientRects().length > 1) { over = true; } }
     if (over) { box.classList.add("stack"); }
   }
-  /* (another chart, by its noun or by a switch, is a new test: every box is closed again) */
+  /* (another chart, another noun or a switch is a new test: every box is closed again) */
+  function declChart(i) {
+    if (!CHARTS[i] || i === nbDecl.chart) { return; }
+    nbDecl.chart = i;
+    nbDecl.model = 0;
+    nbDecl.adj = false;
+    nbDecl.open = {};
+    declShow();
+  }
   function declPick(i) {
-    if (!D.declension.models[i] || i === nbDecl.model) { return; }
+    var chart = curChart();
+    if (!chart || !chart.models[i] || i === nbDecl.model) { return; }
     nbDecl.model = i;
     nbDecl.open = {};
     declShow();
@@ -1492,51 +2082,166 @@
     btn.setAttribute("aria-disabled", "true");
     if (sr.length === 2) { sr[0].hidden = true; sr[1].hidden = false; announce(sr[1].textContent); }
   }
-  function buildNotebook() {
-    var dc = D.declension, h = "", sneakyCells = 0;
-    h += '<section class="nb-sec"><h3>Every case has a job</h3><ul class="nb-cases">';
-    dc.rows.forEach(function (row) {
-      var c = D.cases[row.k];
-      if (!c) { return; }
-      h += '<li class="nb-case c-' + c.key + '">' + pic("c-" + c.key, "c-pic") + '<div class="nb-ct"><span class="chip c-' + c.key + '">' + esc(c.name) + '</span><b class="nb-q">' + esc(c.question) + "</b>" +
-        '<span class="nb-job">Job: ' + esc(c.job) + '</span><span class="nb-hook">' + rich(c.hook) + "</span></div></li>";
-    });
-    h += "</ul></section>";
-    /* the chart of the first declension: what it shows (which noun, with the adjective or without) is
-       put in by declShow() */
-    h += '<section class="nb-sec nb-decl"><h3>The first declension</h3><p class="dc-entry" id="dcEntry" aria-live="polite"></p>' +
-      '<div class="dc-about"><p aria-hidden="true">' + esc(DC_MODEL + " " + DC_JOB) + '</p><p id="dcAbout"></p></div>' +
-      '<div class="dc-chips" role="group" aria-labelledby="dcChipsLab"><span class="dc-lab" id="dcChipsLab">Try another noun:</span>';
-    dc.models.forEach(function (m, i) { h += '<button type="button" class="dc-chip" data-noun="' + i + '" aria-pressed="' + (i ? "false" : "true") + '" lang="la">' + esc(m.word) + "</button>"; });
-    h += '</div><div class="dc-opts"><button type="button" class="dc-switch" id="dcAdj" data-decl="adj" aria-pressed="false"><span class="dc-knob" aria-hidden="true"></span><span>with <i lang="la">' + esc(dc.adjective.word) + "</i></span></button>" +
-      '<p class="dc-masc" id="dcMasc" hidden></p><button type="button" class="dc-switch" id="dcTest" data-decl="test" aria-pressed="false"><span class="dc-knob" aria-hidden="true"></span><span>Test yourself</span></button></div>' +
-      '<p class="dc-say" id="dcSay" hidden>' + esc(DC_TEST) + '</p><div class="dc-table" id="dcTable"></div><p class="dc-base" id="dcBase"></p>';
-    /* the chart marks every cell with the sneaky ending; he speaks of three suspects, because the fourth
-       cell (the vocative plural) is the nominative's twin. The caption says so. */
-    var twin = false;
-    dc.rows.forEach(function (row) {
-      if (!D.cases[row.k]) { return; }
-      if (row.sg === dc.sneaky) { sneakyCells++; }
-      if (row.pl === dc.sneaky) { sneakyCells++; }
-      if (row.k === "voc" && row.pl === dc.sneaky) { twin = true; }
-    });
-    h += '<p class="decl-key"><b lang="la">-' + esc(dc.sneaky) + "</b><span>The sneaky ending. It turns up " + sneakyCells + " times" +
-      (twin && sneakyCells === 4 ? ": the three suspects, and the vocative plural, which always looks like the nominative." : ", so the rest of the sentence has to tell you which job it has.") + "</span></p></section>";
-    h += '<section class="nb-sec nb-how"><h3>The detective method</h3><ol class="nb-method">';
-    D.method.forEach(function (m) { h += "<li><b>" + txt(m.title) + "</b>" + txt(m.text) + "</li>"; });
-    h += "</ol></section>";
-    /* the word list: every Latin word of the sentences with its full dictionary entry, one entry a
-       line, in the form of the chart's own entry line */
-    var wl = D.wordList;
-    if (wl && wl.groups && wl.groups.length) {
-      h += '<section class="nb-sec nb-words"><h3>Word list</h3>' + (wl.intro ? "<p>" + rich(wl.intro) + "</p>" : "") + '<div class="wl-groups">';
-      wl.groups.forEach(function (g) {
-        h += '<div class="wl-group"><h4>' + rich(g.title) + '</h4><ul class="wl">';
-        (g.items || []).forEach(function (it) { h += '<li><i lang="la">' + esc(it.la) + "</i>" + (it.note ? ", " + esc(it.note) : "") + ", " + rich(it.en) + "</li>"; });
-        h += "</ul></div>";
+  /* the chart the Notebook opens with: the one of the class's chapter (the last of the casebook) */
+  function homeChart() { return Math.max(0, CHARTS.length - 1); }
+  /* the method of a file: its unit's own, or the one of chapter 2 */
+  function methodOf(f) { var u = fileUnit(f); return u && u.method ? u.method : D.method; }
+  /* All nouns: every noun of the book up to the class's chapter (the nouns of the drill, js/noundrill.js),
+     chapter by chapter, the latest first. A chapter's list opens and closes at its heading, a noun's whole
+     table under its line; a table is built when it is first asked for, by the chart renderer above. Every
+     time the Notebook opens, the class's chapter is open and every table is closed. In a round of the noun
+     drill the chapter of the noun on the desk is the open one, and that noun is marked and in view (his
+     clue may send the player here: "Check its table in your Notebook."). */
+  var AN_SIZES = [18, 17, 16, 15, 14];
+  function nounGroups() {
+    var nd = drill(), out = [];
+    if (!nd || !BOOK.nouns || typeof nd.groups !== "function" || typeof nd.chart !== "function") { return out; }
+    try { out = arr(nd.groups(BOOK.nouns)).filter(function (g) { return g && Array.isArray(g.nouns) && g.nouns.length && +g.chapter >= 1; }); } catch (e) { out = []; }
+    return out;
+  }
+  function nounsHtml() {
+    var groups = nounGroups(), h = "";
+    if (!groups.length) { return ""; }
+    h += '<section class="nb-sec nb-nouns span"><h3>All nouns</h3><p>Every noun of Wheelock’s Latin up to chapter ' + BOOK.nouns + '. Tap a noun to see all its forms.</p><div class="an-chs">';
+    groups.forEach(function (g) {
+      var ch = +g.chapter, short = chapterInfo(ch).short, list = g.nouns.filter(function (x) { return x && typeof x.id === "string" && ID_RE.test(x.id); }), n = list.length, id = "anCh" + ch;
+      h += '<div class="an-ch"><h4 class="an-chh"><button type="button" class="an-chb" data-anch="' + ch + '" aria-expanded="false" aria-controls="' + id + '"><b>Chapter ' + ch + "</b>" +
+        (short ? '<span class="an-cht">' + rich(short) + "</span>" : "") + '<span class="an-n">' + n + (n === 1 ? " noun" : " nouns") + "</span>" + icon("next", "ic an-arrow") + '</button></h4><ul class="an-list" id="' + id + '" hidden>';
+      list.forEach(function (x) {
+        h += '<li class="an-item"><button type="button" class="an-noun" data-an="' + esc(x.id) + '" aria-expanded="false" aria-controls="anT-' + esc(x.id) + '"><span class="an-e">' + rich(x.entryHtml) + ", " + esc(x.meaning) + "</span>" +
+          icon("next", "ic an-arrow") + '</button><div class="an-panel" id="anT-' + esc(x.id) + '" role="group" aria-label="The forms of ' + esc(x.word) + '" hidden></div></li>';
       });
-      h += "</div></section>";
+      h += "</ul></div>";
+    });
+    return h + "</div></section>";
+  }
+  /* the table of one noun, with the lines the table has under it (a locative, a second form the book allows) */
+  function nounTable(id) {
+    var nd = drill(), c = null, forms = {}, empty = false;
+    try { c = nd ? nd.chart(id) : null; } catch (e) { c = null; }
+    if (!c || !c.forms || typeof c.forms !== "object") { return ""; }
+    ROW_KEYS.forEach(function (k) {
+      var row = Array.isArray(c.forms[k]) ? c.forms[k] : [];
+      forms[k] = [0, 1].map(function (i) { if (typeof row[i] !== "string" || !row[i]) { empty = true; return ""; } return row[i]; });
+    });
+    var chart = { id: "n-" + id, chapter: 0, title: cleanText(c.entry), note: "", models: [{ word: cleanText(c.word), meaning: cleanText(c.meaning), gender: dotGender(c.gender), forms: forms }], adjective: null, sneaky: "", group: "" };
+    return chartTable(chart, { abbr: true }).html + arr(c.lines).map(function (s) { return '<p class="an-line">' + rich(s) + "</p>"; }).join("") +
+      (empty ? '<p class="an-line">An empty box means the book has no such form for this noun.</p>' : "");
+  }
+  /* a table is never wider than the Notebook: a long noun's table takes the short names of the cases
+     ("Nom."; a screen reader keeps the full names), then its type steps down, and at the very last a word
+     may break */
+  function fitNounTable(panel) {
+    var t = panel.querySelector("table"), i = 0;
+    if (!t || panel.hidden) { return; }
+    function wide() { return t.offsetWidth > panel.clientWidth + 1; }
+    panel.style.removeProperty("--an-fs");
+    panel.classList.remove("ab");
+    panel.classList.remove("brk");
+    if (wide()) { panel.classList.add("ab"); }
+    while (wide() && i < AN_SIZES.length) { panel.style.setProperty("--an-fs", AN_SIZES[i++] + "px"); }
+    if (wide()) { panel.classList.add("brk"); }
+  }
+  function fitNounTables() {
+    var list = nbPages.querySelectorAll(".an-panel:not([hidden])");
+    for (var i = 0; i < list.length; i++) { fitNounTable(list[i]); }
+  }
+  function nounChapter(btn, open) {
+    var list = $(btn.getAttribute("aria-controls"));
+    if (!list) { return; }
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    list.hidden = !open;
+    if (open) { fitNounTables(); }
+  }
+  function nounOpen(btn, open) {
+    var panel = $(btn.getAttribute("aria-controls"));
+    if (!panel) { return; }
+    if (open && !panel.firstChild) { panel.innerHTML = nounTable(btn.getAttribute("data-an")); }
+    if (open && !panel.firstChild) { return; }
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    panel.hidden = !open;
+    if (open) { fitNounTable(panel); }
+  }
+  /* the noun of the question on the desk, in a round of the noun drill (its questions are "n-<noun>-<case>-<number>") */
+  function deskNoun() {
+    var q = view === "play" && R && R.file && R.file.nounDrill && R.cur ? R.cur.q : null;
+    var m = q ? /^n-(.+)-(?:nom|gen|dat|acc|abl|voc)-(?:sg|pl)$/.exec(String(q.id)) : null;
+    return m ? m[1] : "";
+  }
+  /* as the Notebook opens: one chapter open, every table closed. Returns the line of the noun on the desk. */
+  function nounsReset() {
+    var sec = nbPages.querySelector(".nb-nouns"), i;
+    if (!sec) { return null; }
+    var chs = sec.querySelectorAll(".an-chb"), open = sec.querySelectorAll('.an-noun[aria-expanded="true"]'), was = sec.querySelectorAll(".an-item.now");
+    for (i = 0; i < open.length; i++) { nounOpen(open[i], false); }
+    for (i = 0; i < was.length; i++) {
+      was[i].classList.remove("now");
+      var tag = was[i].querySelector(".an-now");
+      if (tag) { tag.parentNode.removeChild(tag); }
     }
+    var id = deskNoun(), row = id ? sec.querySelector('.an-noun[data-an="' + selEsc(id) + '"]') : null;
+    var first = row ? row.closest(".an-ch").querySelector(".an-chb") : chs[0];
+    for (i = 0; i < chs.length; i++) { nounChapter(chs[i], chs[i] === first); }
+    if (row) {
+      row.parentNode.classList.add("now");
+      row.querySelector(".an-e").insertAdjacentHTML("beforeend", ' <span class="an-now">On the desk now</span>');
+    }
+    return row;
+  }
+  function nbCard(c, ofCase) {
+    var pk = ofCase || null;
+    return '<li class="nb-case c-' + c.key + (pk ? "" : " no-pic") + '">' + (pk ? pic("c-" + pk, "c-pic") : "") + '<div class="nb-ct"><span class="chip c-' + c.key + '">' + esc(c.name) + "</span>" +
+      (c.question ? '<b class="nb-q">' + esc(c.question) + "</b>" : "") + (c.job ? '<span class="nb-job">Job: ' + esc(c.job) + "</span>" : "") + (c.hook ? '<span class="nb-hook">' + rich(c.hook) + "</span>" : "") + "</div></li>";
+  }
+  function buildNotebook() {
+    var h = "", k;
+    h += '<section class="nb-sec"><h3>Every case has a job</h3><ul class="nb-cases">';
+    ROW_KEYS.forEach(function (key) { if (own(D.cases, key)) { h += nbCard(D.cases[key], key); } });
+    /* and a card for each job the open units add (the ablative of agent, the appositive, ...) */
+    for (k in JOBS) { if (own(JOBS, k)) { h += nbCard(JOBS[k], JOBS[k].of); } }
+    h += "</ul></section>";
+    /* the charts of the casebook: what the one on show shows (which noun, with the adjective or without)
+       is put in by declShow() */
+    if (CHARTS.length) {
+      var first = CHARTS[homeChart()];
+      h += '<section class="nb-sec nb-decl"><h3 id="dcTitle">' + esc(first.title) + "</h3>";
+      if (CHARTS.length > 1) {
+        h += '<div class="dc-tabs" role="group" aria-label="Charts">';
+        CHARTS.forEach(function (c, i) { h += '<button type="button" class="dc-tab" data-chart="' + i + '" aria-pressed="false"><small>Ch. ' + c.chapter + "</small> " + esc(c.title) + "</button>"; });
+        h += "</div>";
+      }
+      h += '<p class="dc-entry" id="dcEntry" aria-live="polite"></p>' +
+        '<div class="dc-about"><p aria-hidden="true" id="dcAboutSize">' + esc(modelLine(first) + " " + DC_JOB) + '</p><p id="dcAbout"></p></div>' +
+        '<div class="dc-chips" id="dcChips" role="group" aria-labelledby="dcChipsLab"></div>' +
+        '<div class="dc-opts"><button type="button" class="dc-switch" id="dcAdj" data-decl="adj" aria-pressed="false"><span class="dc-knob" aria-hidden="true"></span><span>with <i lang="la" id="dcAdjWord">' + esc(first.adjective ? first.adjective.word : "") + "</i></span></button>" +
+        '<p class="dc-masc" id="dcMasc" hidden></p><button type="button" class="dc-switch" id="dcTest" data-decl="test" aria-pressed="false"><span class="dc-knob" aria-hidden="true"></span><span>Test yourself</span></button></div>' +
+        '<p class="dc-say" id="dcSay" hidden>' + esc(DC_TEST) + '</p><div class="dc-table" id="dcTable"></div><p class="dc-base" id="dcBase"></p><div class="dc-foot" id="dcFoot"></div></section>';
+    }
+    h += '<section class="nb-sec nb-how"><h3>The detective method</h3><ol class="nb-method">';
+    var meth = D.method;
+    BOOK.units.forEach(function (u) { if (u.method) { meth = u.method; } });
+    meth.forEach(function (m) { h += "<li><b>" + txt(m.title) + "</b>" + txt(m.text) + "</li>"; });
+    h += "</ol></section>";
+    /* the word list: every Latin word of the sentences with its full dictionary entry, one entry a line,
+       in the form of the chart's own entry line; chapter by chapter, the class's own chapter first */
+    var lists = BOOK.units.filter(function (u) { return u.wordList && arr(u.wordList.groups).length; }).reverse();
+    if (lists.length) {
+      h += '<section class="nb-sec nb-words"><h3>Word list</h3>' + (lists[0].wordList.intro ? "<p>" + rich(lists[0].wordList.intro) + "</p>" : "");
+      lists.forEach(function (u) {
+        var short = chapterInfo(u.chapter).short;
+        h += '<div class="wl-ch"><h4 class="wl-chh">Chapter ' + u.chapter + (short ? '<span class="wl-cht">' + rich(short) + "</span>" : "") + '</h4><div class="wl-groups">';
+        arr(u.wordList.groups).forEach(function (g) {
+          if (!g) { return; }
+          h += '<div class="wl-group"><h4>' + rich(g.title) + '</h4><ul class="wl">';
+          arr(g.items).forEach(function (it) { if (it) { h += '<li><i lang="la">' + esc(it.la) + "</i>" + (it.note ? ", " + esc(it.note) : "") + ", " + rich(it.en) + "</li>"; } });
+          h += "</ul></div>";
+        });
+        h += "</div></div>";
+      });
+      h += "</section>";
+    }
+    /* every noun of the book so far, each with its whole table (the nouns of the drill) */
+    h += nounsHtml();
     h += '<section class="nb-sec nb-notes' + (MUSIC ? "" : " span") + '"><h3>Field notes</h3><p>' + esc(D.inspector.nameNote) + '</p><ul class="nb-tips"><li>' + esc(L.glossHint) + "</li><li>Clues never cost stars. Ask as often as you like.</li>" +
       '<li class="kb-tip">On a keyboard: <kbd>1</kbd> to <kbd>4</kbd> answer, <kbd>Enter</kbd> continues, <kbd>C</kbd> asks for a clue, <kbd>N</kbd> opens this Notebook and <kbd>M</kbd> turns the sound effects on or off.</li></ul></section>';
     if (MUSIC) {
@@ -1544,6 +2249,7 @@
       try { muC = typeof MUSIC.credit === "function" ? String(MUSIC.credit() || "") : ""; } catch (e) { muC = ""; }
       h += '<section class="nb-sec nb-music"><h3>The music</h3>' +
         "<p>In the background you hear slow music by <b>Antonio Vivaldi</b> (1678 to 1741), a priest in Venice who wrote about 500 concertos. In between come gentle pieces linked to the stories about <b>Sherlock Holmes</b>, the detective made up by Arthur Conan Doyle. Holmes plays the violin, and these pieces are played on a violin too.</p>" +
+        "<p>When the Inspector takes out his own violin, he plays a fast Caprice by <b>Niccolò Paganini</b> (1782 to 1840), the Italian violin star. In “The Cardboard Box,” Holmes tells Watson story after story about Paganini.</p>" +
         "<p>The game plays each piece note by note, using recordings of a real violin, viola and cello. While a piece plays, you can read about it below. Tap <b>Next piece</b> to hear a different one.</p>" +
         '<p class="mu-now"><svg class="ic" aria-hidden="true"><use href="#i-music"></use></svg><span id="muTitle"></span></p>' +
         '<p class="mu-about" id="muAbout" hidden></p>' +
@@ -1551,11 +2257,14 @@
         '<button type="button" class="btn sm mu-btn" id="muNext" data-action="music-next">Next piece</button></p>' +
         '<p class="mu-credit">' + (muC ? esc(muC) + " " : "") + '<a href="music/credits.html#from-game" target="_blank" rel="noopener">More about the music</a></p></section>';
     }
+    /* last, after the music block: where the material comes from, for parents (its own tab) */
+    h += '<section class="nb-sec nb-end span"><p class="nb-src"><a class="tlink" href="sources.html#from-game" target="_blank" rel="noopener">Sources for parents</a><span>The book and the school plan these files follow.</span></p></section>';
     nbPages.innerHTML = h;
     nbPages.setAttribute("tabindex", "0");
     nbPages.setAttribute("aria-label", "Notebook pages");
-    nbDecl.shown = -1;
+    nbDecl.chart = homeChart(); nbDecl.model = 0; nbDecl.shown = ""; nbDecl.chips = "";
     declShow();
+    syncMusic();
   }
   function setInert(on) {
     try {
@@ -1563,18 +2272,22 @@
     } catch (e) { /* ignore */ }
   }
   function openNotebook() {
-    if (nbOpen || cfOpen) { return; }
+    if (nbOpen || cfOpen || !player || nbBtn.hidden) { return; }
     nbOpen = true;
+    violinOff();
     lastFocus = document.activeElement;
     hideGloss();
-    nbDecl.model = 0; nbDecl.adj = false; nbDecl.test = false; nbDecl.open = {};
+    nbDecl.chart = homeChart(); nbDecl.model = 0; nbDecl.adj = false; nbDecl.test = false; nbDecl.open = {};
     declShow();
+    var noun = nounsReset();
     nb.classList.add("open");
     nb.setAttribute("aria-hidden", "false");
     nbScrim.hidden = false;
     setInert(true);
     nbPages.scrollTop = 0;
-    try { nbClose.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+    /* in a round of the noun drill the Notebook opens at the noun on the desk (a keyboard starts there too) */
+    if (noun) { nbPages.scrollTop = Math.max(0, Math.round(noun.getBoundingClientRect().top - nbPages.getBoundingClientRect().top) - 64); }
+    try { (noun && kb ? noun : nbClose).focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
   function closeNotebook() {
     if (!nbOpen) { return; }
@@ -1590,9 +2303,20 @@
     lastFocus = null;
     try { if (f && f.focus && document.body.contains(f)) { f.focus({ preventScroll: true }); } } catch (e) { /* ignore */ }
   }
-  function openConfirm() {
-    if (cfOpen || nbOpen) { return; }
+  /* kind "reset" (Reset progress on the home screen) or "remove" (a player, from Manage players: players.js
+     gives the words and hears the answer, done(true) or done(false)) */
+  var cfKind = "reset", cfDone = null;
+  function openConfirm(kind, words, done) {
+    if (cfOpen || nbOpen) { if (done) { done(false); } return; }
+    cfKind = kind === "remove" && words ? "remove" : "reset";
+    cfDone = cfKind === "remove" && done ? done : null;
+    var w = cfKind === "remove" ? words : CF_RESET;
+    if (cfTitle) { cfTitle.textContent = w.title; }
+    if (cfText) { cfText.textContent = w.text; }
+    cfNo.textContent = w.no;
+    cfYes.textContent = w.yes;
     cfOpen = true;
+    violinOff();
     lastFocus = document.activeElement;
     cf.classList.add("open");
     cf.setAttribute("aria-hidden", "false");
@@ -1608,14 +2332,25 @@
     cfScrim.hidden = true;
     setInert(false);
     restoreFocus();
+    var d = cfDone;
+    cfDone = null;
+    if (d) { d(false); }
   }
   nbClose.addEventListener("click", function () { Sfx.play("tap"); closeNotebook(); });
   nbScrim.addEventListener("click", closeNotebook);
   cfScrim.addEventListener("click", closeConfirm);
   cfNo.addEventListener("click", function () { Sfx.play("tap"); closeConfirm(); });
   cfYes.addEventListener("click", function () {
-    save.stars = {}; save.solo = {}; save.seen = {};
-    persist();
+    if (cfKind === "remove") {
+      var d = cfDone;
+      cfDone = null;
+      closeConfirm();
+      Sfx.play("ruleout");
+      if (d) { d(true); }
+      return;
+    }
+    if (player) { prog[player.id] = { stars: {}, solo: {}, seen: {} }; usePlayer(player); }
+    persist(undefined, true);
     paused = null; R = null; greeted = false;
     closeConfirm();
     Sfx.play("ruleout");
@@ -1636,63 +2371,233 @@
   function siteHome() {
     try { return /(^|\/)case-detective\/(index\.html?)?$/i.test(decodeURIComponent(location.pathname)) ? "../index.html" : ""; } catch (e) { return ""; }
   }
-  /* every star that can be won, grouped by the rank it leads to */
-  function rankRowHtml(total) {
-    var edges = D.ranks.map(function (r) { return r.min; }), max = maxStars(), h = '<div class="rank-row" aria-hidden="true"><span class="rk-g">';
-    for (var i = 0; i < max; i++) {
-      if (i && edges.indexOf(i) > 0) { h += '</span><span class="rk-g">'; }
-      h += '<svg viewBox="0 0 24 24"' + (i < total ? ' class="on" style="--i:' + i + '"' : "") + ' focusable="false"><use href="#i-star"></use></svg>';
-    }
+  /* The way to the next rank: the stars from the player's rank to the next one (3 to 12 of them), those
+     already won lit. At the top rank, and in the gold box of a promotion (done), the stretch that led to the
+     rank, all lit. (--n, the stars of the row: a row that does not wrap shares the width by them, so that on
+     a narrow phone they all shrink alike instead of pushing the page wide.) */
+  function rankWay(total, done) {
+    var r = rankFor(total), from, to;
+    if (done || !r.next) { to = RANKS[r.index].min; from = r.index ? RANKS[r.index - 1].min : to; return { n: to - from, lit: to - from }; }
+    from = RANKS[r.index].min; to = r.next.min;
+    return { n: to - from, lit: Math.max(0, Math.min(to - from, total - from)) };
+  }
+  function rankRowHtml(total, done) {
+    var w = rankWay(total, done), h = '<div class="rank-row' + (w.n > 15 ? " many" : "") + '" aria-hidden="true"><span class="rk-g" style="--n:' + w.n + '">';
+    for (var i = 0; i < w.n; i++) { h += '<svg viewBox="0 0 24 24"' + (i < w.lit ? ' class="on" style="--i:' + i + '"' : "") + ' focusable="false"><use href="#i-star"></use></svg>'; }
     return h + "</span></div>";
   }
+  /* What he says on a player's home. A casebook of the four files of chapter 2 alone (the game without
+     the noun drill) keeps the lines of data.js, word for word: they say "Four case files" and "of 12
+     stars". Any other casebook has the lines of courses.js, which count its own files and stars. */
+  function homeLines(kind, map) {
+    var H = CL.home || {}, only2 = BOOK.units.length === 1 && BOOK.units[0].builtIn && FILES.length === D.files.length;
+    var src = kind === "first" ? (only2 ? L.homeFirst : H.first || L.homeFirst) : kind === "done" ? (only2 ? L.homeDone : H.done || L.homeDone) : (only2 ? L.homeBack : H.back || L.homeBack);
+    return src.map(function (s) { return fill(s, map); });
+  }
+  function chapterHead(u) {
+    var here = u.chapter === player.chapter;
+    /* (the heading is a flex row: the spaces between its parts are for a screen reader) */
+    return '<h3 class="ch-h" id="ch-' + u.chapter + '"><b>Chapter ' + u.chapter + "</b>" + (u.title ? ' <span class="ch-t">' + rich(u.title) + "</span>" : "") + (here ? ' <em class="ch-here">Your class is here</em>' : "") + "</h3>";
+  }
+  function folderHtml(f, nf, first, done, left) {
+    var s = save.stars[f.id] || 0, solo = !!save.solo[f.id];
+    var isPaused = !!(paused && paused.file.id === f.id);
+    var isNext = paused ? isPaused : (f === nf && (!done || left > 0));
+    var closed = s >= 2;
+    var go = isPaused ? "Resume" : (s ? "Replay" : "Open");
+    var flag = isNext ? (isPaused ? "In progress" : (first ? "Start here" : (done ? "Win the ribbon" : "Next up"))) : "";
+    var tab = fileName(f, true), label = tab + ": " + f.title + ". " + s + " of 3 stars." + (closed ? " Case closed." : "") + (solo ? " " + L.solo : "") + (isPaused ? " In progress." : (isNext ? " " + flag + "." : ""));
+    return '<li><button type="button" class="folder' + (isNext ? " next" : "") + (closed ? " closed" : "") + '" data-file="' + esc(f.id) + '" aria-label="' + esc(label) + '">' +
+      /* (the tab's chapter gives way to the bookmark ribbon on a narrow folder: the chapter's heading, or the
+         class line of a casebook of one chapter, says it there) */
+      '<span class="f-tab"><span class="f-ch">Ch. ' + fileChapter(f) + " · </span>File " + f.n + '</span><span class="f-title">' + txt(f.title) + '</span><span class="f-blurb">' + txt(f.blurb) + "</span>" +
+      '<span class="f-foot">' + starsHtml(s) + (closed && !isNext ? '<span class="f-stamp">' + esc(L.stamp.closed) + "</span>" : '<span class="f-go">' + go + "</span>") + "</span>" +
+      (solo ? '<svg class="f-ribbon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-ribbon"></use></svg>' : "") +
+      (flag ? '<span class="f-flag">' + flag + "</span>" : "") + "</button></li>";
+  }
   function home() {
+    if (!player) { choosePlayers(); return; }
+    /* (the grade or the chapter changed in another tab: the casebook opens again first) */
+    if (stale && !busy) { var moved = LP.get(player.id); if (moved) { startPlayer(moved, true); return; } }
     B = null; T = null;
-    var total = totalStars(), max = maxStars(), rank = rankFor(total), nf = nextFile(), done = total >= max;
+    syncLogo();
+    var v = el("div", "view v-home"), h = "", any = FILES.length > 0;
+    var total = totalStars(), max = maxStars(), won = allStars(), rank = rankFor(won), nf = any ? nextFile() : null, done = any && total >= max;
     var first = !hasProgress(), left = ribbonsLeft();
-    var v = el("div", "view v-home"), h = "";
-    var toNext = rank.next ? rank.next.min - total : 0;
-    h += '<h1 class="sr">Case Detective</h1><section class="rank" aria-label="Your rank">' + '<svg class="rank-badge" viewBox="0 0 48 52" aria-hidden="true" focusable="false"><use href="#i-badge"></use></svg>' +
-      '<div class="rank-txt"><b class="rank-title">' + esc(rank.title) + '</b><span class="rank-next">' + (rank.next ? toNext + (toNext === 1 ? " more star" : " more stars") + " to " + esc(rank.next.title) : (left ? "Top rank. " + (left === 1 ? "One no-clue ribbon" : left + " no-clue ribbons") + " still to win." : "Top rank. Every file solved without a clue.")) + "</span></div>" +
-      '<div class="rank-count" role="img" aria-label="' + total + " of " + max + ' stars"><b>' + total + "</b><span>/" + max + "</span></div>";
-    h += rankRowHtml(total) + "</section>";
-    h += '<h2 class="sr">Case files</h2><ul class="files">';
-    FILES.forEach(function (f) {
-      var s = save.stars[f.id] || 0, solo = !!save.solo[f.id];
-      var isPaused = !!(paused && paused.file.id === f.id);
-      var isNext = paused ? isPaused : (f === nf && (!done || left > 0));
-      var closed = s >= 2;
-      var go = isPaused ? "Resume" : (s ? "Replay" : "Open");
-      var flag = isNext ? (isPaused ? "In progress" : (first ? "Start here" : (done ? "Win the ribbon" : "Next up"))) : "";
-      var label = "File " + f.n + ": " + f.title + ". " + s + " of 3 stars." + (closed ? " Case closed." : "") + (solo ? " " + L.solo : "") + (isPaused ? " In progress." : (isNext ? " " + flag + "." : ""));
-      h += '<li><button type="button" class="folder' + (isNext ? " next" : "") + (closed ? " closed" : "") + '" data-file="' + esc(f.id) + '" aria-label="' + esc(label) + '">' +
-        '<span class="f-tab">File ' + f.n + '</span><span class="f-title">' + txt(f.title) + '</span><span class="f-blurb">' + txt(f.blurb) + "</span>" +
-        '<span class="f-foot">' + starsHtml(s) + (closed && !isNext ? '<span class="f-stamp">' + esc(L.stamp.closed) + "</span>" : '<span class="f-go">' + go + "</span>") + "</span>" +
-        (solo ? '<svg class="f-ribbon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-ribbon"></use></svg>' : "") +
-        (flag ? '<span class="f-flag">' + flag + "</span>" : "") + "</button></li>";
+    var toNext = rank.next ? rank.next.min - won : 0, many = rankWay(won).n > 15;
+    /* (the line under the rank: the stars to the next rank; with every star of the casebook won, the no-clue
+       ribbons still to win come first, as they are what can be won now; with every ribbon won as well, the line
+       says where the next stars come from: "9 more stars to Chief Inspector in the chapters to come"; at the top
+       rank, the ribbons) */
+    var ribbonsLine = left === 1 ? "One no-clue ribbon still to win." : left + " no-clue ribbons still to win.";
+    var nextLine = rank.next ? (done && left ? ribbonsLine : toNext + (toNext === 1 ? " more star" : " more stars") + " to " + esc(rank.next.title) + (done ? " in the chapters to come" : "")) : (left ? "Top rank. " + ribbonsLine : "Top rank. Every file solved without a clue.");
+    /* (on the games site "Switch player" and "Change" lead to the home page, where the players are chosen) */
+    h += '<h1 class="sr">Case Detective</h1><div class="cb-head"><p class="cb-who">' + LP.badge(player, "sm") + '<span class="cb-name">' + esc(whose(player.name)) + " case files</span>" +
+      (atHome ? '<a class="tlink cb-switch" href="' + esc(homeUrl("players")) + '" data-home="players">Switch player</a></p>' : '<button type="button" class="tlink cb-switch" data-action="players">Switch player</button></p>') +
+      '<p class="cb-class"><span class="cb-line">' + esc(LP.gradeLine(player, true)) + "</span>" +
+      (atHome ? '<a class="tlink cb-change" href="' + esc(homeUrl("chapter")) + '" data-home="chapter">' : '<button type="button" class="tlink cb-change" data-action="chapter">') +
+      'Change<span class="sr"> your chapter</span>' + (atHome ? "</a>" : "</button>") + "</p></div>";
+    if (BOOK.failed.length) {
+      h += '<p class="cb-fail" role="status">The case files of ' + (BOOK.failed.length > 1 ? "chapters " : "chapter ") + BOOK.failed.join(" and ") + " could not be opened. Reload the page to try again.</p>";
+    }
+    if (any) {
+      h += '<section class="rank' + (many ? " many" : "") + '" aria-label="Your rank">' + '<svg class="rank-badge" viewBox="0 0 48 52" aria-hidden="true" focusable="false"><use href="#i-badge"></use></svg>' +
+        '<div class="rank-txt"><b class="rank-title">' + esc(rank.title) + '</b><span class="rank-next">' + nextLine + "</span></div>" +
+        '<div class="rank-count" role="img" aria-label="' + total + " of " + max + ' stars"><b>' + total + "</b><span>/" + max + "</span></div>";
+      h += rankRowHtml(won) + "</section>";
+    }
+    h += '<h2 class="sr">Case files</h2>';
+    /* the files chapter by chapter: the class's own chapter first, then the earlier chapters of the course,
+       the most recent first (chapter 5: 5, 4, 3, 2). Nothing is folded away, and the main button still opens
+       the next file in book order. A casebook of the class's own chapter alone has one group: its heading
+       is there for a screen reader, and the eye has the class line and the tabs ("Ch. 2 · File 1"). */
+    var groups = BOOK.units.filter(function (u) { return FILES.some(function (f) { return fileChapter(f) === u.chapter; }); })
+      .sort(function (a, b) { return (b.chapter === player.chapter) - (a.chapter === player.chapter) || b.chapter - a.chapter; });
+    var classGroup = null;
+    groups.forEach(function (u) { if (u.chapter === player.chapter) { classGroup = u; } });
+    var classUnit = !!classGroup;
+    var solo = groups.length === 1 && classUnit && !BOOK.ahead;
+    /* The class's chapter has no case files yet: a note says so. With the noun drill the chapter still has
+       its "Every noun" file, and the note names it. A course with no case files at all yet (a class still on
+       an earlier chapter, one of Latin IB) has the drill files alone, and the note says that. (A chapter whose
+       files could not be opened has files: the line above says so. So has a course whose unit files could not
+       be opened: its "Every noun" files alone are no sign that it has no case files.) */
+    var drillOnly = any && !FILES.some(function (f) { return !f.nounDrill; });
+    if (!BOOK.ahead && any && BOOK.failed.indexOf(player.chapter) < 0) {
+      if (drillOnly && !BOOK.failed.length && BOOK.course && BOOK.course.course) {
+        h += '<p class="ch-note cb-none">' + esc(BOOK.course.course) + " has no case files yet. For now, each of its chapters has an “" + txt(FILES[0].title) + "” file.</p>";
+      }
+      else if (!classUnit) { h += '<p class="ch-note cb-none">Chapter ' + player.chapter + " has no case files yet. These are the chapters before it.</p>"; }
+      else if (classGroup.drill) {
+        h += '<p class="ch-note cb-none">Chapter ' + player.chapter + " has only its “" + txt(classGroup.files[0].title) + "” file so far." + (groups.length > 1 ? " The other files are from the chapters before it." : "") + "</p>";
+      }
+    }
+    groups.forEach(function (u) {
+      var list = FILES.filter(function (f) { return fileChapter(f) === u.chapter; });
+      h += '<section class="cb-ch' + (u.chapter === player.chapter ? " here" : "") + (solo ? " solo" : "") + '" aria-labelledby="ch-' + u.chapter + '">' + chapterHead(u) +
+        (BOOK.ahead === u.chapter ? '<p class="ch-note">Your class meets this in chapter ' + u.chapter + ".</p>" : "") + '<ul class="files' + (list.length === 5 ? " n5" : "") + '">';
+      list.forEach(function (f) { h += folderHtml(f, nf, first, done, left); });
+      h += "</ul></section>";
     });
-    h += "</ul>";
-    var target = paused ? paused.file : nf;
-    var verb = paused ? "Resume" : (first ? "Open" : (done ? "Replay" : "Continue:"));
-    h += '<div class="dock"><button type="button" class="btn primary" data-primary data-open="' + esc(target.id) + '"><span>' + verb + " File " + target.n + "<small>" + txt(target.title) + "</small></span>" + icon("next") + "</button></div>";
+    if (BOOK.locked.length) {
+      h += '<section class="cb-locked" aria-labelledby="ch-later"><h3 class="ch-h" id="ch-later"><b>Later chapters</b></h3><ul class="lk-list">';
+      BOOK.locked.forEach(function (e) {
+        var short = chapterInfo(e.chapter).short;
+        h += '<li class="lk">' + icon("files", "ic lk-ic") + "<b>Chapter " + e.chapter + "</b> · " + (short ? '<span class="lk-t">' + rich(short) + "</span> · " : "") + '<span class="lk-n">Opens at chapter ' + e.chapter + " (change your chapter at the top)</span></li>";
+      });
+      h += "</ul></section>";
+    }
+    if (any) {
+      var target = paused ? paused.file : nf;
+      var verb = paused ? "Resume" : (first ? "Open" : (done ? "Replay" : "Continue:"));
+      h += '<div class="dock"><button type="button" class="btn primary" data-primary data-open="' + esc(target.id) + '"><span>' + verb + " " + esc(fileName(target)) + "<small>" + txt(target.title) + "</small></span>" + icon("next") + "</button></div>";
+    }
+    /* the foot: the way to the other games (on the games site only) and the reset, with the sources page
+       between them in the same row. Where the players are chosen on the home page, this is the link for
+       parents that "Who's on the case?" has elsewhere (the same page): in one row, the casebook still fits a
+       laptop screen of 768 px. */
     var site = siteHome();
-    h += '<p class="home-foot">' + (site ? '<a class="tlink" href="' + site + '">More language games</a>' : "<span></span>") + '<button type="button" class="tlink" data-action="reset">Reset progress</button></p>';
+    h += '<div class="home-end"><p class="home-foot">' + (site ? '<a class="tlink" href="' + site + '">More language games</a>' : "<span></span>") +
+      (any ? '<button type="button" class="tlink" data-action="reset">Reset progress</button>' : "<span></span>") + "</p>" +
+      '<p class="home-src"><a class="tlink" href="sources.html#from-game" target="_blank" rel="noopener">Sources for parents</a></p></div>';
     v.innerHTML = h;
     setView("home", v);
     setMid("");
 
     var lines, moods;
-    var map = { stars: total, nextN: nf.n, nextTitle: nf.title, rank: rank.title };
-    if (first) { lines = L.homeFirst.slice(); moods = ["!wave", "point"]; }
-    else if (done) { lines = L.homeDone.map(function (s) { return fill(s, map); }); moods = ["!cheer", "proud"]; }
-    else { lines = L.homeBack.map(function (s) { return fill(s, map); }); moods = ["!wave", "point"]; }
-    /* he says hello once; on later visits to his desk he goes straight to what is next */
-    if (greeted && lines.length > 1) { lines = lines.slice(-1); moods = moods.slice(-1); }
+    /* (a casebook of "Every noun" files alone counts them by their name: it has no case files, as its note says) */
+    var kindOf = drillOnly ? "“" + esc(FILES[0].title) + "” file" : "case file";
+    var map = { stars: total, max: max, count: countWord(FILES.length), files: FILES.length === 1 ? kindOf + " is" : kindOf + "s are", theFirst: FILES.length === 1 ? "it" : "the first", nextN: nf ? nf.n : "", nextCh: nf ? fileChapter(nf) : "", nextTitle: nf ? nf.title : "", rank: rank.title };
+    if (!any) { var fl = CL.home && CL.home.failed; lines = [fill((Array.isArray(fl) ? fl[0] : fl) || "I cannot open these case files right now. Reload the page to try again.", { chapters: BOOK.failed.join(" and ") })]; moods = ["think"]; }
+    else if (first) { lines = homeLines("first", map); moods = ["!wave", "point"]; }
+    else if (done) { lines = homeLines("done", map); moods = ["!cheer", "proud"]; }
+    else { lines = homeLines("back", map); moods = ["!wave", "point"]; }
+    /* his first line may come from the way here (the home page, or the stars of 2.1): it takes the place of
+       his hello, where the lines begin with one. Otherwise he says hello once, and on later visits to his desk
+       he goes straight to what is next. */
+    var said = lead ? leadLine(lead) : null;
+    lead = "";
+    if (said) {
+      var hello = any && !done;
+      lines = [said.line].concat(hello ? lines.slice(1) : lines);
+      moods = [said.mood].concat(hello ? moods.slice(1) : moods);
+    } else if (greeted && lines.length > 1) { lines = lines.slice(-1); moods = moods.slice(-1); }
     greeted = true;
     var nextEl = v.querySelector(".folder.next");
     runSequence(lines, moods, function (n) { if (n === lines.length - 1 && nextEl) { lookAtNode(nextEl, 2000); } });
     reserveStage(lines.map(function (s) { return [{ html: s }]; }), lines.length > 1 ? { dots: [0, lines.length] } : null);
   }
+  /* His first line on the casebook by the way the player came: back from the games' home page (added: a new
+     player; chapter: the chapter changed; picked: a player chosen), or from the question about the stars of
+     2.1 (yes, no). The words are courses.js's (lines.arrive, lines.claim). A new player he has just met on
+     “Who’s on the case?”, where he introduced himself (LatinPlayers.met), has the line “met”: he does not
+     introduce himself twice in a row. */
+  var claimedN = 0;
+  function starsWord(n) { return n + (n === 1 ? " star" : " stars"); }
+  function metNow(p) { return !!p && typeof LP.met === "function" && arr((CL.arrive || {}).met).length > 0 && LP.met(p.id); }
+  function leadLine(kind) {
+    if (kind === "added" && metNow(player)) { kind = "met"; }
+    var A = CL.arrive || {}, C = CL.claim || {}, src = kind === "yes" || kind === "no" ? C[kind] : A[kind];
+    var s = Array.isArray(src) ? src[0] : src;
+    if (!s || !player) { return null; }
+    return { line: fill(s, { name: esc(player.name), chapter: player.chapter, stars: starsWord(claimedN) }), mood: kind === "yes" ? "proud" : (kind === "no" ? "point" : "!wave") };
+  }
+
+  /* ------------------------------------------------------ the stars of 2.1
+     A save of version 2.1 has stars but no player. Where the players are chosen on the games' home page,
+     the Inspector asks each player once, before the casebook: were these stars yours? Yes: they join the
+     player's progress (the better stars of each file, its ribbon, what was seen) and the old save is gone.
+     No: they wait for another player, and this one is not asked again. They are never dropped before
+     someone takes them (see persist). */
+  function claimFor(p) {
+    if (!askOld || !p) { return false; }
+    var cur = readSave(), was = progressIn(cur) ? oldIn(cur) : old;
+    if (progressIn(cur)) { old = was; asked = was ? askedIn(cur) : []; }
+    return !!old && asked.indexOf(p.id) < 0;
+  }
+  function claim() {
+    var n = starsIn(old), words = starsWord(n);
+    var v = el("div", "view v-claim");
+    v.innerHTML = '<h1 class="sr">Case Detective</h1><section class="claim" aria-labelledby="clH"><h2 class="cl-h" id="clH" tabindex="-1">Stars from before</h2>' +
+      '<p class="cl-n" aria-hidden="true">' + icon("star", "ic") + "<b>" + n + "</b></p>" +
+      '<p class="cl-t">Before players had names, someone on this device won ' + words + " in Case Detective. Was it you, " + esc(player.name) + "?</p>" +
+      '<p class="cl-note">' + (n === 1 ? "If not, the star stays here for the right detective." : "If not, the stars stay here for the right detective.") + "</p>" +
+      '<div class="cl-btns"><button type="button" class="btn primary" data-action="claim-yes">Yes, it was me</button><button type="button" class="btn cl-no" data-action="claim-no">No, it wasn\u2019t me</button></div></section>';
+    setView("claim", v);
+    setMid("");
+    if (kb) { try { v.querySelector(".cl-h").focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    var A = leadLine(lead), C = CL.claim || {}, ask = Array.isArray(C.ask) ? C.ask[0] : C.ask;
+    lead = "";
+    var lines = (A ? [A.line] : []).concat([fill(ask || "Before players had names, someone on this device won {stars} in Case Detective. Was it you, <b>{name}</b>?", { name: esc(player.name), stars: words })]);
+    var moods = (A ? [A.mood] : []).concat(["think"]);
+    greeted = true;
+    runSequence(lines, moods, null);
+    reserveStage(lines.map(function (s) { return [{ html: s }]; }), lines.length > 1 ? { dots: [0, lines.length] } : null);
+  }
+  function claimYes() {
+    var cur = readSave(), was = progressIn(cur) ? oldIn(cur) : old;
+    if (!player || !was) { home(); return; }
+    var mine = progressOf(player.id), k;
+    for (k in was.stars) { if (own(was.stars, k) && (mine.stars[k] || 0) < was.stars[k]) { mine.stars[k] = was.stars[k]; } }
+    for (k in was.solo) { if (own(was.solo, k) && mine.stars[k] === 3) { mine.solo[k] = true; } }
+    for (k in was.seen) { if (own(was.seen, k)) { mine.seen[k] = true; } }
+    claimedN = starsIn(was);
+    usePlayer(player);
+    persist(null);
+    lead = "yes";
+    home();
+  }
+  function claimNo() {
+    var cur = readSave(), was = progressIn(cur) ? oldIn(cur) : old, who = progressIn(cur) ? askedIn(cur) : asked;
+    claimedN = starsIn(was);
+    if (player && was) { persist({ old: was, asked: who.indexOf(player.id) < 0 ? who.concat([player.id]) : who }); }
+    /* (his line only while the stars are still here: another tab may have just given them away) */
+    lead = was ? "no" : "";
+    home();
+  }
+
   function goHome() {
+    if (!player) { choosePlayers(); return; }
     if (view === "play" && R && !R.done) { paused = R; }
     home();
   }
@@ -1704,52 +2609,304 @@
     briefing(f);
   }
 
+  /* --------------------------------------------------- the games' home page
+     On the games site (and on a copy of it, on disk or on this computer: the hosts of onGamesSite) the
+     players are chosen on the site's home page, ../index.html, once for every game. There this game does not
+     show "Who's on the case?": it opens for the player chosen there (LatinPlayers.current()); with nobody
+     chosen it goes to the home page (?play=case-detective#players), which comes back here after the pick
+     with #added, #chapter or #picked. The player chip, "Switch player" and "Change" lead there too.
+     Where the list of players cannot be stored (a sandboxed frame, a preview: LatinPlayers keeps it in memory
+     for the visit) or on another host, the game keeps its own screens for the players, as before. */
+  var HOME_PAGE = "../index.html", FOLDER = "case-detective";
+  function canStore() {
+    try { var k = "latinGames.probe"; window.localStorage.setItem(k, "1"); window.localStorage.removeItem(k); return true; } catch (e) { return false; }
+  }
+  var atHome = onGamesSite(siteHost()) && canStore();
+  function homeUrl(screen) { return HOME_PAGE + "?play=" + FOLDER + "#" + screen; }
+  /* (replace, not push: the home page comes back here the same way, so a round trip leaves one entry for
+     the game in the history) */
+  function toHomePage(screen) {
+    try { window.location.replace(homeUrl(screen || "players")); } catch (e) { atHome = false; app.style.visibility = ""; ui.players(); }
+  }
+  /* back from the home page: what was done there, for his first line (the hash goes at once: a reload is a
+     plain visit) */
+  var arrivedAt = now();
+  var arrived = (function () {
+    var m = null;
+    try { m = /^#(added|chapter|picked)$/.exec(window.location.hash || ""); } catch (e) { m = null; }
+    if (!m) { return ""; }
+    try { window.history.replaceState(null, "", window.location.pathname + window.location.search); } catch (e2) { /* ignore */ }
+    return m[1];
+  })();
+  /* the players' screens of this game, or the home page */
+  function choosePlayers() { if (atHome) { toHomePage("players"); } else { ui.players(); } }
+  /* Back from the home page, where a player was just chosen, and nobody is chosen here: the list reaches a new
+     page through the browser's storage, which can come a moment late after the page that wrote it. It is
+     waited for (onPlayers). If it does not come (this page was given other storage than the home page, as a
+     browser can do with pages on disk), the game plays with its own screens for this visit, rather than send
+     the child back and forth. The stars of 2.1 still wait for the question (the list is stored here). */
+  var waiting = 0;
+  function waitForPick() {
+    app.style.visibility = "hidden";
+    waiting = setTimeout(function () {
+      waiting = 0;
+      atHome = false;
+      ownChip();
+      app.style.visibility = "";
+      ui.players();
+    }, 2500);
+  }
+  /* where the game keeps its own screens for the players, the chip is a button that opens them */
+  function ownChip() {
+    if (!chip || chip.tagName !== "A") { return; }
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = chip.className;
+    b.id = chip.id;
+    b.title = chip.title;
+    b.hidden = chip.hidden;
+    b.setAttribute("data-action", "players");
+    chip.parentNode.replaceChild(b, chip);
+    chip = b;
+  }
+
+  /* ------------------------------------------------------------ players
+     The screens that choose and set up a player are the site's (js/players.js): this game is their host
+     where it keeps them (see above). It shows them on the desk, lets the Inspector say their lines, counts
+     each player's stars, marks the chapters that have case files, and opens a player's casebook when a
+     player is picked. */
+  var busy = false;   /* a casebook is being opened (its unit files are loading) */
+  var lead = "";      /* his first line on the casebook: how the player came (see leadLine) */
+  function startPlayer(p, keepGreeting) {
+    if (!p || busy) { return; }
+    LP.choose(p.id);
+    usePlayer(p);
+    stale = false;
+    persist();
+    paused = null; R = null;
+    if (!keepGreeting) { greeted = false; }
+    app.style.visibility = "";
+    syncLogo();
+    busy = true;
+    var b = desk.querySelector("[data-primary]");
+    if (b) { b.disabled = true; }
+    openCasebook(p, function () {
+      busy = false;
+      /* (another tab chose someone else meanwhile) */
+      var cur = atHome ? LP.current() : null;
+      if (atHome && cur && cur.id !== p.id) { startPlayer(cur); return; }
+      if (claimFor(p)) { claim(); } else { home(); }
+    });
+  }
+  /* his lines on those screens: courses.js (with the line of data.js where it has none) */
+  function playerLines() {
+    var o = {}, k;
+    for (k in CL) { if (own(CL, k)) { o[k] = CL[k]; } }
+    ["playersFirst", "playersBack"].forEach(function (key) { if (!arr(o[key]).length) { o[key] = [L.homeFirst[0]]; } });
+    return o;
+  }
+  var ui = LP.screens({
+    show: function (node, kind) {
+      if (kind === "players") { usePlayer(null); paused = null; R = null; B = null; T = null; syncLogo(); }
+      else if (kind === "manage") { usePlayer(null); syncLogo(); }
+      setView(kind === "setup" ? "setup" : "players", node);
+      setMid("");
+    },
+    say: function (lines, first, o) {
+      runSequence(lines, o && o.moods ? o.moods : [first], null);
+      reserveStage(lines.map(function (s) { return [{ html: s }]; }), lines.length > 1 ? { dots: [0, lines.length] } : null);
+    },
+    picked: function (p, how) {
+      if (how === "back") { home(); return; }
+      /* (the first player of the device: he introduced himself on “Who’s on the case?” a moment ago) */
+      if (how === "added" && metNow(p)) { lead = "met"; }
+      startPlayer(p, how === "chapter");
+    },
+    starsOf: function (p) { return starsWon(p.id); },
+    /* (every chapter a player of the grade may choose that has case files: the grade's own, and those of the
+       courses before it, for a class still on an earlier chapter) */
+    filesIn: function (g) { var o = {}; arr(C.units).forEach(function (u) { if (u && inGrade(+g, +u.chapter)) { o[+u.chapter] = true; } }); return o; },
+    sourcesHref: "sources.html#from-game",
+    icon: function (name, cls) { return icon(name, cls); },
+    confirm: function (words, done) { openConfirm("remove", words, done); },
+    tap: function () { Sfx.play("tap"); },
+    lines: playerLines()
+  });
+  /* A change to the list of players or to the switches of the device, made on this page or in another tab:
+     the switches follow; the progress of a removed player goes; a player on the case who was removed
+     elsewhere is gone from here too, and one whose grade or chapter changed gets the casebook again.
+     Where the players are chosen on the home page, this page follows the choice made in another tab: with
+     nobody chosen any more it goes to the home page; with someone else chosen it opens their casebook. */
+  function onPlayers(ev) {
+    var st = LP.settings();
+    if (st.sound !== save.sound) { save.sound = st.sound; try { Sfx.setMuted(!save.sound); } catch (e) { /* ignore */ } tidySave(); syncSound(); }
+    if (st.music !== save.music) { save.music = st.music; if (MUSIC) { try { MUSIC.setEnabled(save.music); } catch (e2) { /* ignore */ } } syncMusic(); }
+    prune();
+    if (atHome && waiting) {
+      var picked = LP.current();
+      if (picked) { clearTimeout(waiting); waiting = 0; lead = arrived; startPlayer(picked); }
+      return;
+    }
+    if (atHome && ev && ev.remote && !busy) {
+      var cur = LP.current();
+      if (!cur || !player || cur.id !== player.id) {
+        if (cfOpen) { closeConfirm(); }
+        if (nbOpen) { closeNotebook(); }
+        /* (just back from the home page, this page read the list a moment before the choice made there: the
+           player chosen there gets the first line meant for them) */
+        if (cur) { if (arrived && now() - arrivedAt < 4000) { lead = arrived; } startPlayer(cur); }
+        else { app.style.visibility = "hidden"; toHomePage("players"); }
+        return;
+      }
+    }
+    if (!player) { return; }
+    var p = LP.get(player.id);
+    if (!p) {
+      if (cfOpen) { closeConfirm(); }
+      if (nbOpen) { closeNotebook(); }
+      choosePlayers();
+      return;
+    }
+    if (p.grade !== player.grade || p.chapter !== player.chapter) {
+      stale = true;
+      if (view === "home" && !busy) { startPlayer(p, true); }
+      return;
+    }
+    if (p.name !== player.name || p.color !== player.color) {
+      player.name = p.name;
+      player.color = p.color;
+      syncChip();
+      if (view === "home" && !busy) { home(); }
+    }
+  }
+  /* another tab wrote this game's progress: the other players' stars as it has them (the stars on their cards),
+     and the player on the case as it is stored now. On the games site every tab follows the player chosen
+     last, so another tab may play the same player: a star won there counts here too (and stays: see persist),
+     and a "Reset progress" made there holds here as well. A casebook on show counts them again. */
+  function progKey(p) {
+    return ["stars", "solo", "seen"].map(function (n) { return Object.keys(p[n]).sort().map(function (k) { return k + "=" + p[n][k]; }).join(","); }).join("|");
+  }
+  function onProgress() {
+    var o = readSave(), pr = progressIn(o);
+    if (!pr) { return; }
+    LP.list().forEach(function (p) { if (!(player && player.id === p.id) && own(pr, p.id)) { prog[p.id] = cleanProgress(pr[p.id]); } });
+    if (player && view !== "claim" && own(pr, player.id)) {
+      var had = progKey(progressOf(player.id));
+      prog[player.id] = cleanProgress(pr[player.id]);
+      usePlayer(player);
+      if (progKey(prog[player.id]) !== had && view === "home" && !busy && !cfOpen && !nbOpen) { home(); }
+    }
+    /* the stars of 2.1 were settled in another tab while this one asks about them: the player's progress as it
+       is stored now (with those stars, if this player took them there), and the casebook */
+    if (view === "claim" && player && (!oldIn(o) || askedIn(o).indexOf(player.id) >= 0)) {
+      if (own(pr, player.id)) { prog[player.id] = cleanProgress(pr[player.id]); usePlayer(player); }
+      home();
+    }
+  }
+  /* ?grade=G[&chapter=N] goes straight to a player's case files (tests, links): the first player of grade
+     G (the chapter set to N, if given), or a new player "Player" of grade G when there is none. A grade
+     that cannot be played yet, or a chapter that is not one of the grade's (1 to its last chapter:
+     ?grade=8&chapter=5 is an 8th grader whose class is still on chapter 5), is left out. */
+  function urlParams() {
+    var out = {};
+    String(location.search || "").replace(/^\?/, "").split("&").forEach(function (kv) {
+      if (!kv) { return; }
+      var i = kv.indexOf("="), k = i < 0 ? kv : kv.slice(0, i), val = i < 0 ? "" : kv.slice(i + 1);
+      try { k = decodeURIComponent(k); val = decodeURIComponent(val.replace(/\+/g, " ")); } catch (e) { return; }
+      if (k && !own(out, k)) { out[k] = val; }
+    });
+    return out;
+  }
+  var URLQ = urlParams();
+  /* (a link that names a grade starts the game as before: the stars of 2.1 become "Player 1" there too) */
+  var linked = own(URLQ, "grade") && canPlay(+URLQ.grade);
+  var askOld = atHome && !linked;
+  function playerFromUrl() {
+    var g = +URLQ.grade, ch = +URLQ.chapter, p = null;
+    if (!own(URLQ, "grade") || !canPlay(g)) { return null; }
+    /* (the first one added: ids are numbered in that order) */
+    LP.list().sort(function (a, b) { return +a.id.slice(1) - +b.id.slice(1); }).some(function (x) { if (x.grade === g) { p = x; return true; } return false; });
+    if (!p) { return LP.add({ name: "Player", grade: g, chapter: inGrade(g, ch) ? ch : monthChapter(g) }); }
+    if (own(URLQ, "chapter") && inGrade(g, ch) && p.chapter !== ch) { p = LP.update(p.id, { chapter: ch }) || p; }
+    return p;
+  }
+
   /* ----------------------------------------------------------- briefing */
   /* A plain line may name a Latin word of the word list ("Also after sine."): it is printed as Latin,
-     like everywhere else. Only a whole word that is a headword of the list, letter for letter. */
-  var LATIN = null;
-  function latinText(s) {
-    if (!LATIN) {
-      LATIN = {};
-      ((D.wordList && D.wordList.groups) || []).forEach(function (g) {
-        (g.items || []).forEach(function (it) { var w = String(it.la).split(/[,\s]/)[0]; if (w.length > 1) { LATIN[w] = true; } });
+     like everywhere else. Only a whole word that is a headword of the list of the file's own chapter,
+     letter for letter, and never one that is also a short English word ("in", "is"). */
+  var LATIN = null, NOT_LATIN = { a: 1, an: 1, at: 1, "do": 1, "in": 1, is: 1, it: 1, me: 1, no: 1, us: 1 };
+  function latinText(s, file) {
+    var u = fileUnit(file), ch = u ? u.chapter : 0;
+    if (!LATIN) { LATIN = {}; }
+    if (!LATIN[ch]) {
+      var map = LATIN[ch] = {}, wl = u ? u.wordList : D.wordList;
+      arr(wl && wl.groups).forEach(function (g) {
+        arr(g && g.items).forEach(function (it) {
+          /* the headword, and the second form of an entry that has two ("ā / ab (+abl.)": ab too). A word of
+             one letter counts only with its macron (ā, ē; never the English "a"). */
+          String(it && it.la).split(/[,(]/)[0].split("/").forEach(function (alt) {
+            var w = alt.replace(/^\s+/, "").split(/\s/)[0];
+            if (w && (w.length > 1 || /[^\x00-\x7f]/.test(w)) && !own(NOT_LATIN, w.toLowerCase())) { map[w] = true; }
+          });
+        });
       });
     }
-    return keep(String(s === undefined || s === null ? "" : s).split(/([A-Za-zÀ-ſ]+)/).map(function (part, i) {
-      return i % 2 && LATIN[part] === true ? '<i lang="la">' + esc(part) + "</i>" : esc(part);
+    var latin = LATIN[ch];
+    /* (never the letters of an ending: "-ā") */
+    return keep(String(s === undefined || s === null ? "" : s).split(/([A-Za-zÀ-ſ]+)/).map(function (part, i, all) {
+      return i % 2 && latin[part] === true && !/-$/.test(all[i - 1]) ? '<i lang="la">' + esc(part) + "</i>" : esc(part);
     }).join(""));
+  }
+  /* the chart of a file: the one a beat names (show: "chart", chart: id), or its chapter's first chart */
+  function chartOfFile(f, id) {
+    var i, u = fileUnit(f), want = id || (u && u.charts.length ? u.charts[0].id : "");
+    for (i = 0; i < CHARTS.length; i++) { if (CHARTS[i].id === want) { return CHARTS[i]; } }
+    return CHARTS[0] || null;
   }
   /* The word the three suspects share (file 3) is the file's own: the Latin word of the beat that lays
      the recap on the desk. (The chart's noun is the book's model noun, which is another word.) */
   function suspectWord(file) {
-    var w = "", dc = D.declension;
+    var w = "", ch = chartOfFile(file);
     (file.briefing || []).forEach(function (b) {
       var m = !w && b.show === "recap" ? /<i>([^<]+)<\/i>/.exec(String(b.say || "")) : null;
       if (m) { w = m[1]; }
     });
-    if (!w) { w = dc.models[0].stem + dc.sneaky; }
+    if (!w && ch && ch.sneaky) { w = splitForm(ch.models[0].forms.nom[0])[0] + ch.sneaky; }
     return w.charAt(0).toLowerCase() + w.slice(1);
   }
+  /* the round picture of a case: a case has its own, a job the one of the case it belongs to */
+  function keyPic(k) { var pk = caseOfKey(k); return pk ? pic("c-" + pk, "c-pic") : ""; }
   function recapHtml(file) {
     var rc = file.recap, h = "";
     if (!rc || !rc.items) { return ""; }
     if (rc.kind === "questions") {
-      h += '<h2 class="rc-h">The detective questions</h2><ul class="rc-list">';
+      /* (a name of more than one word, "Ablative of place from which", makes the list "long": every chip of it
+         has the same width and its name may wrap) */
+      var long = rc.items.some(function (it) { var c = keyInfo(it.k); return /\s/.test(String(c ? c.name : it.k)); });
+      h += '<h2 class="rc-h">The detective questions</h2><ul class="rc-list' + (long ? " long" : "") + '">';
       rc.items.forEach(function (it) {
-        var c = D.cases[it.k];
-        h += '<li class="c-' + esc(it.k) + '">' + (c ? pic("c-" + c.key, "c-pic") : "") + '<span class="chip c-' + esc(it.k) + '">' + esc(c ? c.name : it.k) + "</span><span>" + latinText(it.text) + "</span></li>";
+        var c = keyInfo(it.k);
+        h += '<li class="c-' + esc(it.k) + '">' + (c ? keyPic(it.k) : "") + '<span class="chip c-' + esc(it.k) + '">' + esc(c ? c.name : it.k) + "</span><span>" + latinText(it.text, file) + "</span></li>";
       });
       h += "</ul>";
     } else if (rc.kind === "endings") {
-      h += '<h2 class="rc-h">Two fingerprints</h2><div class="rc-ends">';
+      /* More than two fingerprints (the "Every noun" file has one for each declension met) lie in short rows,
+         one under the other. What every row would say again is said once: the case and number beside the
+         heading, the hook under the rows. */
+      var first = rc.items[0], rows = rc.items.length > 2;
+      var oneChip = rows && rc.items.every(function (it) { return it.k === first.k && it.number === first.number; });
+      var oneHook = rows && !!first.hook && rc.items.every(function (it) { return it.hook === first.hook; });
+      var chipOf = function (it) { var c = keyInfo(it.k); return '<span class="chip c-' + esc(it.k) + '">' + esc((c ? c.name : it.k) + " " + it.number) + "</span>"; };
+      h += '<h2 class="rc-h' + (oneChip ? " rc-hc" : "") + '">' + countWord(rc.items.length) + (rc.items.length === 1 ? " fingerprint" : " fingerprints") + (oneChip ? " " + chipOf(first) : "") +
+        '</h2><div class="rc-ends' + (rows ? " rows" : "") + '">';
       rc.items.forEach(function (it) {
-        var c = D.cases[it.k];
-        h += '<div class="end-card c-' + esc(it.k) + '"><span class="end-big" lang="la">' + esc(it.ending) + '</span><span class="chip c-' + esc(it.k) + '">' + esc((c ? c.name : it.k) + " " + it.number) + "</span>" +
-          '<span class="end-ex"><i lang="la">' + esc(it.example) + "</i>" + txt(it.meaning) + '</span><span class="end-hook">' + txt(it.hook) + "</span></div>";
+        h += '<div class="end-card c-' + esc(it.k) + '"><span class="end-big" lang="la">' + esc(it.ending) + "</span>" + (oneChip ? "" : chipOf(it)) +
+          '<span class="end-ex"><i lang="la">' + esc(it.example) + "</i>" + txt(it.meaning) + "</span>" + (oneHook ? "" : '<span class="end-hook">' + txt(it.hook) + "</span>") + "</div>";
       });
-      h += "</div>";
+      h += "</div>" + (oneHook ? '<p class="rc-all">' + txt(first.hook) + "</p>" : "");
     } else {
-      h += '<h2 class="rc-h"><i lang="la">' + esc(suspectWord(file)) + "</i>: three suspects</h2>" + '<div class="sus-row">';
+      h += '<h2 class="rc-h"><i lang="la">' + esc(suspectWord(file)) + "</i>: " + countWord(rc.items.length).toLowerCase() + (rc.items.length === 1 ? " suspect" : " suspects") + "</h2>" + '<div class="sus-row">';
       rc.items.forEach(function (it) {
         h += '<div class="sus c-' + esc(it.k) + '">' + portraitFor(it) + "<b>" + esc(it.label) + "</b><span>" + txt(it.meaning) + "</span><small>" + txt(it.text) + "</small></div>";
       });
@@ -1759,21 +2916,52 @@
   }
   /* A briefing may teach with cards (file 1): the chart first (request 6), then one mini lesson per case,
      all of one build (request 5), and the recap at the end. The cards lie on one spot of the desk. */
-  function chartCardHtml() {
-    return '<h2 class="rc-h">The first declension<small>' + declEntry(D.declension.models[0]) + "</small></h2>" + declTable({}).html;
+  function chartCardHtml(file, id) {
+    var chart = chartOfFile(file, id);
+    if (!chart) { return ""; }
+    return '<h2 class="rc-h">' + esc(chart.title) + "<small>" + declEntry(chart, chart.models[0]) + "</small></h2>" + chartTable(chart, {}).html;
   }
   function sameWords(a, b) {
     if (!a || !b || a.length !== b.length) { return false; }
     for (var i = 0; i < a.length; i++) { if (a[i].w !== b[i].w || (a[i].after || "") !== (b[i].after || "")) { return false; } }
     return true;
   }
-  /* The lesson of one case: the case and its question, one Latin example in which only that case's word
-     wears its label, what it says, and the case's row of the chart. A lesson whose sentence is already
-     on the card keeps the card and moves the label: one sentence, several jobs.
+  /* a model noun whose every form has the base of its nominative (porta, amīcus; not ager, agrī) */
+  function regularModel(m) {
+    var base = splitForm(m.forms.nom[0])[0];
+    return ROW_KEYS.every(function (k) { return !own(m.forms, k) || (splitForm(m.forms[k][0])[0] === base && splitForm(m.forms[k][1])[0] === base); });
+  }
+  /* The row k of a chart for the noun of a lesson: the noun itself where it is one of the chart's nouns,
+     else its dictionary form with the ending of a regular model noun swapped. "like" is the first noun of
+     the chart with the same endings in that row (the model noun, wherever it can be). */
+  function lessonForms(chart, k, w) {
+    var lemma = String((w && w.lemma) || ""), i, m, got = null;
+    if (!chart || !lemma) { return null; }
+    for (i = 0; i < chart.models.length && !got; i++) {
+      m = chart.models[i];
+      if (m.word === lemma && own(m.forms, k)) { got = { sg: splitForm(m.forms[k][0]), pl: splitForm(m.forms[k][1]) }; }
+    }
+    for (i = 0; i < chart.models.length && !got; i++) {
+      m = chart.models[i];
+      var nom = splitForm(m.forms.nom[0])[1];
+      if (!own(m.forms, k) || !nom || !regularModel(m) || lemma.length <= nom.length || lemma.slice(-nom.length) !== nom) { continue; }
+      var stem = lemma.slice(0, -nom.length);
+      got = { sg: [stem, splitForm(m.forms[k][0])[1]], pl: [stem, splitForm(m.forms[k][1])[1]] };
+    }
+    if (!got) { return null; }
+    for (i = 0; i < chart.models.length; i++) {
+      m = chart.models[i];
+      if (own(m.forms, k) && splitForm(m.forms[k][0])[1] === got.sg[1] && splitForm(m.forms[k][1])[1] === got.pl[1]) { got.like = m; break; }
+    }
+    return got.like ? got : null;
+  }
+  /* The lesson of one case (or job): the case and its question, one Latin example in which only that
+     case's word wears its label, what it says, and the case's row of the chart. A lesson whose sentence
+     is already on the card keeps the card and moves the label: one sentence, several jobs.
      .ls-scene is the place of the picture of the sentence. It is open only where the fitted briefing
      still holds the strip (lessonSceneFit), and the picture is drawn when the lesson is on show. */
   function setLesson(ls) {
-    var box = B.lessonEl, c = D.cases[ls.k], dc = D.declension, keep = !!(B.lesson && sameWords(B.lesson.words, ls.words)), ti = -1, i;
+    var box = B.lessonEl, ck = colorKey(ls.k), c = ck ? keyInfo(ck) : null, keep = !!(B.lesson && sameWords(B.lesson.words, ls.words)), ti = -1, i;
     if (!box || !c || !ls.words) { return; }
     for (i = 0; i < ls.words.length; i++) { if (ls.words[i].t) { ti = i; } }
     if (!keep) {
@@ -1782,8 +2970,11 @@
       box.querySelector(".ls-strip").appendChild(buildScroll(ls.words.map(function (w) { var o = {}; for (var k in w) { if (k !== "t") { o[k] = w[k]; } } return o; }), false));
     }
     B.lesson = ls;
-    box.className = "bf-card bf-lesson c-" + c.key + (box.classList.contains("wait") ? " wait" : "");
-    box.querySelector(".ls-head").innerHTML = pic("c-" + c.key, "c-pic") + '<span class="chip c-' + c.key + '">' + esc(c.name) + '</span><b class="ls-q">' + esc(c.question) + '</b><span class="ls-job">Job: ' + esc(c.job) + "</span>";
+    var face = keyPic(ck);
+    box.className = "bf-card bf-lesson c-" + ck + (box.classList.contains("wait") ? " wait" : "");
+    var head = box.querySelector(".ls-head");
+    head.className = "ls-head" + (face ? "" : " no-pic");
+    head.innerHTML = face + '<span class="chip c-' + ck + '">' + esc(c.name) + "</span>" + (c.question ? '<b class="ls-q">' + esc(c.question) + "</b>" : "") + (c.job ? '<span class="ls-job">Job: ' + esc(c.job) + "</span>" : "");
     var units = box.querySelectorAll(".wu");
     for (i = 0; i < units.length; i++) {
       var b = units[i].querySelector(".w");
@@ -1795,18 +2986,18 @@
     holder.hidden = !B.scnOn || !canScene(ls.words, ls.scene);
     holder.style.setProperty("--scn-ar", String(sceneRatio()));
     if (B.scnOn && B.lessonLive && !B.measuring) { lessonScene(holder, ls, ti); }
-    /* The row of the chart for this case, on the lesson's own noun (its dictionary form without the
-       last -a), and the form of the model noun it goes like: "Like portam in the chart:". Where that
-       label costs the row a line more than the short one would, the short one stands. */
-    var dr = declRow(ls.k), row = box.querySelector(".ls-row"), tw = ti >= 0 ? ls.words[ti] : null, m0 = dc.models[0];
-    var stem = tw && /.a$/.test(String(tw.lemma || "")) ? String(tw.lemma).slice(0, -1) : "";
-    function lsForm(end) { return '<span class="ls-end" lang="la"><span aria-hidden="true">' + declForm(stem, end) + '</span><span class="sr">' + esc(stem + end) + "</span></span>"; }
-    if (dr && stem) {
-      var forms = ' <span class="ls-forms">' + lsForm(dr.sg) + " <small>(singular),</small> " + lsForm(dr.pl) + " <small>(plural)</small></span>";
-      var rowShort = '<span class="ls-row-h">Same endings as <i lang="la">' + esc(m0.word) + "</i>:</span>" + forms;
+    /* The row of the chart for this case, on the lesson's own noun, and the form of the model noun it
+       goes like: "Like portam in the chart:". Where that label costs the row a line more than the short
+       one would, the short one stands. */
+    var rk = caseOfKey(ck), row = box.querySelector(".ls-row"), tw = ti >= 0 ? ls.words[ti] : null;
+    var made = rk ? lessonForms(chartOfFile(B.file), rk, tw) : null;
+    function lsForm(parts) { return '<span class="ls-end" lang="la"><span aria-hidden="true">' + declForm(parts) + '</span><span class="sr">' + esc(parts[0] + parts[1]) + "</span></span>"; }
+    if (made) {
+      var forms = ' <span class="ls-forms">' + lsForm(made.sg) + " <small>(singular),</small> " + lsForm(made.pl) + " <small>(plural)</small></span>";
+      var rowShort = '<span class="ls-row-h">Same endings as <i lang="la">' + esc(made.like.word) + "</i>:</span>" + forms;
       row.innerHTML = rowShort;
       var hShort = row.offsetHeight;
-      row.innerHTML = '<span class="ls-row-h">Like <i lang="la">' + esc(m0.stem + dr.sg) + "</i> in the chart:</span>" + forms;
+      row.innerHTML = '<span class="ls-row-h">Like <i lang="la">' + esc(formText(made.like.forms[rk][0])) + "</i> in the chart:</span>" + forms;
       if (hShort > 0 && row.offsetHeight > hShort + 2) { row.innerHTML = rowShort; }
     } else { row.innerHTML = ""; }
     if (!keep) { layoutScroll(); }
@@ -1943,9 +3134,11 @@
     /* (cards only while he talks: the short form of a briefing heard before is the recap alone, as ever) */
     var cards = B.talk && file.briefing.some(function (ln) { return ln.show === "chart" || !!ln.lesson; });
     var v = el("div", "view v-brief" + (cards ? " has-cards" : ""));
-    v.innerHTML = '<header class="bf-cover"><span class="f-tab">File ' + file.n + " of " + FILES.length + '</span><h1 class="bf-title">' + txt(file.title) + '</h1><p class="bf-blurb">' + txt(file.blurb) + "</p>" +
+    var inCh = FILES.filter(function (f) { return fileChapter(f) === fileChapter(file); }).length, chartId = "";
+    file.briefing.forEach(function (ln) { if (!chartId && ln.show === "chart" && typeof ln.chart === "string") { chartId = ln.chart; } });
+    v.innerHTML = '<header class="bf-cover"><span class="f-tab">' + esc(fileName(file, true)) + " of " + inCh + '</span><h1 class="bf-title">' + txt(file.title) + '</h1><p class="bf-blurb">' + txt(file.blurb) + "</p>" +
       '<p class="bf-meta">' + (stamp ? '<span class="bf-stamp' + (s >= 2 ? "" : " still") + '">' + esc(stamp) + "</span>" : "<span>" + file.questions.length + " questions</span>") + starsHtml(s) + "</p></header>" +
-      (cards ? '<div class="bf-cards"><section class="bf-card bf-chart wait">' + chartCardHtml() + '</section><section class="bf-card bf-lesson wait"></section>' : "") +
+      (cards ? '<div class="bf-cards"><section class="bf-card bf-chart wait">' + chartCardHtml(file, chartId) + '</section><section class="bf-card bf-lesson wait"></section>' : "") +
       '<section class="recap wait">' + recapHtml(file) + "</section>" + (cards ? "</div>" : "") +
       '<div class="bf-more" hidden><button type="button" class="btn ghost sm" data-action="hear">' + icon("replay") + "Hear the briefing</button>" +
       (file.training && !B.willTrain ? '<button type="button" class="btn ghost sm" data-action="retrain">' + icon("glass") + "Replay the training case</button>" : "") + "</div>" +
@@ -2027,9 +3220,9 @@
   /* ------------------------------------------------------ training case */
   /* One sentence worked through together. The sentence and the three suspects stay where they are for
      the whole case; what the player has to do next always sits in the bar at the bottom. */
-  function methodHtml(cls) {
+  function methodHtml(cls, file) {
     var m = '<ol class="method' + (cls ? " " + cls : "") + '" aria-label="The detective method">';
-    D.method.forEach(function (st, i) { m += "<li><b>" + (i + 1) + '</b><span class="m-t">' + txt(st.title) + '</span><span class="m-x">' + txt(st.text) + "</span></li>"; });
+    methodOf(file).forEach(function (st, i) { m += "<li><b>" + (i + 1) + '</b><span class="m-t">' + txt(st.title) + '</span><span class="m-x">' + txt(st.text) + "</span></li>"; });
     return m + "</ol>";
   }
   function training(file) {
@@ -2112,7 +3305,7 @@
     v.style.minHeight = "";
     if (!wide) { T.hold = 0; return; }
     if (box) {
-      var a = v.offsetHeight, m = el("div", "", methodHtml("full")).firstChild;
+      var a = v.offsetHeight, m = el("div", "", methodHtml("full", T.file)).firstChild;
       box.style.display = "none";
       v.insertBefore(m, box);
       T.hold = Math.max(a, v.offsetHeight);
@@ -2260,7 +3453,7 @@
     /* the case is closed: the suspects leave, and the method he just used is laid out in their place */
     T.outro = true;
     var box = T.view.querySelector(".answers");
-    if (box) { box.insertAdjacentHTML("afterend", methodHtml("full")); T.view.removeChild(box); }
+    if (box) { box.insertAdjacentHTML("afterend", methodHtml("full", T.file)); T.view.removeChild(box); }
     T.view.classList.add("outro");
     T.view.classList.remove("tight");
     var stood = inspFig.getBoundingClientRect();
@@ -2299,6 +3492,9 @@
   /* the longest thing he can say about an answer */
   var LEAD_MAX = (L.correct || []).concat(L.wrong || []).reduce(function (a, s) { return plain(s).length > plain(a).length ? s : a; }, "");
   function startRound(file, only) {
+    /* a round of the noun drill has ten questions of its own, drawn now (a practice round keeps the
+       questions that were missed) */
+    if (file.nounDrill && !only) { var drawn = drillRound(file); if (drawn) { file.questions = drawn; } }
     /* first visit: the author's order (it builds up on purpose). After that the questions are shuffled. */
     var played = !!save.seen["round:" + file.id];
     var qs = only ? shuffle(only) : (played ? shuffle(file.questions) : file.questions.slice());
@@ -2362,7 +3558,7 @@
     var hasWords = !!(q.words && q.words.length), sentence = hasWords && q.type === "sentence", gap = hasWords && !!q.gap;
     var v = el("div", "view v-play " + (hasWords ? "is-sentence" : "is-choice") + (hasWords && !sentence ? " q-choice" : "") + (gap ? " q-gap" : ""));
     if (hasWords) { v.appendChild(buildScroll(q.words, gap)); }
-    if (sentence) { v.insertAdjacentHTML("beforeend", methodHtml("")); }
+    if (sentence) { v.insertAdjacentHTML("beforeend", methodHtml("", R.file)); }
     v.appendChild(buildAnswers(c.opts));
     var dock = el("div", "dock play-dock");
     if (hasWords) { dock.appendChild(el("p", "gloss-hint" + (save.seen.gloss ? " used" : ""), esc(L.glossHint))); }
@@ -2432,6 +3628,11 @@
     if (wide) { applyReserve(); }
     if (!wide && pageOver() > 0) { squeezeInspector(v.lastElementChild); applyReserve(); }
     if (pageOver() > 0 && !v.classList.contains("tight")) { v.classList.add("tight"); applyReserve(); }
+    /* The labels under the words are not seen before the answer, but each has its place already. Where he
+       and the spacing have given what they can, the long names of the jobs ("Ablative of personal agent")
+       give their places to the short ones ("Abl. agent") and the sentence closes up, before anything that
+       is on the screen goes. (After the answer the case note still writes the long name out.) */
+    if (pageOver() > 0 && !v.classList.contains("lab-ab") && v.querySelector(".scroll .wl-a")) { v.classList.add("lab-ab"); layoutScroll(); applyReserve(); }
     /* last of all, on a second look, the line about it having slipped away goes: the question stays */
     if (pageOver() > 0) { app.classList.add("terse"); applyReserve(); }
     /* On a phone that is still too short for a question with its clue, the button for the next clue
@@ -2449,6 +3650,15 @@
       squeezeInspector(v.lastElementChild, true);
     }
     lastStep("cb-up");
+    /* Then a card that carries the long name of a job takes the short one ("Abl. agent" for "Ablative of
+       personal agent": see buildAnswers), with a clue on the desk or without. The question under the name
+       stays, a screen reader still gets the long name, and the case note writes it out after the answer
+       (the cards keep the short one then, so the ones that leave the desk are the ones that were tapped). */
+    if (pageOver() > 0 && !v.classList.contains("opt-ab") && v.querySelector(".answers .ol-a")) {
+      v.classList.add("opt-ab");
+      fitAnswers();
+      if (wide) { applyReserve(); } else { app.style.removeProperty("--insp"); fitInspector(); applyReserve(); squeezeInspector(v.lastElementChild, true); }
+    }
     /* A choice question can be answered from its prompt alone: its Latin example is the first thing
        that is worth less than the prompt and the answers. So where even all of the above is not enough,
        the evidence makes way (it is back, with its labels, once the answer is in). */
@@ -2532,7 +3742,7 @@
     var note = v.querySelector(".clue-note");
     if (!note) {
       note = el("section", "clue-note");
-      note.setAttribute("aria-label", "The Inspector's clues");
+      note.setAttribute("aria-label", "The Inspector\u2019s clues");
       v.insertBefore(note, v.firstChild);
       v.classList.add("has-clue");
     }
@@ -2621,7 +3831,7 @@
     h += '<div class="sh-head"><div class="sh-insp"></div><span class="sh-ic">' + icon(ok ? "check" : "x") + '</span><div class="sh-ttl"><div class="sh-say"></div>' +
       (ok ? '<p class="sh-line"><b>' + (c.retry ? "Got it this time" : "Correct") + "</b>" + optionChip(right, "pop") + jobHtml + "</p>"
         : '<p class="sh-line sh-not"><b>Not</b>' + optionChip(mine, "no") + '</p><p class="sh-line sh-is"><b>It is</b>' + optionChip(right, "pop") + jobHtml + "</p>" +
-          (al ? '<p class="sh-line sh-ask"><b>Why not</b>' + optionChip(mine, "no") + "<b>?</b></p>" : "")) + "</div></div>";
+          (al ? '<p class="sh-line sh-ask"><b>Why not</b><span class="sh-x">' + optionChip(mine, "no", true) + "<b>?</b></span></p>" : "")) + "</div></div>";
     if (al) {
       h += '<p class="sh-wn">' + rich(al.text) + "</p>";
       h += '<p class="sh-line sh-ans"><span class="sh-ok">' + icon("check") + "</span><b>The answer:</b>" + optionChip(right, "") + jobHtml + "</p>";
@@ -2718,8 +3928,10 @@
     var sheet = desk.querySelector(".sheet"), v = sheet ? sheet.parentNode : null;
     if (!sheet || !v) { return; }
     sheet.classList.remove("terse");
+    sheet.classList.remove("ask-ab");
     v.classList.remove("dense");
     v.classList.remove("dense2");
+    if (v.classList.contains("dense3")) { v.classList.remove("dense3"); fitAnswers(true); }
     if (v.classList.contains("lean")) { v.classList.remove("lean"); layoutScroll(); }
     /* Beside the Inspector, on a tall laptop screen or a tablet on its side, the words of the sentence
        are large. There they first take the size they have on a lower laptop screen ("lean"), which
@@ -2731,8 +3943,18 @@
        is still too long with it, the picture goes (sceneGiveAnswered) before the reminder does. */
     if (pageOver() > 0) { v.classList.add("dense"); }
     if (gentle) { return; }
+    /* (then the long names of the jobs under the words give way to their short ones, if they have not
+       already: see fitPlay) */
+    if (pageOver() > 0 && !v.classList.contains("lab-ab") && v.querySelector(".scroll .wl-a")) { v.classList.add("lab-ab"); layoutScroll(); }
+    /* (and so does the long name in "Why not ...?", where he asks it in the note) */
+    var ask = sheet.querySelector(".sh-ask .ol-a");
+    if (pageOver() > 0 && ask && sheet.querySelector(".sh-ask").getClientRects().length) { sheet.classList.add("ask-ab"); }
     if (pageOver() > 0) { sheet.classList.add("terse"); }
     if (pageOver() > 0) { v.classList.add("dense2"); }
+    /* The very last step, for a question whose answer cards stay on the desk above the note: the cards
+       close ranks too ("dense3"). The "Ruled out" stamps go (such a card is still struck through, dashed
+       and pale), and each row of cards is as tall as its own words need. The marks are placed again. */
+    if (pageOver() > 0 && v.classList.contains("is-choice") && v.querySelector(".answers:not(.ghost) .opt")) { v.classList.add("dense3"); fitAnswers(true); }
   }
   function answer(k) {
     var c = R && R.cur;
@@ -2837,12 +4059,12 @@
     R.done = true;
     paused = null;
     if (!R.practice) {
-      var before = rankFor(totalStars()), prev = save.stars[id] || 0;
+      var before = rankFor(allStars()), prev = save.stars[id] || 0;
       if (stars > prev) { save.stars[id] = stars; res.best = prev > 0; } else if (stars < prev) { res.keep = prev; }
       if (stars === 3 && R.clues === 0) { res.solo = true; save.solo[id] = true; }
       save.seen["round:" + id] = true;
       persist();
-      var after = rankFor(totalStars());
+      var after = rankFor(allStars());
       if (after.index > before.index) { res.rankUp = after.title; }
     }
     showResults(res);
@@ -2866,7 +4088,7 @@
     var file = R.file, n = R.n, missed = R.missed.slice(), stars = res.stars, i;
     var nextF = FILES[FILES.indexOf(file) + 1] || null;
     var v = el("div", "view v-results"), h = "";
-    h += '<section class="verdict"><span class="chip-file">' + (res.practice ? "Practice round" : "File " + file.n) + '</span><h1 class="vd-title">' + txt(file.title) + "</h1>";
+    h += '<section class="verdict"><span class="chip-file">' + (res.practice ? "Practice round" : esc(fileName(file))) + '</span><h1 class="vd-title">' + txt(file.title) + "</h1>";
     if (res.practice) {
       h += '<div class="vd-big">' + icon(missed.length ? "glass" : "check", "") + "</div>";
     } else {
@@ -2876,9 +4098,11 @@
     }
     h += '<ul class="vd-stats"><li><b>' + R.right + "/" + n + "</b><span>" + (res.practice ? "fixed" : "first try") + "</span></li><li><b>" + R.best + "</b><span>best streak</span></li><li><b>" + R.clues + "</b><span>" + (R.clues === 1 ? "clue used" : "clues used") + "</span></li></ul>";
     if (res.solo) { h += '<p class="vd-extra vd-solo"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-ribbon"></use></svg><span>' + esc(L.solo) + "</span></p>"; }
-    var rankLine = res.rankUp ? fill(L.rankUp, { rank: res.rankUp }) : "", sayRank = !!rankLine;
+    /* (courses.js says "a" or "an" before the rank: "an Inspector"; data.js's line has "a" only) */
+    var upLine = arr(CL.rankUp)[0] || (typeof CL.rankUp === "string" ? CL.rankUp : "") || L.rankUp;
+    var rankLine = res.rankUp ? fill(upLine, { a: aRank(res.rankUp), rank: res.rankUp }) : "", sayRank = !!rankLine;
     if (res.rankUp) {
-      h += '<div class="vd-extra vd-rank"><svg viewBox="0 0 48 52" aria-hidden="true" focusable="false"><use href="#i-badge"></use></svg><p>' + tieShort(rich(rankLine)) + "</p>" + rankRowHtml(totalStars()) + "</div>";
+      h += '<div class="vd-extra vd-rank"><svg viewBox="0 0 48 52" aria-hidden="true" focusable="false"><use href="#i-badge"></use></svg><p>' + tieShort(rich(rankLine)) + "</p>" + rankRowHtml(allStars(), true) + "</div>";
     }
     if (res.best) { h += '<p class="vd-best">New best</p>'; }
     else if (res.keep) { h += '<p class="vd-best keep">Your best here is still ' + res.keep + (res.keep === 1 ? " star" : " stars") + "</p>"; }
@@ -3000,7 +4224,8 @@
   function toggleSound() {
     save.sound = !save.sound;
     Sfx.setMuted(!save.sound);
-    persist();
+    tidySave();
+    LP.set("sound", save.sound);
     syncSound();
     if (save.sound) { Sfx.play("tap"); }
   }
@@ -3008,7 +4233,7 @@
     if (!MUSIC) { return; }
     save.music = !save.music;
     try { MUSIC.setEnabled(save.music); } catch (e) { /* the game works without music */ }
-    persist();
+    LP.set("music", save.music);
     syncMusic();
   }
   function nextPiece() { if (MUSIC && save.music) { try { MUSIC.next(); } catch (e) { /* ignore */ } } }
@@ -3019,7 +4244,11 @@
     music: toggleMusic,
     "music-next": nextPiece,
     clue: askClue,
-    reset: openConfirm,
+    reset: function () { openConfirm("reset"); },
+    players: function () { if (!busy) { choosePlayers(); } },
+    chapter: function () { if (!busy && view === "home" && player) { if (atHome) { toHomePage("chapter"); } else { ui.changeChapter(player.id); } } },
+    "claim-yes": function () { if (view === "claim") { claimYes(); } },
+    "claim-no": function () { if (view === "claim") { claimNo(); } },
     skip: function () { if (view === "briefing" && B) { briefSkip(); } else if (view === "training" && T) { finishTraining(); } },
     practice: function () { if (view === "results" && R && R.missed.length) { startRound(R.file, R.missed.slice()); } },
     next: function () { var f = R ? FILES[FILES.indexOf(R.file) + 1] : null; if (view === "results" && f) { paused = null; briefing(f); } },
@@ -3077,6 +4306,8 @@
     if (t.hasAttribute("data-k") || t.hasAttribute("data-choice")) { return true; }
     return !shift.clue && t.getAttribute("data-action") === "clue";
   }
+  /* (the guard listens first, in the capture phase: a tap it holds back is defaultPrevented, and neither the
+     screens of players.js nor the game below act on it) */
   document.addEventListener("click", function (e) {
     var t = e.target && e.target.closest ? e.target.closest("button, a") : null;
     if (!t || t.disabled) { return; }
@@ -3084,14 +4315,35 @@
     /* (a click made by a script is no pointer: it has no spot, and is never held back) */
     var byPointer = e.isTrusted !== false && (e.detail > 0 || now() - ptrAt < 700);
     if (shiftTap(e, t, byPointer)) { e.preventDefault(); return; }
-    var a = t.getAttribute("data-action"), isClue = a === "clue" && view === "play" && !!(R && R.cur && !R.cur.answered);
+    var isClue = t.getAttribute("data-action") === "clue" && view === "play" && !!(R && R.cur && !R.cur.answered);
     shift = byPointer && (t.hasAttribute("data-primary") || isClue) ? { t: now(), x: e.clientX, y: e.clientY, ms: isClue ? SHIFT_CLUE : SHIFT_NEXT, clue: isClue, near: ptrKind === "mouse" ? 4 : 24 } : { t: 0, x: 0, y: 0, ms: 0, clue: false, near: 24 };
+  }, true);
+  document.addEventListener("click", function (e) {
+    if (e.defaultPrevented) { return; }
+    var t = e.target && e.target.closest ? e.target.closest("button, a") : null;
+    /* (the screens of players.js, root class lp, answer their own taps) */
+    if (!t || t.disabled || t.closest(".lp")) { return; }
+    /* on the games site the chip, "Switch player" and "Change" go to the home page in place of this page (a
+       click with a key held, or by another button, is the browser's: a new tab or window) */
+    if (t.tagName === "A" && t.hasAttribute("data-home")) {
+      if (e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) { return; }
+      e.preventDefault();
+      if (busy) { return; }
+      Sfx.play("tap");
+      toHomePage(t.getAttribute("data-home"));
+      return;
+    }
+    var a = t.getAttribute("data-action");
     if (a && ACT[a]) {
       if (!QUIET[a]) { Sfx.play("tap"); }
       ACT[a](t);
       return;
     }
+    if (t.hasAttribute("data-chart")) { Sfx.play("tap"); declChart(+t.getAttribute("data-chart")); return; }
     if (t.hasAttribute("data-noun")) { Sfx.play("tap"); declPick(+t.getAttribute("data-noun")); return; }
+    /* All nouns: a chapter's list, a noun's table (a second press closes it) */
+    if (t.hasAttribute("data-anch")) { Sfx.play("tap"); nounChapter(t, t.getAttribute("aria-expanded") !== "true"); return; }
+    if (t.hasAttribute("data-an")) { Sfx.play("tap"); nounOpen(t, t.getAttribute("aria-expanded") !== "true"); return; }
     if (t.hasAttribute("data-decl")) { Sfx.play("tap"); declSwitch(t.getAttribute("data-decl")); return; }
     if (t.hasAttribute("data-box")) { if (!t.classList.contains("open")) { Sfx.play("tap"); declOpen(t); } return; }
     if (t.hasAttribute("data-clue-tab")) { Sfx.play("tap"); if (R && R.cur && !R.cur.answered) { showClue(+t.getAttribute("data-clue-tab"), false); } return; }
@@ -3118,7 +4370,12 @@
   /* ----------------------------------------------------------- keyboard */
   document.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) { return; }
-    var k = e.key;
+    var k = e.key, tgt = e.target;
+    /* a text field (the name of a new player) takes its own keys: no shortcut works there */
+    if (tgt && tgt.matches && tgt.matches("input:not([type=button]):not([type=checkbox]):not([type=radio]), textarea, [contenteditable]")) {
+      if (k === "Escape" && cfOpen) { e.preventDefault(); closeConfirm(); }
+      return;
+    }
     if (k === "Tab" || k === "Enter" || k === " " || /^Arrow/.test(k) || /^[1-4]$/.test(k)) { kb = true; }
     /* a held key is one press: it must not run through a whole briefing */
     if (e.repeat && (k === "Enter" || k === " " || /^[1-9a-z]$/i.test(k))) { e.preventDefault(); return; }
@@ -3165,9 +4422,13 @@
   function refit() {
     hideGloss();
     declFit();
+    fitNounTables();
     var c = view === "play" && R ? R.cur : null, pv = c && !c.answered ? desk.querySelector(".v-play") : null;
-    /* (the evidence may have made way for the old size: it has to be back before it is measured) */
-    if (pv) { pv.classList.remove("no-ev"); }
+    /* (the evidence may have made way for the old size: it has to be back before it is measured; and the
+       short names of the jobs, under the words and on the cards, were for the old size too) */
+    if (pv) { pv.classList.remove("no-ev"); pv.classList.remove("opt-ab"); }
+    var lv = view === "play" ? desk.querySelector(".v-play.lab-ab") : null;
+    if (lv) { lv.classList.remove("lab-ab"); }
     fitPips();
     layoutScroll();
     fitAnswers();
@@ -3211,6 +4472,63 @@
     resizeRaf = window.requestAnimationFrame ? requestAnimationFrame(onResize) : setTimeout(onResize, 60);
   });
 
+  /* ------------------------------------------------------------ the violin
+     A player who takes too long (30 seconds with no tap, click, key or scroll while a question waits for
+     its answer, or a briefing or the training case waits for a tap; he is not talking, no dialog and no
+     Notebook is open, the page is visible) sees the Inspector take out his violin and play: the music
+     switches to a fast caprice and his bow follows its notes. Any input, another screen or a hidden page
+     makes him put it away, and the 30 seconds start again. detective.js and music.js do the playing;
+     the game only says when, and every call is guarded, so the game is the same with files that have no
+     violin. (?idle=N sets the wait to N seconds, for tests.) */
+  var IDLE_MS = 30000;
+  if (own(URLQ, "idle") && +URLQ.idle >= 1 && +URLQ.idle <= 600) { IDLE_MS = Math.round(+URLQ.idle * 1000); }
+  var idle = { t: 0, on: false };
+  function idleView() { return view === "play" || view === "briefing" || view === "training"; }
+  function idleWaits() {
+    if (document.hidden || nbOpen || cfOpen || !speech.done || busy) { return false; }
+    if (view === "play") { return !!(R && R.cur && !R.cur.answered); }
+    return (view === "briefing" && !!B) || (view === "training" && !!T);
+  }
+  function idleArm() {
+    clearTimeout(idle.t);
+    idle.t = 0;
+    if (idle.on || document.hidden || !idleView()) { return; }
+    idle.t = setTimeout(idleCheck, IDLE_MS);
+  }
+  function idleCheck() {
+    idle.t = 0;
+    if (idle.on) { return; }
+    if (idleWaits()) { violinOn(); return; }
+    /* (he is still talking, or a dialog is open: he waits for the quiet, a second at a time) */
+    if (idleView() && !document.hidden) { idle.t = setTimeout(idleCheck, 1000); }
+  }
+  function violinOn() {
+    if (idle.on || typeof insp.violin !== "function") { return; }
+    idle.on = true;
+    try { insp.violin(true); } catch (e) { /* ignore */ }
+    var M = window.Music;
+    if (M && typeof M.setMode === "function") {
+      try { M.setMode("show"); } catch (e2) { /* ignore */ }
+      try { M.onnote = typeof insp.bow === "function" ? function () { try { insp.bow(); } catch (e4) { /* ignore */ } } : null; } catch (e3) { /* ignore */ }
+    }
+  }
+  /* still: he is about to show a new mood, which puts the violin away by itself */
+  function violinOff(still) {
+    if (!idle.on) { return; }
+    idle.on = false;
+    if (!still) { try { if (typeof insp.violin === "function") { insp.violin(false); } } catch (e) { /* ignore */ } }
+    var M = window.Music;
+    if (M && typeof M.setMode === "function") {
+      try { M.onnote = null; } catch (e3) { /* ignore */ }
+      try { M.setMode("calm"); } catch (e2) { /* ignore */ }
+    }
+  }
+  function onInput() { violinOff(); idleArm(); }
+  ["pointerdown", "keydown", "wheel", "touchstart", "scroll"].forEach(function (t) { document.addEventListener(t, onInput, { capture: true, passive: true }); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { violinOff(); clearTimeout(idle.t); idle.t = 0; } else { idleArm(); }
+  });
+
   /* ------------------------------------------------- test contract (SPEC 7.3) */
   window.CD_TEST = {
     state: function () {
@@ -3229,6 +4547,14 @@
       if (view === "training" && T) { return trainHint(); }
       return "[data-primary]";
     },
+    /* the question on the desk as the data has it (a copy), and how many questions its file holds: a round
+       of the noun drill draws its questions when it starts, so a test cannot look them up in a data file */
+    question: function () {
+      var c = view === "play" && R ? R.cur : null, q = null;
+      if (!c) { return null; }
+      try { q = JSON.parse(JSON.stringify(c.q)); } catch (e) { q = null; }
+      return q ? { q: q, of: R.file.questions.length, drill: !!R.file.nounDrill } : null;
+    },
     wrong: function () {
       var c = view === "play" && R ? R.cur : null;
       if (!c || c.answered) { return null; }
@@ -3243,17 +4569,33 @@
   loadSave();
   try { Sfx.setMuted(!save.sound); } catch (e) { /* ignore */ }
   gamesHome();
+  if (!atHome) { ownChip(); } else if (chip) { chip.setAttribute("data-home", "players"); }
   syncSound();
   buildNotebook();
+  tidySave();
   try {
     if (MUSIC) {
-      MUSIC.onchange = function (m) { if (m && m.playing && m.n && m.n !== save.piece) { save.piece = m.n; persist(); } syncMusic(); };
+      /* the piece is kept only from the background list: a fast piece he plays on his violin ("show") is not
+         where the background music should begin again after a reload */
+      MUSIC.onchange = function (m) { if (m && m.playing && m.n && m.mode !== "show" && m.n !== save.piece) { save.piece = m.n; persist(); } syncMusic(); };
       MUSIC.start(save.piece);
       MUSIC.setEnabled(save.music);
     }
   } catch (e) { /* the game works without music */ }
   syncMusic();
-  home();
+  LP.onchange(onPlayers);
+  window.addEventListener("storage", function (e) { if (e.key === D.storageKey || e.key === null) { onProgress(); } });
+  /* The address may name a grade (?grade=6&chapter=2): that player's case files. Otherwise, on the games site,
+     the player chosen on the home page (with nobody chosen, the home page, at once: the page stays blank
+     meanwhile); elsewhere every visit starts on "Who's on the case?". */
+  var fromLink = playerFromUrl();
+  if (fromLink) { startPlayer(fromLink); }
+  else if (atHome && LP.current()) { lead = arrived; startPlayer(LP.current()); }
+  else if (atHome && arrived) { waitForPick(); }
+  else if (atHome) { app.style.visibility = "hidden"; toHomePage("players"); }
+  else { ui.players(); }
+  /* (a page brought back from the browser's cache: the choice may have changed meanwhile) */
+  window.addEventListener("pageshow", function (e) { if (e.persisted && atHome) { app.style.visibility = ""; onPlayers({ remote: true }); } });
   /* Both fonts come in two files (plain letters, and the letters with a long mark). All four are asked
      for now, so that no line changes its height in the middle of a case, and every screen fits itself
      again whenever one arrives. */

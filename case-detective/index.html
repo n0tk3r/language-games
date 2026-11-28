@@ -85,16 +85,19 @@
 <div class="app" id="app" data-view="home">
 
   <header class="topbar" id="topbar">
-    <!-- the way back to all the games: shown on the casebook, where "Case files" is hidden (js/game.js, setView) -->
+    <!-- the way back to all the games: shown where "Case files" is hidden (js/game.js, setView) -->
     <a class="tb-btn tb-games" id="gamesLink" href="../index.html" aria-label="All games: the Language Games home page">
       <svg class="ic" aria-hidden="true"><use href="#i-house"></use></svg><span class="tb-lab">All games</span>
     </a>
     <button type="button" class="tb-btn tb-home" id="homeBtn" data-action="home" aria-label="Back to the case files" hidden>
       <svg class="ic" aria-hidden="true"><use href="#i-files"></use></svg><span class="tb-lab">Case files</span>
     </button>
-    <div class="logo" id="logo"><svg class="ic" aria-hidden="true"><use href="#i-glass"></use></svg><span>Case Detective<small>Wheelock’s Latin<span class="lg-dot"> · </span><span class="lg-ch">Chapter 2</span></small></span></div>
+    <div class="logo" id="logo"><svg class="ic" aria-hidden="true"><use href="#i-glass"></use></svg><span>Case Detective<small>Wheelock’s Latin · Chapter 2</small></span></div>
     <div class="tb-mid" id="tbMid"></div>
     <div class="streak" id="streak" hidden><svg class="ic" aria-hidden="true"><use href="#i-flame"></use></svg><b id="streakN">0</b><span class="sr">answers in a row</span></div>
+    <!-- the player on the case, on the casebook: to the games' home page to change player or chapter (js/game.js,
+         syncChip); where the game keeps its own screens for the players, a button that opens them -->
+    <a class="tb-btn tb-chip" id="playerChip" href="../index.html?play=case-detective#players" title="Change player or chapter" hidden></a>
     <button type="button" class="tb-btn" id="nbBtn" data-action="notebook" aria-haspopup="dialog" aria-label="Open the Notebook">
       <svg class="ic" aria-hidden="true"><use href="#i-book"></use></svg><span class="tb-lab">Notebook</span>
     </button>
@@ -162,6 +165,8 @@
 <noscript><p class="noscript">Case Detective needs JavaScript to run. Please turn it on and reload.</p></noscript>
 
 <script src="js/data.js"></script>
+<script src="js/courses.js"></script>
+<script src="js/players.js"></script>
 <script src="js/detective.js"></script>
 <script src="js/scenes.js"></script>
 <script src="js/sfx.js"></script>

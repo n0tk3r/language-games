@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where the material comes from | Case Detective</title>
+<style>
+@font-face { font-family: 'Nunito Variable'; font-style: normal; font-display: swap; font-weight: 200 1000; src: url(fonts/nunito-latin-wght-normal.woff2) format('woff2-variations'); }
+@font-face { font-family: 'Alegreya Variable'; font-style: normal; font-display: swap; font-weight: 400 900; src: url(fonts/alegreya-latin-wght-normal.woff2) format('woff2-variations'); }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: linear-gradient(180deg, #070d1f, #13244a); color: #2b1d14; font: 500 18px/1.5 'Nunito Variable', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
+main { max-width: 700px; margin: 0 auto; padding: 22px 14px 48px; }
+.card { padding: 20px 22px 24px; border: 2px solid #b89a5e; border-radius: 18px; background: #fbf3dc; box-shadow: 0 12px 30px rgba(0, 0, 0, .45); }
+h1 { margin: 0 0 10px; font: 800 30px/1.15 'Alegreya Variable', Georgia, serif; color: #7c121b; }
+h2 { margin: 24px 0 6px; font: 800 22px/1.2 'Alegreya Variable', Georgia, serif; color: #7c121b; }
+p { margin: 0 0 10px; }
+ul { margin: 0 0 10px; padding-left: 22px; }
+li { margin-bottom: 8px; }
+a { color: #7c121b; font-weight: 700; text-underline-offset: 3px; }
+a:focus-visible { outline: 3px solid #2b1d14; outline-offset: 2px; border-radius: 4px; }
+cite { font-style: italic; }
+.lead { color: #5c4636; }
+.back { display: inline-flex; align-items: center; min-height: 48px; margin-bottom: 14px; padding: 0 18px; border: 2px solid #7a4e10; border-radius: 14px; background: linear-gradient(180deg, #ffe596, #f0bb4c 48%, #d99a2b); color: #2c1a05; font-weight: 800; text-decoration: none; box-shadow: 0 4px 0 #7a4e10; }
+.back:focus-visible { outline: 3px solid #ffe08a; outline-offset: 3px; }
+/* a link in a list of links: a target of 45 px that opens up the lines only as far as it needs (from one line to
+   the next 45 px, so that the targets of two links do not overlap) */
+.links li { margin-bottom: 12px; }
+.links a { display: inline-block; padding: 9px 0; margin: -6px 0; }
+table { width: 100%; margin: 4px 0 12px; border-collapse: collapse; font-size: 17px; }
+caption { margin-bottom: 6px; text-align: left; font-weight: 800; }
+th, td { padding: 5px 8px; border-bottom: 1px solid #dcc590; text-align: left; }
+thead th { border-bottom: 2px solid #b89a5e; color: #5c4636; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; }
+tbody th { font-weight: 700; }
+td { font-variant-numeric: tabular-nums; }
+.note { margin-top: 22px; padding: 12px 14px; border-left: 5px solid #b3202a; border-radius: 10px; background: #f1e2bb; }
+@media (max-width: 380px) {
+  .card { padding: 16px 14px 20px; }
+  h1 { font-size: 26px; }
+  th, td { padding: 5px 4px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <a class="back" id="back" href="index.html">Back to the game</a>
+  <div class="card">
+    <h1>Where the material comes from</h1>
+    <p class="lead">A page for parents: the book and the school plan that Case Detective follows, and how the game uses them.</p>
+
+    <h2 id="book">The book</h2>
+    <p>The Latin in the game comes from <cite>Wheelock’s Latin</cite>, 7th edition, by Frederic M. Wheelock, revised by Richard A. LaFleur (HarperCollins; ISBN 978-0061997211). It is the textbook that Hillsdale College K-12 schools use from 6th grade on. The game goes through it chapter by chapter.</p>
+
+    <h2 id="sequence">The order of the chapters</h2>
+    <p>Hillsdale’s Latin courses split the book by grade:</p>
+    <ul>
+      <li><b>Latin IA</b>, 6th grade: chapters 1 to 8</li>
+      <li><b>Latin IB</b>, 7th grade: chapters 9 to 17</li>
+      <li><b>Latin II</b>, 8th grade: chapters 18 to 27</li>
+      <li><b>Latin III</b>, 9th grade: chapters 28 to 40</li>
+    </ul>
+    <p>When a new player picks a class, the game suggests the chapter of the current month from the school’s month-by-month plan:</p>
+    <table>
+      <caption>The chapter of each month</caption>
+      <thead><tr><th scope="col">Month</th><th scope="col">6th grade</th><th scope="col">7th grade</th><th scope="col">8th grade</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">August</th><td>1</td><td>9</td><td>18</td></tr>
+        <tr><th scope="row">September</th><td>1</td><td>9</td><td>18</td></tr>
+        <tr><th scope="row">October</th><td>1</td><td>9</td><td>20</td></tr>
+        <tr><th scope="row">November</th><td>2</td><td>10</td><td>21</td></tr>
+        <tr><th scope="row">December</th><td>3</td><td>11</td><td>22</td></tr>
+        <tr><th scope="row">January</th><td>4</td><td>12</td><td>23</td></tr>
+        <tr><th scope="row">February</th><td>5</td><td>13</td><td>24</td></tr>
+        <tr><th scope="row">March</th><td>6</td><td>14</td><td>25</td></tr>
+        <tr><th scope="row">April</th><td>7</td><td>15</td><td>26</td></tr>
+        <tr><th scope="row">May</th><td>8</td><td>17</td><td>27</td></tr>
+      </tbody>
+    </table>
+    <p>In June and July the game suggests the last chapter of the grade. The 9th grade has no month plan here, so it starts at chapter 28.</p>
+    <p>The courses and the plan are as given in Hillsdale’s Curriculum Overview, High School Course Catalog (2023) and Program Guide (2022):</p>
+    <ul class="links">
+      <li><a href="https://k12blog.hillsdale.edu/resources-for-latin-students-in-6th-12th/">Resources for Latin students in 6th to 12th grade</a> (Hillsdale K-12 blog)</li>
+      <li><a href="https://k12.hillsdale.edu/Curriculum/Overview">Curriculum Overview</a></li>
+      <li><a href="https://k12.hillsdale.edu/getmedia/95a3b538-8f5a-4682-9f66-1f2ad9f67c50/High-School-Course-Catalog.pdf">High School Course Catalog</a> (2023, PDF)</li>
+      <li><a href="https://k12.hillsdale.edu/getmedia/84355dd1-7257-4cec-b848-5fe17bfed7b6/K12-Sample-Book-List-9-22.pdf">Program Guide</a> (2022, PDF)</li>
+    </ul>
+    <p>Schools differ, so the chapter can always be changed: press “Change” on a player’s case files. A class that is still on an earlier chapter can pick it under “Earlier chapters”: an 8th grader may choose any chapter from 1 to 27. The case files then follow that chapter’s course, so an 8th grader on chapter 5 gets the files of Latin IA. Stars already won stay saved and show again when the class gets back to those chapters. A player’s grade is changed under “Manage players” on the first screen.</p>
+
+    <h2 id="use">How the game uses them</h2>
+    <ul>
+      <li>Each chapter’s case files use only words from that chapter and the chapters before it.</li>
+      <li>The charts follow the book’s order of the cases (nominative, genitive, dative, accusative, ablative, vocative) and its model nouns.</li>
+      <li>A use of a case, for example the ablative of means, is asked only from the chapter where the book teaches it.</li>
+      <li>The “Every noun” file of a chapter asks for the forms of the nouns in the book’s chapter vocabularies, from chapter 1 up to that chapter. The Notebook lists them under “All nouns”, each with its full table.</li>
+      <li>The names of the jobs in 6th grade follow a chapter 2 class test from a school that uses this curriculum.</li>
+    </ul>
+
+    <h2 id="words">Word lists</h2>
+    <p>The word lists were checked against the University of Victoria’s <a href="https://hcmc.uvic.ca/project/latin/wheelock/">Wheelock Latin Exercises</a> (7th edition). Please check the printed book before a graded test.</p>
+
+    <h2 id="music">Music</h2>
+    <p>In the background you hear slow music by Antonio Vivaldi (1678 to 1741) and gentle pieces linked to the Sherlock Holmes stories. When the Inspector plays his violin, you hear Caprices by Niccolò Paganini (1782 to 1840). The game plays every note itself, with recordings of a real violin, viola and cello. The notes come from free editions of the scores (the Mutopia Project and MuseScore). The recordings come from TinySOL, a free set of single notes recorded at Ircam in Paris. <a href="music/credits.html">Where the music comes from</a></p>
+
+    <h2 id="privacy">Privacy</h2>
+    <p>No sign-in, no ads and no tracking. Player names and progress stay in this browser, on this device: nothing is sent anywhere.</p>
+
+    <p class="note">Case Detective is an independent family project. It is not affiliated with or endorsed by Hillsdale College or the publisher of Wheelock’s Latin.</p>
+  </div>
+</main>
+<script>
+/* The game opens this page in a tab of its own, so that a case in progress is not lost. Going back then means
+   closing this tab. Opened any other way, the link simply leads to the game. */
+(function () {
+  var a = document.getElementById("back");
+  if (!a || location.hash !== "#from-game" || history.length > 1) { return; }
+  a.addEventListener("click", function (e) {
+    try { window.close(); } catch (err) { /* the link does its work */ }
+    if (window.closed) { e.preventDefault(); }
+  });
+})();
+</script>
+</body>
+</html>

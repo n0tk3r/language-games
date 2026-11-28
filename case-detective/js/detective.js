@@ -5,6 +5,9 @@
  *   var d = Detective.create({ size: 160, variant: 'full', mood: 'idle' });
  *   d.setMood('think'); d.play('cheer', 1600); d.talk(true); d.lookAt(x, y); d.setSize(200); d.destroy();
  *   also: d.setVariant('bust'), d.getMood()
+ *   the violin: d.violin(true) takes it out (0.8 s) and he plays; d.violin(false) puts it away (0.5 s) and he is back in
+ *   his mood; d.bow() turns the bow once (for a note; with no bow() for 1.2 s he bows on his own at a steady pace);
+ *   d.isPlaying(); setMood() or play() while he plays puts the violin away at once
  *
  * Colours are CSS custom properties (set them on the element or any ancestor):
  *   --dt-coat --dt-coat-shade --dt-hat --dt-accent --dt-skin --dt-hair --dt-line --dt-lens
@@ -94,6 +97,63 @@
     return out;
   }
 
+  /* ------------------------------------------------------------------ the violin
+   * The violin and the bow are drawn in their own units: the violin lies along +x from the end under his jaw (0) to the
+   * scroll (61); the bow along +y of the hand that holds it, stick on the line x = 0, hair on x = VB_HAIR.
+   * Per crop: where the end of the violin sits (at), its angle (a), the angle of the bow (bow) and the stretch of the
+   * bow that crosses the strings (lo to hi: from the hand to the strings). The bow crosses the strings at VC, between
+   * the bridge (14.7) and the end of the fingerboard (20.2). His left hand holds the neck at VG.
+   * In the low pose (taking it out, putting it away) he holds the violin by the neck in front of his left hip, scroll up,
+   * and the bow in his right hand: where the hands are (lowB, lowA) and the angles of the violin (va) and the bow (ba).
+   * From there the left forearm only has to swing up in front of him, so the violin rises close to his body. */
+  var VS = 1.12, BS = 1.1;                /* both are drawn a little larger than their own units */
+  var VG = [43 * VS, 2.2 * VS], VC = 17.4 * VS, VB_HAIR = 2.6 * BS;
+  var VN = {
+    full: { at: [110, 140], a: 4, bow: -40, lo: 12, hi: 40, pos: 22, lowB: [152, 188, 1], lowA: [70, 205, 1], va: -55, ba: -80 },
+    bust: { at: [110, 140], a: 4, bow: -40, lo: 12, hi: 26, pos: 18, lowB: [152, 188, 1], lowA: [70, 205, 1], va: -55, ba: -80 }
+  };
+  function rot(p, a) { var r = a * Math.PI / 180, c = Math.cos(r), s = Math.sin(r); return [p[0] * c - p[1] * s, p[0] * s + p[1] * c]; }
+  function near(a) { return +into(a, -180).toFixed(1); }
+  /* where the hand with the bow is when the strings meet the bow p units from the hand, and the angles of that arm:
+     [shoulder, elbow, wrist] */
+  function bowArm(v, p) {
+    var n = VN[v], c = rot([VC, 0], n.a), rb = n.bow - 90, h = rot([VB_HAIR, p], rb);
+    var t = solve("A", ["H", n.at[0] + c[0] - h[0], n.at[1] + c[1] - h[1], 1]);
+    return [t.th, t.ph, near(rb - t.th - t.ph)];
+  }
+  /* the violin's own turn inside his left hand (the same in both crops; the wrist makes up the difference) */
+  var VR = 0, VZ = {};
+  function hold(v, at, a, bend) {
+    var g = rot(VG, a), t = solve("B", ["H", at[0] + g[0], at[1] + g[1], bend]);
+    return [t.th, t.ph, near(a - t.th - t.ph - VR)];
+  }
+  (function () {
+    var b = VN.bust, g = solve("B", ["H", b.at[0] + rot(VG, b.a)[0], b.at[1] + rot(VG, b.a)[1], 1]);
+    VR = near(b.a - g.th - g.ph);
+    ["full", "bust"].forEach(function (v) {
+      var n = VN[v], up = hold(v, n.at, n.a, 1), arm = bowArm(v, n.pos);
+      var lb = solve("B", ["H", n.lowB[0], n.lowB[1], n.lowB[2]]), la = solve("A", ["H", n.lowA[0], n.lowA[1], n.lowA[2]]);
+      /* same order as PZ: shA, elA, shB, elB, glass, wrB */
+      VZ[v] = {
+        up: [arm[0], arm[1], up[0], up[1], arm[2], up[2]],
+        low: [la.th, la.ph, lb.th, lb.ph, near(n.ba - 90 - la.th - la.ph), near(n.va - lb.th - lb.ph - VR)]
+      };
+    });
+  })();
+  /* the violin's poses: "up" while he lifts it and plays, "low" while he takes it out and puts it away */
+  function violinCss() {
+    var out = "", v, k;
+    for (v in VZ) {
+      for (k in VZ[v]) {
+        out += PJ.map(function (j, i) {
+          var r = '.dt-root[data-variant="' + v + '"][data-mood="violin"]';
+          return (k === "low" ? r + '[data-violin="low"] .dt-' + j + "," + r + '[data-violin="down"] .dt-' + j : r + " .dt-" + j) + "{transform:rotate(" + VZ[v][k][i] + "deg)}";
+        }).join("");
+      }
+    }
+    return out;
+  }
+
   /* ------------------------------------------------------------------ styles */
   function css() {
     var R = ".dt-root", c = "";
@@ -126,9 +186,11 @@
     c += ".dt-svg{display:block;width:100%;height:100%;overflow:visible}" + R + '[data-variant="bust"] .dt-svg{-webkit-clip-path:inset(-60% -60% 0 -60%);clip-path:inset(-60% -60% 0 -60%)}';
     c += ".dt-ol{fill:none;stroke:var(--_line);stroke-width:var(--_sw);stroke-linejoin:round;stroke-linecap:round}";
     c += ".dt-il{fill:none;stroke:var(--_line);stroke-width:1.5px;stroke-linecap:round;stroke-linejoin:round;opacity:.5}";
+    /* the violin's outline is a little finer than his own */
+    c += ".dt-vol,.dt-vso{stroke:var(--_line);stroke-width:calc(var(--_sw)*.72);stroke-linejoin:round}.dt-vol{fill:none}.dt-vs{stroke:var(--_line);stroke-width:.7px;stroke-linejoin:round}";
     c += ".dt-so,.dt-sa{stroke:var(--_line);stroke-width:var(--_sw);stroke-linejoin:round;stroke-linecap:round}.dt-sa{stroke:var(--_accd)}.dt-s{stroke:var(--_line)}";
     c += ".dt-c-coat{fill:var(--_coat)}.dt-c-shade{fill:var(--_shade)}.dt-c-hat{fill:var(--_hat)}.dt-c-accent{fill:var(--_accent)}" +
-      ".dt-c-accd{fill:var(--_accd)}.dt-c-skin{fill:var(--_skin)}.dt-c-hair{fill:var(--_hair)}.dt-c-line{fill:var(--_line)}.dt-c-lens{fill:var(--_lens)}";
+      ".dt-c-accd{fill:var(--_accd)}.dt-c-accl{fill:var(--_accl)}.dt-c-skin{fill:var(--_skin)}.dt-c-hair{fill:var(--_hair)}.dt-c-line{fill:var(--_line)}.dt-c-lens{fill:var(--_lens)}";
     c += ".dt-hl{fill:none;stroke:var(--_accl);stroke-width:1.6px;stroke-linecap:round;opacity:.9}";
     /* the hat tie is a cord: a dark line with a red core. Folds of the cravat are fine dark lines. */
     c += ".dt-cdo,.dt-cd,.dt-fo{fill:none;stroke-linecap:round;stroke-linejoin:round}.dt-cdo{stroke:var(--_accd);stroke-width:calc(var(--_sw) + 2.6px)}" +
@@ -300,10 +362,57 @@
     anim("proud", { "tilt-a": "dt-psway 4.8s ease-in-out .7s infinite", "elB-a": TK + ",dt-thumb 1.8s ease-in-out .7s infinite" });
     anim("proud", { "tilt-a": "dt-leanb 4.8s ease-in-out .7s infinite" }, "bust");
 
+    /* ---- the violin. data-mood is "violin" while it is out; data-violin says how far: "low" (both hands go down for the
+       violin and the bow), "up" (he brings it up under his chin), "play", "down" (putting it away). */
+    var VI = R + '[data-mood="violin"]';
+    /* the violin, the bow and the glass. The violin and the bow appear while the hands are low (the bow only once his
+       right hand is down, so it never sweeps across his face), and go while they are low again; the glass is back only
+       once his hand has nearly reached its place, for the same reason. Put away, the violin and the bow are hidden, not
+       just see-through, so they take no part in drawing him (his other moods look exactly as they did before) */
+    function fade(s, d) { return "{transition:opacity " + s + " linear " + d + ",visibility " + s + " linear " + d + "}"; }
+    var VD = R + '[data-violin="down"] .dt-vio,' + R + '[data-violin="down"] .dt-bw';
+    c += ".dt-vio,.dt-bw{opacity:0;visibility:hidden}.dt-vio,.dt-bw" + fade(".1s", "0s") + ".dt-gl{transition:opacity .12s linear .34s}" +
+      VI + " .dt-vio," + VI + " .dt-bw{opacity:1;visibility:visible}" + VI + " .dt-vio" + fade(".12s", ".12s") + VI + " .dt-bw" + fade(".1s", ".2s") +
+      VI + " .dt-gl{opacity:0;transition:opacity .1s linear}" + VD + "{opacity:0;visibility:hidden}" + VD + fade(".1s", ".1s");
+    c += R + '[data-hand="neck"] .dt-v-h-neck{opacity:1}';
+    /* the other parts only the violin uses (his hand round its neck, the notes, the half-closed eyes) are hidden too
+       while it is put away */
+    var VX = [".dt-v-h-neck", ".dt-v-fx-violin", ".dt-v-e-half"];
+    c += VX.join(",") + "{visibility:hidden;transition:opacity .1s linear,visibility .1s linear}" + VX.map(function (k) { return VI + " " + k; }).join(",") + "{visibility:visible}";
+    /* the arms move as one piece with what they hold: every joint on one curve, so the violin and the bow keep their angle */
+    var VJ = ["shA", "elA", "glass", "shB", "elB", "wrB"];
+    c += VJ.map(function (j) { return VI + " .dt-" + j; }).join(",") + "{transition:transform .46s cubic-bezier(.3,0,.25,1.12)}";
+    c += VJ.map(function (j) { return VI + '[data-violin="low"] .dt-' + j + "," + VI + '[data-violin="down"] .dt-' + j; }).join(",") + "{transition:transform .25s cubic-bezier(.45,0,.55,1)}";
+    /* no tuck, wind-up or float on those arms while the violin is out */
+    c += VI + " .dt-elA-a," + VI + " .dt-elB-a," + VI + " .dt-shB-a{animation:none}";
+    /* except on the way down from a raised hand (a wave, say): then the forearm folds in as it comes, as in any change
+       of mood, so the hand and the violin stay close to him (the script sets --_vtk) */
+    c += VI + '[data-violin="low"] .dt-elB-a{--_tk:var(--_vtk,0deg);animation:dt-tuck .3s ease-in-out}';
+    /* bowing: the script moves the bow arm (shoulder, elbow, wrist) every frame */
+    var VP = R + '[data-variant][data-mood="violin"][data-violin="play"] .dt-';
+    c += VP + "shA{transform:rotate(var(--_bs));transition:none}" + VP + "elA{transform:rotate(var(--_be));transition:none}" + VP + "glass{transform:rotate(var(--_bw));transition:none}";
+    /* his face: he looks at the violin, then plays with his eyes half closed in a smile, brows up and easy */
+    show("violin", ["m-smile", "e-open"]);
+    c += R + '[data-violin="play"] .dt-v-e-open{opacity:0}' + R + '[data-violin="play"] .dt-v-e-half{opacity:1}';
+    pose("violin", { gazem: "translate(2.2px,2.6px)", browL: "translateY(-2.5px) rotate(-3deg)", browR: "translateY(-2.5px) rotate(4deg)" });
+    c += R + '[data-violin="up"] .dt-head,' + R + '[data-violin="play"] .dt-head{transform:rotate(5deg) translateY(.5px);transition-delay:.18s}';
+    c += R + '[data-violin="play"] .dt-browL{transform:translateY(-4px) rotate(-3deg)}' + R + '[data-violin="play"] .dt-browR{transform:translateY(-4px) rotate(3deg)}';
+    /* playing: a slight sway, the head rocks with it, and now and then a note floats up */
+    K("vsway", "0,100=none|25=rotate(1deg)|75=rotate(-1deg)");
+    K("vswayb", "0,100=none|25=rotate(.35deg)|75=rotate(-.35deg)");
+    K("vrock", "0,100=none|25=rotate(1.4deg)|75=rotate(-.7deg)");
+    c +=VI + '[data-violin="play"] .dt-tilt-a{animation:dt-vsway 3.2s ease-in-out infinite}' + R + '[data-variant="bust"][data-mood="violin"][data-violin="play"] .dt-tilt-a{animation:dt-vswayb 3.2s ease-in-out infinite}' +
+      VI + " .dt-head-a{animation:none}" + VI + '[data-violin="play"] .dt-head-a{animation:dt-vrock 3.2s ease-in-out infinite}';
+    c += ".dt-nt{opacity:0}" + VI + '[data-violin="play"] .dt-v-fx-violin{opacity:1}' +
+      VI + '[data-violin="play"] .dt-nt1{animation:dt-note 3.6s ease-out .5s infinite}' + VI + '[data-violin="play"] .dt-nt2{animation:dt-note 3.6s ease-out 1.7s infinite}' +
+      VI + '[data-violin="play"] .dt-nt3{animation:dt-note 3.6s ease-out 2.9s infinite}' +
+      "@keyframes dt-note{0%{transform:translate(0,0) rotate(-10deg) scale(.5);opacity:0}12%{transform:translate(1px,-5px) rotate(6deg) scale(1);opacity:1}" +
+      "45%{transform:translate(4px,-18px) rotate(-6deg) scale(1);opacity:1}70%,100%{transform:translate(7px,-30px) rotate(6deg) scale(.9);opacity:0}}";
+
     /* ---- pause when off screen, stop for reduced motion (poses still change, nothing moves) */
     c += R + ".dt-off *{animation-play-state:paused!important}";
     c += "@media (prefers-reduced-motion:reduce){" + R + " *{animation:none!important;transition:none!important}.dt-sp{opacity:1}" + R + '[data-mood="oops"] .dt-drop{opacity:1}}';
-    return c + poseCss();
+    return c + poseCss() + violinCss();
   }
   function ensureStyle() {
     if (document.getElementById("dt-style")) { return; }
@@ -345,6 +454,48 @@
   function hi(d, o) { return '<path d="' + d + '" fill="#fff3cc" opacity="' + o + '"/>'; }
   var SHD = "#42200c"; /* warm umber: every painted shadow */
   function sh(d, o) { return '<path d="' + d + '" fill="' + SHD + '" opacity="' + o + '"/>'; }
+  /* a half-closed, smiling eye: the lid comes down in an arch and the cheek lifts the lower edge, so what shows of the
+     eye is a crescent (halfEye); halfLid is the line of the lid, a little longer than the crescent */
+  function halfX(rx, ry, d) { return (rx * Math.sqrt(1 - 16 / (ry * ry)) + d).toFixed(2); }
+  function halfEye(rx, ry) { var x = halfX(rx, ry, -0.4); return "M-" + x + ",4Q0,-6 " + x + ",4Q0,5 -" + x + ",4Z"; }
+  function halfLid(rx, ry) { var x = halfX(rx, ry, 0.6); return "M-" + x + ",4.6Q0,-6.4 " + x + ",4.6"; }
+
+  /* ---------- the violin, in its own units (see VN): spruce top under amber varnish, maple ribs, neck and scroll, ebony
+     fingerboard, pegs, tailpiece and chin rest, a maple bridge, four strings */
+  var VBODY = "M0,0C0,-6 3.2,-10.5 8.6,-10.5C12.2,-10.5 14.2,-9.2 14.6,-8.4C15.6,-6.4 16.6,-5.8 18,-5.8C19.4,-5.8 20.4,-6.4 21.4,-7.6" +
+    "C22.2,-8.6 24,-8.9 26.6,-8.9C31,-8.9 34,-6 34,0C34,6 31,8.9 26.6,8.9C24,8.9 22.2,8.6 21.4,7.6C20.4,6.4 19.4,5.8 18,5.8" +
+    "C16.6,5.8 15.6,6.4 14.6,8.4C14.2,9.2 12.2,10.5 8.6,10.5C3.2,10.5 0,6 0,0Z";
+  var EB = "#1e120b", MAPLE = "#8a3c14";
+  function fiddle(url) {
+    var s = '<path class="dt-vso" d="' + VBODY + '" transform="translate(.3 1.7)" fill="#6e2f12"/>';
+    s += '<path d="' + VBODY + '" fill="' + url("vn") + '"/>';
+    s += '<path class="dt-fine" d="' + VBODY + '" transform="translate(17 0) scale(.9) translate(-17 0)" fill="none" stroke="#5a2410" stroke-width=".55" opacity=".55"/>';
+    s += '<path class="dt-fine" d="M24.5,-6.6C27.5,-7 30.5,-6 31.6,-3.6M3.4,-5.6C4.8,-8 7,-8.8 9.6,-8.8" fill="none" stroke="#fff1c4" stroke-width="1.3" stroke-linecap="round" opacity=".5"/>';
+    s += '<path class="dt-vol" d="' + VBODY + '"/>';
+    /* f-holes */
+    s += '<path d="M10.8,-5.5C13.4,-5.3 15.2,-3.2 18.8,-3.4M10.8,5.5C13.4,5.3 15.2,3.2 18.8,3.4" fill="none" stroke="#2a1208" stroke-width=".9" stroke-linecap="round"/>' +
+      '<path class="dt-fine" d="M10.8,-5.5h0M18.8,-3.4h0M10.8,5.5h0M18.8,3.4h0" stroke="#2a1208" stroke-width="1.6" stroke-linecap="round"/>';
+    /* tailpiece, chin rest, end button */
+    s += '<path d="M1.4,-1.7L10.6,-2.7Q11.4,0 10.6,2.7L1.4,1.7Q.8,0 1.4,-1.7Z" fill="' + EB + '"/>';
+    s += '<path class="dt-vs" d="M-.8,-2.4C-.8,-6.6 2.6,-9.8 6.8,-9.9L7.4,-7.6C4.4,-7.4 2.2,-5.2 2,-2.4Z" fill="' + EB + '"/>' +
+      '<path class="dt-fine" d="M.6,-3.4C1,-5.8 2.8,-7.6 5.6,-8.1" fill="none" stroke="#7a5a44" stroke-width=".7" stroke-linecap="round"/><circle cx="-.9" r="1.1" fill="' + EB + '"/>';
+    /* neck, fingerboard, pegbox with its pegs, scroll */
+    s += '<path d="M33,-1.4L47.6,-1.1L47.6,2.7L33,3.3Z" fill="' + MAPLE + '"/>';
+    s += '<path d="M20.2,-2.5L47.2,-1.6L47.2,1.6L20.2,2.5Q19.4,0 20.2,-2.5Z" fill="' + EB + '"/><path class="dt-fine" d="M21,-1.7L46.6,-1.1" stroke="#6b5444" stroke-width=".45"/>';
+    s += '<g fill="' + EB + '" class="dt-vs"><ellipse cx="49" cy="-3.6" rx=".9" ry="1.9"/><ellipse cx="52.2" cy="-3.9" rx=".9" ry="1.9"/><ellipse cx="49" cy="3.6" rx=".9" ry="1.9"/><ellipse cx="52.2" cy="3.9" rx=".9" ry="1.9"/></g>';
+    s += '<path class="dt-vs" d="M47.2,-2L54,-2.5Q55.6,0 54,2.5L47.2,2Z" fill="#7c3412"/><path class="dt-fine" d="M48.2,-.7L53.4,-.9M48.2,.7L53.4,.9" stroke="#2a1208" stroke-width=".7"/>';
+    s += '<circle class="dt-vs" cx="57.4" r="3.4" fill="' + MAPLE + '"/><path d="M57.4,-1.9A1.9,1.9 0 1 1 55.6,.6" fill="none" stroke="#2a1208" stroke-width=".7" stroke-linecap="round"/><circle cx="57.4" r=".7" fill="#2a1208"/>';
+    /* bridge, strings, nut */
+    s += '<path d="M14,-4.4L15.4,-4.4L15.6,4.4L13.8,4.4Z" fill="#f2d49a" stroke="#5a3418" stroke-width=".5" stroke-linejoin="round"/>';
+    s += '<path d="M10.6,-2.1L47.2,-1.2M10.6,-.7L47.2,-.4M10.6,.7L47.2,.4M10.6,2.1L47.2,1.2" stroke="#f6ecd6" stroke-width=".42" fill="none"/><path d="M47.2,-1.7V1.7" stroke="#f2e2c0" stroke-width=".8"/>';
+    return s;
+  }
+  /* the bow, along +y of the hand that holds it: the screw button and the frog behind the fingers, the dark stick, the pale hair */
+  var BOW = '<path d="M0,-12L0,49.5" stroke="#2c140a" stroke-width="2.3" stroke-linecap="round" fill="none"/>' +
+    '<path d="M2.6,-1L2.6,47.6" stroke="#f4ead2" stroke-width="1.5" stroke-linecap="round" fill="none"/>' +
+    '<path d="M-.4,-9.4L3.4,-8.6L3.8,-1.4L-.4,-.6Z" fill="' + EB + '"/><circle class="dt-fine" cx="1.8" cy="-5" r=".9" fill="#f4ecd8"/>' +
+    '<path d="M.2,-1.1L3.6,-1.4" stroke="#e2a93c" stroke-width="1"/><rect x="-1.3" y="-14.2" width="2.6" height="3" rx=".8" fill="#e2a93c" stroke="#7a4e10" stroke-width=".5"/>' +
+    '<path d="M-1,47L3.6,46.6L3.4,50.4L.6,51.6Z" fill="#2c140a"/><path d="M3.6,46.6L3.4,50.4" stroke="#f4ead2" stroke-width=".9"/>';
 
   function markup(n) {
     var id = function (k) { return "dt" + n + k; };
@@ -370,6 +521,8 @@
       '<radialGradient id="' + id("sd") + '"><stop offset="0" stop-color="' + SHD + '" stop-opacity=".36"/><stop offset=".6" stop-color="' + SHD + '" stop-opacity=".14"/><stop offset="1" stop-color="' + SHD + '" stop-opacity="0"/></radialGradient>' +
       '<radialGradient id="' + id("ir") + '" cx=".5" cy=".62" r=".6"><stop offset="0" stop-color="#b9712e"/><stop offset=".7" stop-color="#7a431c"/><stop offset="1" stop-color="#4a2814"/></radialGradient>' +
       '<linearGradient id="' + id("br") + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe9a3"/><stop offset=".45" stop-color="#e2a93c"/><stop offset="1" stop-color="#a66f1c"/></linearGradient>' +
+      '<radialGradient id="' + id("vn") + '" cx=".38" cy=".34" r=".75"><stop offset="0" stop-color="#f3b45e"/><stop offset=".5" stop-color="#d27c2e"/><stop offset="1" stop-color="#9c4417"/></radialGradient>' +
+      '<clipPath id="' + id("e1") + '"><path d="' + halfEye(9.6, 10.8) + '"/></clipPath><clipPath id="' + id("e2") + '"><path d="' + halfEye(8.7, 10.4) + '"/></clipPath>' +
       "</defs>";
 
     s += J("shadow", 100, 272, '<ellipse class="dt-shadow" rx="50" ry="3.8"/>', true);
@@ -451,6 +604,12 @@
     }
     face += '<g class="dt-v dt-v-e-open">' + eye("L", EYE.L[0], EYE.L[1], 9.6, 10.8, 7, "el") + eye("R", EYE.R[0], EYE.R[1], 8.7, 10.4, 6.5, "er") + "</g>";
     face += '<g class="dt-v dt-v-e-happy"><path class="dt-ln" style="stroke-width:3.200px" d="M77,101Q86,89.500 95,101"/><path class="dt-ln" style="stroke-width:3.200px" d="M109,101Q117,90 125,101"/></g>';
+    function half(k, cx, rx, ry, pr) {
+      return '<g transform="translate(' + cx + ' 98)"><path class="dt-s" d="' + halfEye(rx, ry) + '" fill="#fffdf6" stroke-opacity=".55" stroke-width="1.500"/>' +
+        '<g clip-path="' + url(k) + '"><circle cx="1.4" cy="3.6" r="' + pr + '" fill="' + url("ir") + '" stroke="#2a1810" stroke-width="1.300"/><circle cx="1.4" cy="3.6" r="' + (pr * 0.52).toFixed(1) + '" fill="#1c110b"/>' +
+        '<circle cx="-1" cy="1.4" r="1.5" fill="#fff"/></g><path class="dt-lid" d="' + halfLid(rx, ry) + '"/></g>';
+    }
+    face += '<g class="dt-v dt-v-e-half">' + half("e1", EYE.L[0], 9.6, 10.8, 7) + half("e2", EYE.R[0], 8.7, 10.4, 6.5) + "</g>";
     face += '<g class="dt-v dt-v-e-content"><path class="dt-ln" style="stroke-width:3.200px" d="M77,96.500Q86,105.500 95,96.500"/><path class="dt-ln" style="stroke-width:3.200px" d="M109,96.500Q117,105 125,96.500"/></g>';
     face += '<g class="dt-v dt-v-oopsA"><path class="dt-ln" style="stroke-width:3.200px" d="M79,92L93,98.500L79,105"/><path class="dt-ln" style="stroke-width:3.200px" d="M124.500,92L111,98.500L124.500,105"/></g>';
     /* mouths */
@@ -505,6 +664,11 @@
       '<g transform="translate(161 32)"><circle class="dt-dot2 dt-so" r="4.400" fill="#fff8e6" style="stroke-width:1.800px"/></g>' +
       '<g transform="translate(173 17)"><circle class="dt-dot3 dt-so" r="6" fill="#fff8e6" style="stroke-width:1.800px"/></g></g>';
     var head = skull + '<g class="dt-face">' + face + "</g>" + J("hat", 100, 62, hat) + '<g class="dt-face">' + brows + "</g>" + fx;
+    /* ---------- the violin. It lies under his chin, so it is drawn before the head, in a copy of the left arm's joints
+       (same classes: the same pose and the same motion), with the palm of his left hand behind its neck */
+    var vfr = '<g transform="rotate(' + VR + ") scale(" + VS + ") translate(-43 -2.2)" + '">', hfr = '<g transform="rotate(' + VR + ') translate(-43 -2.2)">';
+    up += J("shB", SH.B[0], SH.B[1], J("elB", 0, UP, J("wrB", 0, 37, '<g class="dt-v dt-v-h-neck">' + hfr + '<ellipse class="dt-c-skin dt-so" cx="43" cy="4.4" rx="6.6" ry="4.6"/></g></g>' +
+      '<g class="dt-vio">' + vfr + fiddle(url) + "</g></g>", true), true), true);
     up += J("head", 100, 134, '<g class="dt-lean"><g class="dt-nod"><g transform="translate(-100 -134)">' + head + "</g></g></g>", true);
 
     /* ---------- forearms, hands and the magnifying glass (in front of everything) */
@@ -521,7 +685,7 @@
       '<path d="M-9.500,26A12,12 0 0 1 -1,21.500" fill="none" stroke="#fff" stroke-width="2.400" stroke-linecap="round" opacity=".9"/></g>' +
       '<circle class="dt-s" cy="33" r="16" fill="none" stroke-width="6.800"/><circle cy="33" r="16" fill="none" stroke="' + url("br") + '" stroke-width="4.200"/>' +
       '<path d="M-11.500,22.500A16,16 0 0 1 3,17.200" fill="none" stroke="#fff6d0" stroke-width="1.500" stroke-linecap="round" opacity=".9"/>';
-    var handA = J("glass", 0, 37, glass, true) + '<circle class="dt-c-skin dt-so" cy="37" r="8.200"/>' +
+    var handA = J("glass", 0, 37, '<g class="dt-gl">' + glass + '</g><g class="dt-bw"><g transform="scale(' + BS + ')">' + BOW + "</g></g>", true) + '<circle class="dt-c-skin dt-so" cy="37" r="8.200"/>' +
       '<path class="dt-il" d="M-5,35.500Q0,33.500 5,35.500M-5.500,39.500Q0,37.500 5.500,39.500"/><ellipse class="dt-c-skin dt-so" cx="5.500" cy="33.500" rx="3.600" ry="5" transform="rotate(-24 5.500 33.500)"/>';
     function finger(a, len) { return '<rect class="dt-c-skin dt-so" x="-2.900" y="5" width="5.800" height="' + len + '" rx="2.900" transform="translate(0 37) rotate(' + a + ')"/>'; }
     var handB = '<g class="dt-v dt-v-h-rest"><circle class="dt-c-skin dt-so" cy="37" r="8"/><ellipse class="dt-c-skin dt-so" cx="-6" cy="34.500" rx="3.400" ry="5" transform="rotate(22 -6 34.500)"/><path class="dt-il" d="M-3,41Q1,43 5,41"/></g>' +
@@ -535,7 +699,9 @@
       '<g transform="translate(-14 58)" class="dt-v dt-v-fx-proud"><g class="dt-sp"><path d="' + P.star + '" fill="#ffe58a" stroke="#fff" stroke-width="1"/></g></g></g>' +
       '<g class="dt-v dt-v-fx-wave"><path class="dt-fxw" d="M-17,39Q-20,45 -17,51M17,39Q20,45 17,51" fill="none" stroke="#fff3cc" stroke-width="2.200" stroke-linecap="round"/></g>';
     up += J("shA", SH.A[0], SH.A[1], J("elA", 0, UP, fore + handA, true), true);
-    up += J("shB", SH.B[0], SH.B[1], J("elB", 0, UP, fore + J("wrB", 0, 37, '<g transform="translate(0 -37)">' + handB + "</g>", true), true), true);
+    var neck = '<g class="dt-v dt-v-h-neck">' + hfr + '<path class="dt-c-skin dt-so" d="M36.6,-.4C35.6,-5.6 39,-9.4 43.6,-9.2C48,-9 50.4,-5.8 49.4,-1.2C48.9,.6 47.4,1.2 46.4,.2' +
+      'C45.8,1.4 44,1.6 43.2,.4C42.4,1.6 40.4,1.6 39.8,.4C39,1.4 37.2,1.2 36.6,-.4Z"/><path class="dt-il" d="M40,-5.2Q43,-6.6 46.6,-5"/></g></g>';
+    up += J("shB", SH.B[0], SH.B[1], J("elB", 0, UP, fore + J("wrB", 0, 37, '<g transform="translate(0 -37)">' + handB + "</g>" + neck, true), true), true);
 
     s += J("body", 100, 272, J("tilt", 100, 272, legs + J("chest", 100, 238, up)) + shoes);
 
@@ -543,6 +709,16 @@
     var sp = [[28, 26, 1.2, 0], [170, 24, 1.05, .2], [152, 0, .8, .45], [48, 2, .9, .6], [190, 80, .85, .8, 1], [8, 80, .8, .35, 1]];
     s += '<g class="dt-v dt-v-fx-cheer">' + sp.map(function (q) {
       return '<g transform="translate(' + q[0] + " " + q[1] + ") scale(" + q[2] + ')"' + (q[4] ? ' class="dt-spx"' : "") + '><g class="dt-sp" style="animation-delay:' + q[3] + 's"><path d="' + P.star + '" fill="#ffe58a" stroke="#fff8dc" stroke-width="1"/></g></g>';
+    }).join("") + "</g>";
+    /* notes that float up from the violin now and then (brass and red) */
+    function note(red) {
+      var f = red ? ' class="dt-so dt-c-accl"' : ' class="dt-so" fill="' + url("br") + '"';
+      return "<path" + f + ' style="stroke-width:1.300px" d="M.6,3V-9.5H2.2Q2.6,-7.6 4.6,-6.4Q6.8,-5 6,-2Q5.6,-4.4 2.2,-5.6V3Z"/>' +
+        "<ellipse" + f + ' style="stroke-width:1.300px" cx="-1.1" cy="3.3" rx="3" ry="2.2" transform="rotate(-20 -1.1 3.3)"/>';
+    }
+    var notes = [[158, 116, 0], [170, 106, 1], [152, 124, 0]];
+    s += '<g class="dt-v dt-v-fx-violin">' + notes.map(function (q, i) {
+      return '<g transform="translate(' + q[0] + " " + q[1] + ')"><g class="dt-nt dt-nt' + (i + 1) + '">' + note(q[2]) + "</g></g>";
     }).join("") + "</g>";
     s += "</svg>";
     return s;
@@ -571,7 +747,7 @@
     el.setAttribute("aria-hidden", "true");
     el.innerHTML = markup(n);
     var svg = el.firstChild;
-    var st = { variant: null, mood: "idle", shown: null, size: 160, one: null, blink: null, glance: null, say: null, talk: false, look: false, gx: 0, gy: 0, lastBlink: 0, dead: false, io: null, at: 0 };
+    var st = { variant: null, mood: "idle", shown: null, size: 160, one: null, blink: null, glance: null, say: null, talk: false, look: false, gx: 0, gy: 0, lastBlink: 0, dead: false, io: null, at: 0, vn: null, vt: null, raf: 0 };
     var loops = el.querySelectorAll(".dt-a");
     var parts = { gaze: el.querySelectorAll(".dt-gaze"), face: el.querySelectorAll(".dt-face"), lean: el.querySelectorAll(".dt-lean") };
 
@@ -635,8 +811,74 @@
         sv("sd", (up ? Math.min(120, d * 3) : 0).toFixed(0) + "ms"); sv("ed", ed.toFixed(0) + "ms"); sv("tk", -tk.toFixed(1) + "deg");
         sv("tw", (up ? Math.min(9, d * 0.1) : 0).toFixed(1) + "deg");
         sv("ta", Math.min(40, Math.abs(b[0] - tA) * 0.3).toFixed(1) + "deg");
+        el.removeAttribute("data-violin");
         el.setAttribute("data-mood", m);
       });
+    }
+
+    /* ---- the violin. st.vn: "low" and "up" while he takes it out, "play", "down" while he puts it away.
+       Each step is a change of pose like a change of mood (no jump), with data-mood "violin" and data-violin the step. */
+    function vset(ph) {
+      if (ph === "low") {
+        var live = !reduced() && document.documentElement.contains(el), z = VZ[st.variant].low;
+        var tB = live ? ang("shB", -270) : z[2], p0 = live ? tB + ang("elB", -165) : z[2] + z[3];
+        sv("vtk", -(p0 < -90 && z[2] + z[3] > -90 ? Math.min(st.variant === "bust" ? 110 : 80, Math.abs(z[2] - tB) * 0.9) : 0).toFixed(1) + "deg");
+      }
+      st.vn = ph; st.shown = "violin"; st.at = Date.now();
+      clearTimeout(st.hand); clearTimeout(st.wince);
+      /* his left hand closes round the neck when the violin is there to hold */
+      if (ph === "low" && !reduced()) {
+        el.setAttribute("data-hand", "rest");
+        st.hand = setTimeout(function () { el.setAttribute("data-hand", "neck"); }, 200);
+      } else if (ph !== "down") { el.setAttribute("data-hand", "neck"); }
+      restyle(function () {
+        el.classList.remove("dt-wince");
+        el.setAttribute("data-violin", ph);
+        el.setAttribute("data-mood", "violin");
+      });
+    }
+    function vstop() {
+      clearTimeout(st.vt); st.vt = null;
+      if (st.raf) { (root.cancelAnimationFrame || clearTimeout)(st.raf); st.raf = 0; }
+      st.vn = null;
+    }
+    /* put it away at once (another mood was asked for): a fist first, as after any change. His eyes change with a blink
+       (half closed to open, or open to half closed when he starts to play), so the two never show at once. */
+    function vend() { var was = st.vn; vstop(); clearTimeout(st.hand); el.setAttribute("data-hand", "rest"); if (was === "play") { blink(130); } }
+    /* bowing: the stretch of the bow between his hand and the strings (st.bp) moves from st.bf to st.bb in st.bd ms */
+    function bowAt(p) {
+      var a = bowArm(st.variant, p);
+      sv("bs", a[0] + "deg"); sv("be", a[1] + "deg"); sv("bw", a[2] + "deg");
+    }
+    function flip(now, own) {
+      var n = VN[st.variant], d = own ? 1150 : Math.max(60, Math.min(1500, now - st.bt));
+      st.bdir = -st.bdir;
+      /* a note gets a stroke as long as the time it has, a stroke of his own the whole stretch */
+      var to = st.bp + st.bdir * (own ? n.hi - n.lo : Math.max(3, Math.min(n.hi - n.lo, d * 0.035)));
+      st.bf = st.bp; st.bb = Math.max(n.lo, Math.min(n.hi, to)); st.bt = now;
+      st.bd = own ? 1150 : Math.max(70, Math.min(900, d * 0.9)); st.bown = own;
+    }
+    /* speed up, go steady, slow down: a = the share of the stroke spent speeding up */
+    function ease(k, a) {
+      var v = 1 / (1 - a);
+      return k < a ? v * k * k / (2 * a) : k > 1 - a ? 1 - v * (1 - k) * (1 - k) / (2 * a) : v * (k - a / 2);
+    }
+    function tick() {
+      st.raf = (root.requestAnimationFrame || function (f) { return setTimeout(f, 16); })(tick);
+      if (st.vn !== "play" || quiet()) { return; }
+      var now = Date.now(), n = VN[st.variant];
+      /* no note for 1.2 s: he bows on his own, one full stroke after another */
+      if (now - st.bl > 1200 && now - st.bt >= st.bd) { flip(now, true); }
+      st.bp = Math.max(n.lo, Math.min(n.hi, st.bf + (st.bb - st.bf) * ease(Math.min(1, (now - st.bt) / st.bd), st.bown ? 0.22 : 0.5)));
+      bowAt(st.bp);
+    }
+    function vplay() {
+      var p = VN[st.variant].pos, now = Date.now();
+      st.vn = "play"; st.bp = st.bf = st.bb = p; st.bt = now; st.bd = 1; st.bl = 0; st.bdir = 1; st.bown = true;
+      bowAt(p);
+      blink(130);
+      el.setAttribute("data-violin", "play");
+      if (!reduced()) { tick(); }
     }
     function setVariant(v) {
       v = v === "bust" ? "bust" : "full";
@@ -731,11 +973,13 @@
     el.setMood = function (m) {
       if (MOODS.indexOf(m) < 0) { return el; }
       st.mood = m;
+      if (st.vn) { vend(); }
       if (!st.one) { show(m); }
       return el;
     };
     el.play = function (m, ms) {
       if (MOODS.indexOf(m) < 0 || st.dead) { return el; }
+      if (st.vn) { vend(); }
       clearOne();
       show(m, true);
       st.one = setTimeout(function () { st.one = null; show(st.mood); }, ms > 0 ? ms : 1600);
@@ -752,12 +996,42 @@
       if (on && !st.dead && !reduced()) { say(); }
       return el;
     };
+    el.violin = function (on) {
+      if (st.dead) { return el; }
+      var still = reduced() || !document.documentElement.contains(el);
+      if (on) {
+        if (el.isPlaying()) { return el; }
+        clearOne(); vstop();
+        /* with reduced motion he simply holds it, ready to play */
+        if (still) { vset("up"); vplay(); return el; }
+        vset("low");
+        st.vt = setTimeout(function () {
+          vset("up");
+          st.vt = setTimeout(function () { st.vt = null; vplay(); }, 500);
+        }, 300);
+      } else if (st.vn && st.vn !== "down") {
+        var was = st.vn;
+        vstop();
+        if (still) { vend(); show(st.mood, true); return el; }
+        if (was === "play") { blink(130); }
+        vset("down");
+        st.vt = setTimeout(function () { st.vt = null; vend(); show(st.mood, true); }, 250);
+      }
+      return el;
+    };
+    el.bow = function () {
+      /* notes that come together (a chord) turn the bow once */
+      if (st.vn === "play" && !st.dead && !reduced()) { var now = Date.now(); st.bl = now; if (now - st.bt >= 30) { flip(now, false); } }
+      return el;
+    };
+    el.isPlaying = function () { return st.vn === "low" || st.vn === "up" || st.vn === "play"; };
     el.lookAt = function (x, y) { lookAt(x, y); return el; };
     el.setSize = function (px) { setSize(px); return el; };
     el.setVariant = function (v) { setVariant(v); return el; };
     el.getMood = function () { return st.mood; };
     el.destroy = function () {
       st.dead = true; st.talk = false;
+      vstop();
       clearOne(); clearTimeout(st.blink); clearTimeout(st.glance); clearTimeout(st.sayT); clearTimeout(st.wince); clearTimeout(st.hand);
       if (st.io) { try { st.io.disconnect(); } catch (e) { /* ignore */ } st.io = null; }
       el.classList.remove("dt-talk", "dt-blinking");

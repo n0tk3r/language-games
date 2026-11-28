@@ -44,6 +44,8 @@
   button:active { transform: translateY(2px); box-shadow: 0 1px 0 #7a4e10; }
   button.plain { color: var(--ink); background: var(--parch); border-color: #b89a5e; box-shadow: 0 3px 0 #b89a5e; text-transform: capitalize; }
   button[aria-pressed="true"] { color: #fff; background: linear-gradient(180deg, #c8323a, #9c1a24); border-color: var(--red-dk); box-shadow: 0 3px 0 var(--red-dk); }
+  button[aria-disabled="true"] { opacity: .55; cursor: default; }
+  button[aria-disabled="true"]:active { transform: none; box-shadow: 0 3px 0 #7a4e10; }
   .group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
   .group > span { flex: 0 0 100%; font: 800 12px/1.2 var(--f-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--brass-lt); }
   label.size { display: flex; align-items: center; gap: 10px; font-weight: 700; min-height: 44px; }
@@ -83,7 +85,7 @@
 <div class="wrap">
   <header class="top">
     <h1>Inspector Cāsus</h1>
-    <p>Meet the detective from <a href="index.html">Case Detective</a>. Pick a mood, make him talk, and move your pointer or your finger around the page: his eyes follow you.</p>
+    <p>Meet the detective from <a href="index.html">Case Detective</a>. Pick a mood, make him talk, hand him his violin, and move your pointer or your finger around the page: his eyes follow you.</p>
   </header>
 
   <main>
@@ -100,6 +102,11 @@
             <button type="button" id="wave">Play wave</button>
             <button type="button" id="talk" aria-pressed="false">Talking</button>
           </div>
+          <div class="group" role="group" aria-label="Violin">
+            <span>Violin (in the game, when a player waits a long time)</span>
+            <button type="button" id="violin" aria-pressed="false">Violin</button>
+            <button type="button" id="bow" aria-disabled="true">Bow once</button>
+          </div>
           <div class="group" role="group" aria-label="Crop and size">
             <span>Crop and size</span>
             <button type="button" id="variant" aria-pressed="false">Head and shoulders</button>
@@ -111,7 +118,7 @@
 
     <section aria-labelledby="h-all">
       <h2 id="h-all">Every mood, both crops, four sizes</h2>
-      <p>The reactions, the talking and the colors here act on every copy on the page at once.</p>
+      <p>The reactions, the violin, the talking and the colors act on every copy on the page at once.</p>
       <div class="group" role="group" aria-label="Background behind him" id="bgs">
         <span>Background behind him</span>
         <button type="button" data-bg="night" aria-pressed="true">Midnight blue</button>
@@ -151,11 +158,12 @@
   MOODS.forEach(function (m) {
     var b = document.createElement("button");
     b.type = "button"; b.className = "plain"; b.textContent = m; press(b, m === "wave");
-    b.onclick = function () { hero.setMood(m); MOODS.forEach(function (k) { press(moodBtns[k], k === m); }); };
+    b.onclick = function () { hero.setMood(m); MOODS.forEach(function (k) { press(moodBtns[k], k === m); }); vsync(); };
     moodBtns[m] = b; moodBox.appendChild(b);
   });
-  /* after his hello he settles down, the way he does in the game */
-  setTimeout(function () { if (hero.getMood() === "wave") { hero.setMood("idle"); MOODS.forEach(function (k) { press(moodBtns[k], k === "idle"); }); } }, 2600);
+  /* after his hello he settles down, the way he does in the game (at once if he is handed his violin before that) */
+  function settle() { clearTimeout(greet); if (hero.getMood() === "wave") { hero.setMood("idle"); MOODS.forEach(function (k) { press(moodBtns[k], k === "idle"); }); } }
+  var greet = setTimeout(function () { settle(); vsync(); }, 2600);
 
   var sizeIn = byId("size"), sizeOut = byId("sizeOut"), varBtn = byId("variant"), bust = false;
   function fit() { hero.setSize(+sizeIn.value); sizeOut.textContent = sizeIn.value + " px"; }
@@ -187,7 +195,14 @@
   /* ---- things that act on every copy */
   var talking = false;
   byId("talk").onclick = function () { talking = !talking; press(this, talking); all.forEach(function (d) { d.talk(talking); }); };
-  ["cheer", "oops", "wave"].forEach(function (m) { byId(m).onclick = function () { all.forEach(function (d) { d.play(m, m === "wave" ? 2200 : 1600); }); }; });
+  ["cheer", "oops", "wave"].forEach(function (m) { byId(m).onclick = function () { all.forEach(function (d) { d.play(m, m === "wave" ? 2200 : 1600); }); vsync(); }; });
+  /* the violin: he takes it out and plays, and puts it away again (another mood or a reaction puts it away too);
+     "Bow once" turns the bow, the way each note of the music does in the game */
+  var vBtn = byId("violin"), bowBtn = byId("bow");
+  function playing() { return all.some(function (d) { return d.isPlaying && d.isPlaying(); }); }
+  function vsync() { var on = playing(); press(vBtn, on); bowBtn.setAttribute("aria-disabled", String(!on)); }
+  vBtn.onclick = function () { var on = !playing(); if (on) { settle(); } all.forEach(function (d) { if (d.violin) { d.violin(on); } }); vsync(); };
+  bowBtn.onclick = function () { all.forEach(function (d) { if (d.bow) { d.bow(); } }); };
   var bgBtns = byId("bgs").querySelectorAll("button");
   Array.prototype.forEach.call(bgBtns, function (b) {
     b.onclick = function () {
