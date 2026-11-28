@@ -240,7 +240,14 @@ On the games site, `../case-detective/index.html` opens for the current player: 
 
 ## A minimal working example
 
-The page below is a whole game in `another-game/index.html`, next to `case-detective/`: “Who’s on the case?” and the steps with the Inspector’s lines, a game screen that wins stars under its own key, the two switches of the device in its bar, and the music with a link to its credits. It follows changes made in other tabs, drops the progress of removed players, keeps the focus where the keyboard needs it, and fits a phone. The tests of Case Detective play this very page.
+The page below is a whole game in `another-game/index.html`, next to `case-detective/`: “Who’s on the case?” and the steps with the Inspector’s lines, a game screen that wins stars under its own key (and resets them), the two switches of the device in its bar, and the music with a link to its credits. It drops the progress of removed players, keeps the focus where the keyboard needs it, and fits a phone. The tests of Case Detective play this very page.
+
+A child may have the game open in two tabs at once, so it keeps its key the way Case Detective keeps its own (`persist` and `onProgress` in `js/game.js`):
+
+- Every change reads the key again first, as another tab may have won stars since: each player keeps the more stars of the two. Then the change is made and the key is written whole, so a star won in one tab is never written over by the other.
+- “Reset stars” writes that player alone, fresh (no stars); the other players stay as stored.
+- It follows the storage events of its key: stars won or reset in another tab show at once, and a reset made there stays when this tab saves next.
+- Each tab plays its own player: a player chosen in another tab does not move it. When its player is removed in another tab, it goes back to “Who’s on the case?”; a new name, grade or chapter shows at once.
 
 ```html
 <!DOCTYPE html>
@@ -257,6 +264,7 @@ The page below is a whole game in `another-game/index.html`, next to `case-detec
   .og-say { flex: 1 1 180px; min-width: 0; }
   .og-top [aria-pressed="false"] .og-on, .og-top [aria-pressed="true"] .og-off { display: none; }
   .og-main { width: 100%; max-width: 760px; margin: 0 auto; }
+  .og-reset { margin: 10px 0 14px; }
   .og-foot { padding: 4px 12px 8px; text-align: center; }
 </style>
 </head>
@@ -283,17 +291,26 @@ The page below is a whole game in `another-game/index.html`, next to `case-detec
   document.getElementById("insp").appendChild(insp);
   var playing = null;   /* the player on the case, or null while the players' screens are on show */
 
-  /* this game's own progress, by player id (kept for the visit if the browser will not store it) */
-  var mine = {};
-  try { mine = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { mine = {}; }
-  function store() { try { localStorage.setItem(KEY, JSON.stringify(mine)); } catch (e) { /* kept for the visit */ } }
+  /* this game's own progress, by player id: { "p1": { stars: 2 } } */
+  function stored() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+  var mine = stored();   /* as this page has it (kept for the visit if the browser will not store it) */
   function starsOf(p) { return (mine[p.id] && mine[p.id].stars) || 0; }
+  /* Every change reads the key again first, as another tab may have won stars since: each player on the list
+     keeps the more stars of the two (the progress of a player who is no longer on it goes). Then the change is
+     made, and the key is written whole. */
+  function change(fn) {
+    var now = stored(), out = {};
+    LP.list().forEach(function (p) {
+      var n = Math.max(starsOf(p), (now[p.id] && now[p.id].stars) || 0);
+      if (n > 0) { out[p.id] = { stars: n }; }
+    });
+    mine = out;
+    if (fn) { fn(); }
+    try { localStorage.setItem(KEY, JSON.stringify(mine)); } catch (e) { /* kept for the visit */ }
+  }
   /* the progress of a player who is no longer on the list goes */
   function prune() {
-    var ids = {}, gone = false;
-    LP.list().forEach(function (p) { ids[p.id] = true; });
-    Object.keys(mine).forEach(function (id) { if (!ids[id]) { delete mine[id]; gone = true; } });
-    if (gone) { store(); }
+    if (Object.keys(mine).some(function (id) { return !LP.get(id); })) { change(); }
   }
 
   var ui = LP.screens({
@@ -305,14 +322,15 @@ The page below is a whole game in `another-game/index.html`, next to `case-detec
     text: { start: "Start playing", wiped: "{name}’s progress in every game will be wiped from this device. The other players stay." }
   });
 
-  /* the game itself: here only a star to win */
+  /* the game itself: here only stars to win, and to reset */
   function play(p) {
     /* the focus, if it was on the screen before: on the same button again, or else on the heading */
     var a = document.activeElement, was = !a || a === document.body || screen.contains(a), og = was && a && a.getAttribute ? a.getAttribute("data-og") : null;
     playing = p;
     var v = document.createElement("div");
     v.className = "view lp";
-    v.innerHTML = '<h1 class="pl-h" tabindex="-1"></h1><p class="pl-meta"></p><div class="dock">' +
+    v.innerHTML = '<h1 class="pl-h" tabindex="-1"></h1><p class="pl-meta"></p>' +
+      '<div class="og-reset"><button type="button" class="btn ghost sm" data-og="reset">Reset stars</button></div><div class="dock">' +
       '<button type="button" class="btn primary" data-og="star">Win a star</button>' +
       '<button type="button" class="btn ghost" data-og="chapter">Change chapter</button>' +
       '<button type="button" class="btn ghost" data-og="players">Switch player</button></div>';
@@ -326,9 +344,10 @@ The page below is a whole game in `another-game/index.html`, next to `case-detec
   screen.addEventListener("click", function (e) {
     var b = e.target.closest ? e.target.closest("[data-og]") : null;
     if (!b || !playing) { return; }
-    var what = b.getAttribute("data-og");
-    if (what === "star") { mine[playing.id] = { stars: starsOf(playing) + 1 }; store(); play(playing); }
-    else if (what === "chapter") { ui.changeChapter(playing.id); }
+    var what = b.getAttribute("data-og"), id = playing.id;
+    if (what === "star") { change(function () { mine[id] = { stars: starsOf(playing) + 1 }; }); play(playing); }
+    else if (what === "reset") { change(function () { delete mine[id]; }); play(playing); }   /* that player alone, fresh */
+    else if (what === "chapter") { ui.changeChapter(id); }
     else if (what === "players") { ui.players(); }
   });
 
@@ -342,7 +361,8 @@ The page below is a whole game in `another-game/index.html`, next to `case-detec
   soundBtn.addEventListener("click", function () { LP.set("sound", !LP.settings().sound); });
   musicBtn.addEventListener("click", function () { LP.set("music", !LP.settings().music); });
 
-  /* a change made here or in another tab: the switches follow, and the player on the case may be gone */
+  /* a change of the list, here or in another tab: the switches follow, and the player on the case may be gone or
+     changed (a player chosen in another tab does not move this one: each tab plays its own) */
   LP.onchange(function () {
     sync();
     prune();
@@ -350,6 +370,12 @@ The page below is a whole game in `another-game/index.html`, next to `case-detec
     var p = LP.get(playing.id);
     if (!p) { ui.players(); }
     else if (JSON.stringify(p) !== JSON.stringify(playing)) { play(p); }
+  });
+  /* this game's own key written in another tab (stars won there, or reset): taken as it is stored, and shown */
+  window.addEventListener("storage", function (e) {
+    if (e.key !== KEY && e.key !== null) { return; }
+    mine = stored();
+    if (playing) { play(playing); }
   });
 
   prune();
