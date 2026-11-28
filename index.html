@@ -167,12 +167,12 @@
   bdi { unicode-bidi: isolate; }
   /* the steps' Back and Next bar stays in view at the foot of the screen (players.css) and inside this panel's
      border, in the panel's own night blue; a chapter reached with the Tab key is never left under it */
-  html { scroll-padding-bottom: 96px; }
-  #whos-playing .lp .dock.stick { margin: 4px -18px -18px; padding: 10px 18px 18px; border-radius: 0 0 14px 14px; background: linear-gradient(180deg, rgba(14, 24, 50, 0), #0e1832 34%); }
+  html:has(#whos-playing .lp .dock.stick) { scroll-padding-bottom: 96px; }
+  #whos-playing .lp .dock.stick { margin: 4px -18px -18px; padding: 10px 18px calc(18px + env(safe-area-inset-bottom)); border-radius: 0 0 14px 14px; background: linear-gradient(180deg, rgba(14, 24, 50, 0), #0e1832 34%); }
   /* a phone: the panel gives the player cards its room */
   @media (max-width: 419.98px) {
     .tonight { padding: 14px 10px 16px; }
-    #whos-playing .lp .dock.stick { margin: 4px -10px -16px; padding: 10px 10px 16px; }
+    #whos-playing .lp .dock.stick { margin: 4px -10px -16px; padding: 10px 10px calc(16px + env(safe-area-inset-bottom)); }
   }
 
   /* the folder that is still empty */
@@ -450,6 +450,10 @@
       box.textContent = ""; box.setAttribute("data-kind", kind || "players"); box.appendChild(el);
       levels();
       topBar();
+      /* a new screen starts at its top: the panel's top (Back to tonight, the Inspector's line, the heading that has
+         the focus) comes into view when the page was scrolled past it */
+      var t = sec.getBoundingClientRect().top;
+      if (t < 0) { window.scrollBy(0, t - 8); }
     },
     say: function (lines) {
       sayEl.textContent = "";

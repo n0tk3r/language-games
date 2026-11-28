@@ -36,9 +36,10 @@ Latin text helpers. Static files, classic scripts, no build step; works from `fi
 <script src="js/climb.js"></script>
 ```
 
-Nothing may 404 or throw. The body needs no markup (a `<noscript>` line at most): `mount()` builds the page.
+Nothing may 404 or throw. The body needs only a `<noscript>` line and the page's own `h1` (a hidden one is fine:
+`<h1 class="sr">Game: what it is</h1>`): `mount()` builds the rest.
 players.js's screen headings are `h1` and its chapter step's course headings `h2`; the shell makes them heard as
-levels 2 and 3, under the game's own `h1` (a hidden one is fine: `<h1 class="sr">`).
+levels 2 and 3, under that `h1`.
 
 ## A game in twenty lines
 
