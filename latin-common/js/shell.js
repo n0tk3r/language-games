@@ -671,6 +671,10 @@
 
     var host = {
       show: function (node, kind) {
+        /* the focus was on the chip's menu or in the game (Switch player, Change chapter): let it go with them, so
+           players.js puts it on the new screen's heading */
+        var a = doc.activeElement;
+        if (a && a !== doc.body && (menu.contains(a) || game.contains(a))) { try { a.blur(); } catch (e) { /* ignore */ } }
         closeMenu();
         view = "players";
         app.setAttribute("data-view", "players");
@@ -698,9 +702,11 @@
         return s && cls ? s.replace('class="ic"', 'class="' + esc(cls) + '"') : s;
       }
     };
-    /* the screens' headings are h1, under the game's own h1: heard as level 2 (also when a screen redraws in place) */
+    /* players.js's headings are h1 (the screen) and h2 (the chapter step's courses), under the game's own h1: heard
+       as levels 2 and 3 (also when a screen redraws in place). The fallback's are h2 and h3 already. */
     function levels() {
-      Array.prototype.forEach.call(scr.querySelectorAll("h1"), function (h) { h.setAttribute("role", "heading"); h.setAttribute("aria-level", "2"); });
+      if (!scr.querySelector("h1")) { return; }
+      Array.prototype.forEach.call(scr.querySelectorAll("h1, h2"), function (h) { h.setAttribute("role", "heading"); h.setAttribute("aria-level", h.nodeName === "H1" ? "2" : "3"); });
     }
     try { new root.MutationObserver(levels).observe(scr, { childList: true, subtree: true }); } catch (e) { /* show() still does it */ }
     function screens() {

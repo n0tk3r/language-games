@@ -162,10 +162,11 @@
     try { if (c && Array.isArray(c.playerColors) && c.playerColors.length) { return c.playerColors.map(String); } } catch (e) { /* ignore */ }
     return OWN.playerColors;
   }
+  /* the site's own lines first (courses.js holds Case Detective's: "A new detective!") */
   function lines(name) {
-    var c = CDC(), l = null;
-    try { l = c && c.lines && c.lines[name] ? c.lines[name] : null; } catch (e) { l = null; }
-    l = l || OWN.lines[name] || [];
+    var c = CDC(), l = OWN.lines[name] || null;
+    if (!l) { try { l = c && c.lines && c.lines[name] ? c.lines[name] : null; } catch (e) { l = null; } }
+    l = l || [];
     return (Array.isArray(l) ? l : [l]).map(String);
   }
 
@@ -588,7 +589,7 @@
   /* a small confirm box in the same look (styles: .dlg in latin-common/css/common.css) */
   function confirmBox(title, text, yes, no, done) {
     var back = doc.activeElement, scrim = doc.createElement("div"), box = doc.createElement("section");
-    scrim.className = "scrim lpf-cf";
+    scrim.className = "scrim lpf-cf";                  /* lpf-cf: its look on the home page (css/players.css) */
     box.className = "dlg open lpf-cf";
     box.setAttribute("role", "alertdialog");
     box.setAttribute("aria-modal", "true");

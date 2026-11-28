@@ -4,8 +4,8 @@
  *   ROW_THINK=ms               a pause before each answer (default 0: a quick child)
  * Makes a player, rows every leg (a few wrong tiles or typed forms on purpose; a deliberate wrong tile waits
  * 800 ms, so it is never a rushed one), answers the called boxes (one wrong), checks for sideways overflow and cut
- * boxes on each result card, goes back to the quay, and exits non-zero on a console error (the 404s of Case
- * Detective 2.2's files aside), on overflow, or if the voyage does not end.
+ * boxes on each result card, goes back to the quay, and exits non-zero on a console error (a file that does not load
+ * among them), on overflow, or if the voyage does not end.
  * The race with the Corvus: a Corvus on every leg whose drum beats (Calm water and Open sea at Slow; no Storm leg at
  * Slow), a race line on every raced result card and none without a drum, a raced result card never taller (below
  * 900 px, where the panel is docked) and never scrolling more than the card as it was before the race, the regatta
@@ -266,7 +266,7 @@ function raceExpected(p, step) { return p.evaluate(([beat, step]) => RowLogic.ra
 async function newPage(b, o) {
   const ctx = await b.newContext(Object.assign({ viewport: { width: +w, height: +h }, deviceScaleFactor: 1 }, o || {}));
   const p = await ctx.newPage(), errs = [];
-  p.on("console", (m) => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND|404/.test(m.text())) { errs.push(m.text()); } });
+  p.on("console", (m) => { if (m.type() === "error") { errs.push(m.text()); } });
   p.on("pageerror", (e) => errs.push("pageerror: " + e.message));
   p.errs = errs;
   return p;

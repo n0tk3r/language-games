@@ -8,7 +8,8 @@ Latin text helpers. Static files, classic scripts, no build step; works from `fi
 |---|---|
 | `css/common.css` | Case Detective's tokens and fonts (from `../../case-detective/fonts/`), base, top bar, player chip, stage and bubble, desk, buttons, cards, sheets and dialogs, toasts, macron keys, players screens, focus ring, reduced motion, print base |
 | `js/players-words.js` | `window.LatinPlayersWords`: the site's own words for Case Detective's players screens (`text`, `lines`, `filesIcon`: "Who’s playing?", the Inspector's lines, the check that marks a chapter with games ready). The front page and the shell pass them to `screens(host)`, so the screens speak for every game |
-| `js/players-fallback.js` | `window.LatinPlayers` when Case Detective's `players.js` is not loaded: same API, same storage, so a page keeps working without it (its screens take their look from `common.css`) |
+| `js/players-fallback.js` | `window.LatinPlayers` when Case Detective's `players.js` is not loaded: same API, same storage, so a page keeps working without it (its screens take their look from `common.css` in the games, from `css/players.css` on the home page) |
+| `css/players.css` | The fallback's screens' look on the home page, which has no `common.css`; the home page links it only when the fallback draws the screens. Built by `tools/build_players_css.py` from `common.css`, every rule scoped to `.lp` (the screens' box) and `.lpf-cf` (the confirm box). Rebuild it after changing buttons, cards, dialogs or `.lpf-*` in `common.css` |
 | `js/shell.js` | `window.LatinShell` (also `require("./shell.js")` in node for the text helpers) |
 | `js/words.js`, `js/charts.js` | `LATIN_WORDS`, `LATIN_CHARTS` (built by `tools/`, do not edit) |
 | `sources.html` | For parents: where the words and charts come from (printable) |
@@ -36,7 +37,8 @@ Latin text helpers. Static files, classic scripts, no build step; works from `fi
 ```
 
 Nothing may 404 or throw. The body needs no markup (a `<noscript>` line at most): `mount()` builds the page.
-The players screens' headings are `h1`; the shell makes them heard as level 2 under the game's own `h1`.
+players.js's screen headings are `h1` and its chapter step's course headings `h2`; the shell makes them heard as
+levels 2 and 3, under the game's own `h1` (a hidden one is fine: `<h1 class="sr">`).
 
 ## A game in twenty lines
 
@@ -53,7 +55,7 @@ The players screens' headings are `h1`; the shell makes them heard as level 2 un
     logo: '<svg viewBox="0 0 32 32">...</svg>',         // your own inline SVG, drawn in brass
     onHome: function () { home(); },                    // the logo becomes a "home" button
     onSettings: function () { openSettings(); },        // shows the gear (in the chip menu on phones)
-    filesIn: function (grade) { return { 1: true, 2: true, 3: true }; },  // chapters with content, marked "Ready"; asked for every chapter from 1 to the grade's last
+    filesIn: function (grade) { return { 1: true, 2: true, 3: true }; },  // chapters with content, marked with a check ("has games ready"); asked for every chapter from 1 to the grade's last
     starsOf: function (p) { return null; },             // optional number on each player card
     onPlayer: function (player, how) {                  // how: "continue" | "added" | "chapter" | "update" | "none"
       state = progress.load(player.id) || fresh();
@@ -178,13 +180,14 @@ Storage, shared by every game on the site: localStorage `latinGames.v1` =
 | `inGrade(g, ch)` | A chapter a player of the grade may be on: any whole chapter from 1 to the grade's `last`, so a class that is still on an earlier chapter can go back (1 to 27 for an 8th grader). Above the grade's last, 0, 2.5 or "x" is refused. Every write (a pick, add, update, a sound or music switch) keeps such a chapter |
 | `courseOf(ch)` | The entry of `grades()` whose chapters hold `ch`, also a grade still to come (chapter 15: grade 7, Latin IB); `null` for none. A game gives a player on an earlier chapter the content of that chapter's course: never take `p.chapter >= gradeInfo(p.grade).first` for granted |
 | `monthChapter(g, date?)` | Hillsdale's plan: grade 6 Aug-Oct 1, Nov 2, Dec 3, Jan 4, Feb 5, Mar 6, Apr 7, May-Jul 8; grade 8 Aug-Sep 18, Oct 20 (Hillsdale puts 19 and 20 in October), Nov 21, Dec 22, Jan 23, Feb 24, Mar 25, Apr 26, May-Jul 27 |
-| `chapter(n)` | `{ title, short }` (Wheelock's title from `LATIN_WORDS.chapters`; `short` is its first part) |
+| `chapter(n)` | `{ title, short }`: Case Detective's names from `courses.js` (`short` may hold `<i>`: "First declension: <i>porta</i>"); the fallback without `courses.js` takes Wheelock's title from `LATIN_WORDS.chapters` |
 | `gradeLine(p, withCourse?)` | `"6th grade · Chapter 3"`, `"6th grade · Latin IA · Chapter 3"`; the course is that of the player's chapter: `"8th grade · Latin IB · Chapter 15"` |
-| `screens(host)` | `{ players(), add(), manage(), changeChapter(id) }`. The shell is the host; you do not call this yourself. It passes the site's words (`players-words.js`) as `host.text`, `host.lines` and `host.icon("files")`. The chapter step shows the grade's own chapters (this month's marked), then a button "Earlier chapters" ("For a class that is still on an earlier chapter.", `aria-expanded`, `aria-controls`) over the chapters 1 to `first - 1`, grouped by course; the list is open when the chosen chapter is one of them, and closed with one of them chosen the button says "Chapter 5 chosen". Each group of chapters takes the Tab once (at its chosen chapter, else its first); the arrow keys walk every chapter that shows. 6th grade has none, so its step has no button |
+| `screens(host)` | `{ players(), add(), manage(), changeChapter(id) }`. The shell is the host; you do not call this yourself. It passes the site's words (`players-words.js`) as `host.text`, `host.lines` and `host.icon("files")`. The chapter step shows the grade's own chapters (this month's marked), then a button "Earlier chapters" ("For a class that is still on an earlier chapter.", `aria-expanded`, `aria-controls`) over the chapters 1 to `first - 1`, grouped by course; the list is open when the chosen chapter is one of them, and closed with one of them chosen the button says "Chapter 5 chosen". Every chapter is a button of its own (`aria-pressed`), one Tab stop each (the fallback's are a radio group: one Tab stop a group, arrow keys within). 6th grade has none, so its step has no button |
 
 The fallback also has `fallback: true`; players.js does not. Both use `window.CD_COURSES` (grades, months,
-`playerColors`, `chapters`, `lines`) from `courses.js`. players.js also converts a Case Detective 2.1 save; the
-fallback does not. players.js reads a stored player of a grade that is not open yet (7th) as 6th grade.
+`playerColors`, `chapters`) from `courses.js`; players.js also its `lines`, the fallback its own. Case Detective's own
+game takes in a 2.1 save, neither of these. players.js reads a stored player of a grade that is not open yet (7th) as
+6th grade.
 
 ## CSS you can use
 

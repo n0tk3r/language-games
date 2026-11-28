@@ -52,7 +52,7 @@ async function game(browser, [w, h], player, { seed, mode }) {
   const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("console", (m) => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND|Failed to load resource/.test(m.text())) { errors.push(m.text()); } });
+  page.on("console", (m) => { if (m.type() === "error") { errors.push(m.text()); } });
   await page.addInitScript((s) => { Date.now = () => s; }, seed);   /* the game seeds Erase Away with Date.now() */
   await page.goto(ROOT + "index.html");
   await page.evaluate((p) => {
