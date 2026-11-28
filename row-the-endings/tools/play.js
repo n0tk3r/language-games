@@ -33,19 +33,38 @@ const BEAT = ["off", "slow", "steady"].indexOf(process.env.ROW_BEAT) >= 0 ? proc
 const THINK = Math.max(0, +process.env.ROW_THINK || 0);
 const FITS = (+w === 390 && +h === 844) || (+w === 1366 && +h === 768);    /* the play screens must not scroll at these */
 
+/* a new player, on the players screens: Case Detective's js/players.js (.pl-*, .st-*, .gr-*, .ch-*), or
+   latin-common's players-fallback.js (.lpf-*) where players.js is not loaded */
 async function addPlayer(p, name, g, ch) {
-  if (await p.locator(".lpf-new").count()) { await p.click(".lpf-new"); }
-  await p.fill(".lpf-input", name);
-  await p.click("form .btn.primary");
-  await p.click(`.lpf-grade[data-g="${g}"]`);
-  await p.waitForTimeout(150);
-  if (ch) {
-    /* an earlier chapter (a class still on one): open "Earlier chapters" first */
-    if (!(await p.locator(`.lpf-ch[data-ch="${ch}"]`).isVisible()) && await p.locator(".lpf-ch-open").count()) { await p.click(".lpf-ch-open"); await p.waitForTimeout(150); }
-    await p.click(`.lpf-ch[data-ch="${ch}"]`);
+  if (await p.locator(".lpf-input, .lpf-new").count()) {
+    if (await p.locator(".lpf-new").count()) { await p.click(".lpf-new"); }
+    await p.fill(".lpf-input", name);
+    await p.click("form .btn.primary");
+    await p.click(`.lpf-grade[data-g="${g}"]`);
+    await p.waitForTimeout(150);
+    if (ch) {
+      /* an earlier chapter (a class still on one): open "Earlier chapters" first */
+      if (!(await p.locator(`.lpf-ch[data-ch="${ch}"]`).isVisible()) && await p.locator(".lpf-ch-open").count()) { await p.click(".lpf-ch-open"); await p.waitForTimeout(150); }
+      await p.click(`.lpf-ch[data-ch="${ch}"]`);
+    }
+    await p.click('[data-act="go"]');
+    await p.waitForTimeout(500);
+    return;
   }
-  await p.click('[data-act="go"]');
-  await p.waitForTimeout(500);
+  const primary = () => p.locator("[data-primary]:visible").first();
+  if (!(await p.locator("#stName:visible").count())) { await p.locator('[data-action="add-player"]:visible').first().click(); await p.waitForTimeout(150); }
+  await p.fill("#stName", name);
+  await primary().click();
+  await p.locator(`.gr-card[data-grade="${g}"]:visible`).click();
+  await p.waitForTimeout(200);
+  if (ch) {
+    const chip = p.locator(`.ch-chip[data-chapter="${ch}"]`);
+    /* an earlier chapter (a class still on one): open "Earlier chapters" first */
+    if (!(await chip.isVisible()) && await p.locator(".ch-open:visible").count()) { await p.locator(".ch-open:visible").click(); await p.waitForTimeout(200); }
+    await chip.click();
+  }
+  await primary().click();
+  await p.waitForTimeout(600);
 }
 /* the drum, in Settings, before sailing */
 async function setBeat(p, beat) {

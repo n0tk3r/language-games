@@ -1,10 +1,9 @@
 /*!
  * LatinPlayers (fallback): the players of the Latin games, kept in this browser.
  *
- * Case Detective 2.2 ships the real one (../case-detective/js/players.js). Until it is there, this file
- * defines window.LatinPlayers with the same API and the same storage (localStorage "latinGames.v1"), so a
- * player made now is still there when 2.2 takes over. If LatinPlayers is already defined, this file does
- * nothing at all.
+ * The pages load Case Detective's own (../case-detective/js/players.js) first. Should that file be missing, this
+ * one defines window.LatinPlayers with the same API and the same storage (localStorage "latinGames.v1"), so the
+ * pages keep working and the players stay. If LatinPlayers is already defined, this file does nothing at all.
  *
  * Storage, exactly as Case Detective's draft:
  *   latinGames.v1 = { v: 1, players: [{ id: "p1", name, color, grade, chapter }], last, sound, music, next }
@@ -37,15 +36,16 @@
   var doc = root.document;
 
   /* ------------------------------------------------------------ course data */
-  /* months: index 0 = January ... 11 = December, the chapter of that month on Hillsdale's plan.
-     start: the month (1-12) the school year starts. */
+  /* months: index 0 = January ... 11 = December, the chapter of that month on Hillsdale's plan (October of
+     grade 8 holds chapters 19 and 20: 20, as Case Detective's courses.js says). start: the month (1-12) the
+     school year starts. */
   var OWN = {
     grades: [
       { grade: 6, course: "Latin IA", first: 1, last: 8, soon: false, start: 8,
         months: [4, 5, 6, 7, 8, 8, 8, 1, 1, 1, 2, 3] },
       { grade: 7, course: "Latin IB", first: 9, last: 17, soon: true, start: 8, months: null },
       { grade: 8, course: "Latin II", first: 18, last: 27, soon: false, start: 8,
-        months: [23, 24, 25, 26, 27, 27, 27, 18, 18, 19, 21, 22] },
+        months: [23, 24, 25, 26, 27, 27, 27, 18, 18, 20, 21, 22] },
       { grade: 9, course: "Latin III", first: 28, last: 40, soon: true, start: 8, months: null }
     ],
     /* warm, distinct, never purple; white text reads on each */
@@ -56,7 +56,7 @@
       playersManage: ["Here you can rename a player, change a grade or a chapter, or remove a player."],
       askName: ["What is your name?", "A first name or a nickname is plenty."],
       askGrade: ["Nice to meet you, <b>{name}</b>!", "Which grade are you in?"],
-      askChapter: ["Which chapter is your class on?", "I picked this month's chapter. Change it if your class is somewhere else."],
+      askChapter: ["Which chapter is your class on?", "I picked this month’s chapter. Change it if your class is somewhere else."],
       changeChapter: ["Which chapter is your class on now, <b>{name}</b>?"],
       changeGrade: ["Which grade is <b>{name}</b> in now?"]
     }
@@ -588,7 +588,7 @@
   /* a small confirm box in the same look (styles: .dlg in latin-common/css/common.css) */
   function confirmBox(title, text, yes, no, done) {
     var back = doc.activeElement, scrim = doc.createElement("div"), box = doc.createElement("section");
-    scrim.className = "scrim lpf-cf";                  /* lpf-cf: the look on a page without common.css (css/players.css) */
+    scrim.className = "scrim lpf-cf";
     box.className = "dlg open lpf-cf";
     box.setAttribute("role", "alertdialog");
     box.setAttribute("aria-modal", "true");

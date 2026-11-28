@@ -37,6 +37,8 @@
     try { return !!(root.matchMedia && root.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { return false; }
   }
   function P() { var p = root.LatinPlayers; return p && typeof p.list === "function" ? p : null; }
+  /* the site's own words for the players screens (players-words.js), when the page loads them */
+  function WORDS() { var w = root.LatinPlayersWords; return w && typeof w === "object" ? w : null; }
   function el(tag, cls, html) {
     var e = doc.createElement(tag);
     if (cls) { e.className = cls; }
@@ -677,6 +679,7 @@
         scr.setAttribute("data-kind", kind || "players");
         scr.textContent = "";
         scr.appendChild(node);
+        levels();
         try { root.scrollTo(0, 0); } catch (e) { /* ignore */ }
       },
       say: function (lines, m) { say(lines, m); },
@@ -684,8 +687,22 @@
       starsOf: typeof opts.starsOf === "function" ? function (p) { return opts.starsOf(p); } : undefined,
       filesIn: typeof opts.filesIn === "function" ? function (g) { return opts.filesIn(g); } : undefined,
       sourcesHref: opts.sourcesHref === false ? undefined : opts.sourcesHref || BASE + "sources.html",
-      icon: function (n) { return icon(n); }
+      /* the site's own words for Case Detective's screens (players-words.js), so they speak for every game */
+      text: WORDS() ? WORDS().text : undefined,
+      lines: WORDS() ? WORDS().lines : undefined,
+      /* the screens ask with their own class ("ic ch-chev"): the shell's icon takes it, so their styles still apply */
+      icon: function (n, cls) {
+        var w = WORDS(), s;
+        if (n === "files" && w && w.filesIcon) { return w.filesIcon; }
+        s = icon(n);
+        return s && cls ? s.replace('class="ic"', 'class="' + esc(cls) + '"') : s;
+      }
     };
+    /* the screens' headings are h1, under the game's own h1: heard as level 2 (also when a screen redraws in place) */
+    function levels() {
+      Array.prototype.forEach.call(scr.querySelectorAll("h1"), function (h) { h.setAttribute("role", "heading"); h.setAttribute("aria-level", "2"); });
+    }
+    try { new root.MutationObserver(levels).observe(scr, { childList: true, subtree: true }); } catch (e) { /* show() still does it */ }
     function screens() {
       if (ui) { return ui; }
       var pl = P();

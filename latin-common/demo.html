@@ -7,10 +7,8 @@
 <title>Latin games: the shared shell (demo)</title>
 <meta name="theme-color" content="#070d1f">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23b3202a'/%3E%3Ccircle cx='32' cy='32' r='17' fill='none' stroke='%23e2a93c' stroke-width='6'/%3E%3C/svg%3E">
-<!-- the same order as a game's index.html; the three Case Detective 2.2 files are missing until 2.2 ships (404, harmless) -->
-<!-- Case Detective 2.2 shares its players screens; switched on once the games are tested with it:
-  <link rel="stylesheet" href="../case-detective/css/players.css">
--->
+<!-- the same order as a game's index.html; the players screens are Case Detective's (js/players.js), this is their look -->
+<link rel="stylesheet" href="../case-detective/css/players.css">
 <link rel="stylesheet" href="css/common.css">
 <style>
   /* the demo's own bits */
@@ -32,11 +30,12 @@
 <body>
 <noscript><p class="noscript">This page needs JavaScript. Please turn it on and reload.</p></noscript>
 
-<!-- Case Detective 2.2, switched on once tested: <script src="../case-detective/js/courses.js"></script> -->
-<!-- Case Detective 2.2, switched on once tested: <script src="../case-detective/js/players.js"></script> -->
 <script src="js/words.js"></script>
 <script src="js/charts.js"></script>
+<script src="../case-detective/js/courses.js"></script>
+<script src="../case-detective/js/players.js"></script>
 <script src="js/players-fallback.js"></script>
+<script src="js/players-words.js"></script>
 <script src="../case-detective/js/detective.js"></script>
 <script src="../case-detective/js/sfx.js"></script>
 <script src="../case-detective/js/music.js"></script>

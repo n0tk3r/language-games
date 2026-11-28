@@ -163,7 +163,7 @@
       moods.push("wave");
     }
     if (L.behind(W, p)) {
-      lines.push("Chapter " + p.chapter + "’s words are on their way; tonight we practise chapters " + first + " to " + pc + ".");
+      lines.push("Chapter " + p.chapter + "’s words are on their way; tonight we practice chapters " + first + " to " + pc + ".");
       moods.push("think");
     }
     if (qday) { lines.push("Quiz today! You know these words. Good luck!"); moods.push("cheer"); }

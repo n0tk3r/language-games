@@ -136,8 +136,8 @@
   .tonight ol a:hover { background: rgba(255, 255, 255, .15); }
   .tonight ol a:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
-  /* Who's playing: the players are picked here, once, for every game (latin-common/js/players-fallback.js
-     or Case Detective's players.js draws the screens into .lp; their look is latin-common/css/players.css) */
+  /* Who's playing: the players are picked here, once, for every game (Case Detective's js/players.js draws the
+     screens into .lp; their look is its css/players.css) */
   [hidden] { display: none !important; }
   .pl-head { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
   .pl-av { display: flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--pc, #b3202a); color: #fff; font: 800 21px/1 var(--f-ui); text-transform: uppercase; box-shadow: 0 0 0 3px var(--brass), 0 0 0 5px #4a2f14; }
@@ -165,12 +165,9 @@
   .pl-say b { color: var(--brass-lt); }
   .pl-say .pl-n { display: block; color: var(--brass); font: 800 12.5px/1.4 var(--f-ui); letter-spacing: .06em; text-transform: uppercase; }
   bdi { unicode-bidi: isolate; }
-  /* a phone: the panel gives the player cards its room, and the card's Play / Continue keeps only its arrow */
+  /* a phone: the panel gives the player cards its room */
   @media (max-width: 419.98px) {
     .tonight { padding: 14px 10px 16px; }
-    #whos-playing .lpf-card { gap: 10px; padding: 10px; }
-    #whos-playing .lpf-go { gap: 0; padding: 6px; font-size: 0; }
-    #whos-playing .lpf-go .ic { width: 20px; height: 20px; }
   }
 
   /* the folder that is still empty */
@@ -257,7 +254,7 @@
     .cd:hover { -webkit-transform: none; transform: none; }
   }
 </style>
-<link rel="stylesheet" href="latin-common/css/players.css">
+<link rel="stylesheet" href="case-detective/css/players.css">
 </head>
 <body>
 <header class="top">
@@ -368,8 +365,13 @@
 <script src="row-the-endings/js/art.js"></script>
 <script src="latin-common/js/charts.js"></script>
 <script src="latin-common/js/words.js"></script>
-<!-- the players, shared by every game; when Case Detective 2.2 is on the site, its css/players.css, js/courses.js and js/players.js take this place -->
+<!-- the players, shared by every game: Case Detective's js/courses.js (the grades, chapters and lines), then its js/players.js,
+     with the site's own words for its screens (players-words.js). players-fallback.js does nothing when players.js is there,
+     and keeps the page working if it is not. -->
+<script src="case-detective/js/courses.js"></script>
+<script src="case-detective/js/players.js"></script>
 <script src="latin-common/js/players-fallback.js"></script>
+<script src="latin-common/js/players-words.js"></script>
 <script>
 (function () {
   "use strict";
@@ -381,15 +383,18 @@
      The players are picked here, once, for every game: the games read the chosen player (latinGames.v1, kept only
      in this browser) and send the child here when nobody is chosen yet, as index.html?play=<game folder>#players
      (or #chapter, #manage, #add); after the pick the game opens again. The screens are drawn by window.LatinPlayers
-     (latin-common/js/players-fallback.js, or Case Detective's players.js once it is on the site). */
+     (Case Detective's js/players.js, with the grades and chapters of its js/courses.js), in the site's own words
+     (latin-common/js/players-words.js). */
   var GAMES = { "case-detective": "Case Detective", "climb-to-consul": "Climb to Consul", "row-the-endings": "Row the Endings" };
   var SCREENS = { players: 1, chapter: 1, manage: 1, add: 1 };
-  /* the chapters that have something to play (Climb to Consul and Row the Endings; Case Detective is chapter 2):
-     Latin IA's 1 to 3 and Latin II's 18 to 22. An 8th grader may pick an earlier chapter, for a class still on one,
-     so the chapter step marks every ready chapter up to the grade's last. */
+  /* the chapters that have something to play (Climb to Consul and Row the Endings; Case Detective's case files of
+     chapters 2, 3, 18 and 20 are among them): Latin IA's 1 to 3 and Latin II's 18 to 22. An 8th grader may pick an
+     earlier chapter, for a class still on one, so the chapter step marks every ready chapter up to the grade's last
+     (1 to 3 under "Earlier chapters"). Case Detective's "Every noun" files are in every chapter, so they are not
+     counted: the mark would then say nothing. */
   var READY = { 1: 1, 2: 1, 3: 1, 18: 1, 19: 1, 20: 1, 21: 1, 22: 1 };
   function $(id) { return document.getElementById(id); }
-  var L = window.LatinPlayers || null, ui = null, view = "";
+  var L = window.LatinPlayers || null, WORDS = window.LatinPlayersWords || null, ui = null, view = "";
   var sec = $("whos-playing"), nowEl = $("pl-now"), pickEl = $("pl-pick"), box = $("pl-screens"), sayEl = $("pl-say");
   var topEl = $("pl-top"), forEl = $("pl-for"), backEl = $("pl-back"), actsEl = $("pl-acts");
 
@@ -427,6 +432,7 @@
       view = "pick";
       sec.hidden = false; nowEl.hidden = true; pickEl.hidden = false;
       box.textContent = ""; box.setAttribute("data-kind", kind || "players"); box.appendChild(el);
+      levels();
       topBar();
     },
     say: function (lines) {
@@ -446,8 +452,17 @@
       Object.keys(READY).forEach(function (c) { if (gi && +c <= gi.last) { out[c] = 1; } });
       return out;
     },
-    sourcesHref: "latin-common/sources.html"
+    sourcesHref: "latin-common/sources.html",
+    /* the site's words (players.js speaks as in Case Detective without them) and the check of "games ready" */
+    text: WORDS ? WORDS.text : undefined,
+    lines: WORDS ? WORDS.lines : undefined,
+    icon: function (name) { return name === "files" && WORDS ? WORDS.filesIcon : null; }
   };
+  /* the screens' headings are h1, under this page's own h1: heard as level 2 (also when a screen redraws in place) */
+  function levels() {
+    Array.prototype.forEach.call(box.querySelectorAll("h1"), function (h) { h.setAttribute("role", "heading"); h.setAttribute("aria-level", "2"); });
+  }
+  try { new MutationObserver(levels).observe(box, { childList: true, subtree: true }); } catch (e) { /* show() still does it */ }
   function screens() {
     if (ui || !L || typeof L.screens !== "function") { return ui; }
     try { ui = L.screens(host); } catch (e) { ui = null; }
@@ -487,6 +502,21 @@
     return co ? co.grade : 0;
   }
   function playable(p) { var g = courseGrade(p); return !!p && (g === 6 || g === 8); }
+  /* Case Detective's line on Tonight, by the game's own rule (casebookPlan and addDrill in its game.js): the case
+     files of the course of the class's chapter up to it, or that course's first ones ahead of the class, and an
+     "Every noun" file in each chapter from 2 up to the class's (Latin IB has those alone). Without courses.js: the
+     6th grade's old line. "" for a grade that cannot play. */
+  function cdWhat(p) {
+    var C = window.CD_COURSES, ch = +p.chapter, co = null, units, before;
+    if (p.grade !== 6 && p.grade !== 8) { return ""; }
+    try { co = L && typeof L.courseOf === "function" ? L.courseOf(ch) : null; } catch (e) { co = null; }
+    if (!C || !Array.isArray(C.units) || !co) { return courseGrade(p) === 6 ? "a case file on the jobs of the cases" : ""; }
+    units = C.units.map(function (u) { return +(u && u.chapter); }).filter(function (c) { return c >= co.first && c <= co.last; }).sort(function (a, b) { return a - b; });
+    before = units.filter(function (c) { return c < ch; });
+    if (units.indexOf(ch) >= 0) { return "chapter " + ch + "’s case files on the jobs of the cases"; }
+    if (!before.length && units.length) { return "chapter " + units[0] + "’s case files, ahead of your class"; }
+    return "chapter " + ch + "’s “Every noun” file" + (before.length ? ", and the case files before it" : "");
+  }
   function plain(name) { return String(name == null ? "" : name).replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, ""); }
 
   /* Tonight: what the chosen player can do tonight, one line per game */
@@ -528,14 +558,15 @@
       var charts = ((window.LATIN_CHARTS || {}).charts || []).filter(function (c) { return c.ch === ch; });
       item("climb-to-consul/index.html", "Climb to Consul", "tonight’s assembly, chapter " + ch + "’s new words and the words due");
       item("row-the-endings/index.html", "Row the Endings", charts.length ? "tonight’s voyage, " + charts[0].title + (charts.length > 1 ? " and more" : "") : "tonight’s voyage");
-      if (cg === 6) { item("case-detective/index.html", "Case Detective", "a case file on the jobs of the cases"); }
     }
+    var cd = cdWhat(p);
+    if (cd) { item("case-detective/index.html", "Case Detective", cd); }
     list.hidden = !list.children.length;
     /* a grade whose games are not made yet: say so, and offer to change the grade; an earlier chapter whose
        games are not made yet (chapters 9 to 17): say so, and offer to change the chapter */
     var note = $("pl-note"), ready = playable(p), ownOk = p.grade === 6 || p.grade === 8;
     note.hidden = ready;
-    note.textContent = ready ? "" : ownOk ? "The games for chapter " + p.chapter + " are on their way. For now they cover chapters 1 to 3 and 18 to 22." :
+    note.textContent = ready ? "" : ownOk ? (cd ? "Climb to Consul and Row the Endings are on their way for chapter " : "The games for chapter ") + p.chapter + (cd ? "." : " are on their way.") + " For now they cover chapters 1 to 3 and 18 to 22." :
       "The games for " + (line.split(" · ")[0] || "this grade") + " are on their way. For now they cover 6th and 8th grade.";
     var chLab = $("pl-ch-lab");
     chLab.textContent = ready || ownOk ? "Change chapter" : "Change grade";

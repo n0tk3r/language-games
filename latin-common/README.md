@@ -7,8 +7,8 @@ Latin text helpers. Static files, classic scripts, no build step; works from `fi
 | File | What it is |
 |---|---|
 | `css/common.css` | Case Detective's tokens and fonts (from `../../case-detective/fonts/`), base, top bar, player chip, stage and bubble, desk, buttons, cards, sheets and dialogs, toasts, macron keys, players screens, focus ring, reduced motion, print base |
-| `js/players-fallback.js` | `window.LatinPlayers` when Case Detective 2.2's `players.js` is not there: same API, same storage |
-| `css/players.css` | The players screens' look on a page without `common.css` (the site's front page, where the players are picked): built by `tools/build_players_css.py` from `common.css`, every rule scoped to `.lp` (the screens' box) and `.lpf-cf` (the confirm box). Rebuild it after changing buttons, cards, dialogs or `.lpf-*` in `common.css` |
+| `js/players-words.js` | `window.LatinPlayersWords`: the site's own words for Case Detective's players screens (`text`, `lines`, `filesIcon`: "Who’s playing?", the Inspector's lines, the check that marks a chapter with games ready). The front page and the shell pass them to `screens(host)`, so the screens speak for every game |
+| `js/players-fallback.js` | `window.LatinPlayers` when Case Detective's `players.js` is not loaded: same API, same storage, so a page keeps working without it (its screens take their look from `common.css`) |
 | `js/shell.js` | `window.LatinShell` (also `require("./shell.js")` in node for the text helpers) |
 | `js/words.js`, `js/charts.js` | `LATIN_WORDS`, `LATIN_CHARTS` (built by `tools/`, do not edit) |
 | `sources.html` | For parents: where the words and charts come from (printable) |
@@ -17,15 +17,16 @@ Latin text helpers. Static files, classic scripts, no build step; works from `fi
 ## Script order in a game's `index.html`
 
 ```html
-<link rel="stylesheet" href="../case-detective/css/players.css">   <!-- 2.2: missing until it ships, harmless -->
+<link rel="stylesheet" href="../case-detective/css/players.css">   <!-- the players screens' look -->
 <link rel="stylesheet" href="../latin-common/css/common.css">
 <link rel="stylesheet" href="css/climb.css">
 ...
-<script src="../case-detective/js/courses.js"></script>   <!-- 2.2 -->
-<script src="../case-detective/js/players.js"></script>   <!-- 2.2 -->
 <script src="../latin-common/js/words.js"></script>
 <script src="../latin-common/js/charts.js"></script>      <!-- Row the Endings -->
-<script src="../latin-common/js/players-fallback.js"></script>
+<script src="../case-detective/js/courses.js"></script>   <!-- the grades, chapters and the school's plan -->
+<script src="../case-detective/js/players.js"></script>   <!-- window.LatinPlayers and its screens -->
+<script src="../latin-common/js/players-fallback.js"></script>   <!-- does nothing when players.js is there -->
+<script src="../latin-common/js/players-words.js"></script>
 <script src="../case-detective/js/detective.js"></script>
 <script src="../case-detective/js/sfx.js"></script>
 <script src="../case-detective/js/music.js"></script>
@@ -34,9 +35,8 @@ Latin text helpers. Static files, classic scripts, no build step; works from `fi
 <script src="js/climb.js"></script>
 ```
 
-The three 2.2 files 404 until Case Detective 2.2 is published (in Chromium from `file://`:
-`Failed to load resource: net::ERR_FILE_NOT_FOUND`). Nothing else may 404 or throw. The body needs no markup
-(a `<noscript>` line at most): `mount()` builds the page.
+Nothing may 404 or throw. The body needs no markup (a `<noscript>` line at most): `mount()` builds the page.
+The players screens' headings are `h1`; the shell makes them heard as level 2 under the game's own `h1`.
 
 ## A game in twenty lines
 
@@ -150,7 +150,7 @@ is hidden when `music.js` or Web Audio is missing.
 In node: `const S = require("../latin-common/js/shell.js")` gives the same object; everything but `mount`,
 `macronKeys` and `rich` works without a DOM. Or load it in a `vm` context like `words.js`.
 
-## `window.LatinPlayers` (players-fallback.js, or Case Detective 2.2's players.js)
+## `window.LatinPlayers` (Case Detective's players.js, or players-fallback.js)
 
 Storage, shared by every game on the site: localStorage `latinGames.v1` =
 
@@ -177,14 +177,14 @@ Storage, shared by every game on the site: localStorage `latinGames.v1` =
 | `gradeInfo(g)`, `canPlay(g)` | |
 | `inGrade(g, ch)` | A chapter a player of the grade may be on: any whole chapter from 1 to the grade's `last`, so a class that is still on an earlier chapter can go back (1 to 27 for an 8th grader). Above the grade's last, 0, 2.5 or "x" is refused. Every write (a pick, add, update, a sound or music switch) keeps such a chapter |
 | `courseOf(ch)` | The entry of `grades()` whose chapters hold `ch`, also a grade still to come (chapter 15: grade 7, Latin IB); `null` for none. A game gives a player on an earlier chapter the content of that chapter's course: never take `p.chapter >= gradeInfo(p.grade).first` for granted |
-| `monthChapter(g, date?)` | Hillsdale's plan: grade 6 Aug-Oct 1, Nov 2, Dec 3, Jan 4, Feb 5, Mar 6, Apr 7, May-Jul 8; grade 8 Aug-Sep 18, Oct 19, Nov 21, Dec 22, Jan 23, Feb 24, Mar 25, Apr 26, May-Jul 27 |
+| `monthChapter(g, date?)` | Hillsdale's plan: grade 6 Aug-Oct 1, Nov 2, Dec 3, Jan 4, Feb 5, Mar 6, Apr 7, May-Jul 8; grade 8 Aug-Sep 18, Oct 20 (Hillsdale puts 19 and 20 in October), Nov 21, Dec 22, Jan 23, Feb 24, Mar 25, Apr 26, May-Jul 27 |
 | `chapter(n)` | `{ title, short }` (Wheelock's title from `LATIN_WORDS.chapters`; `short` is its first part) |
 | `gradeLine(p, withCourse?)` | `"6th grade · Chapter 3"`, `"6th grade · Latin IA · Chapter 3"`; the course is that of the player's chapter: `"8th grade · Latin IB · Chapter 15"` |
-| `screens(host)` | `{ players(), add(), manage(), changeChapter(id) }`. The shell is the host; you do not call this yourself. The chapter step shows the grade's own chapters (this month's marked), then a button "Earlier chapters" ("For a class that is still on an earlier chapter.", `aria-expanded`, `aria-controls`) over the chapters 1 to `first - 1`, grouped by course; the list is open when the chosen chapter is one of them, and closed with one of them chosen the button says "Chapter 5 chosen". Each group of chapters takes the Tab once (at its chosen chapter, else its first); the arrow keys walk every chapter that shows. 6th grade has none, so its step has no button |
+| `screens(host)` | `{ players(), add(), manage(), changeChapter(id) }`. The shell is the host; you do not call this yourself. It passes the site's words (`players-words.js`) as `host.text`, `host.lines` and `host.icon("files")`. The chapter step shows the grade's own chapters (this month's marked), then a button "Earlier chapters" ("For a class that is still on an earlier chapter.", `aria-expanded`, `aria-controls`) over the chapters 1 to `first - 1`, grouped by course; the list is open when the chosen chapter is one of them, and closed with one of them chosen the button says "Chapter 5 chosen". Each group of chapters takes the Tab once (at its chosen chapter, else its first); the arrow keys walk every chapter that shows. 6th grade has none, so its step has no button |
 
-The fallback also has `fallback: true`; 2.2's file will not. Uses `window.CD_COURSES` (grades, months,
-`playerColors`, `chapters`, `lines`) when it is there. It does not convert a Case Detective 2.1 save: 2.2
-does that.
+The fallback also has `fallback: true`; players.js does not. Both use `window.CD_COURSES` (grades, months,
+`playerColors`, `chapters`, `lines`) from `courses.js`. players.js also converts a Case Detective 2.1 save; the
+fallback does not. players.js reads a stored player of a grade that is not open yet (7th) as 6th grade.
 
 ## CSS you can use
 
@@ -213,5 +213,5 @@ All from `common.css`, in Case Detective's look:
 - Keep the Inspector's lines short, one idea a line; Latin always with its macrons, in `<i>`.
 - The shell does not bind Enter or the number keys: your game does (and calls `shell.next()` when `shell.more()`).
 - Music may only start after the first tap or key press; the shell handles that.
-- Test with `demo.html` from `file://`; the three 2.2 files are the only errors in the console.
+- Test with `demo.html` from `file://`; the console shows no errors.
 - Do not change anything inside `case-detective/`.
